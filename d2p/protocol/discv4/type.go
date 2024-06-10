@@ -1,6 +1,8 @@
 package discv4
 
 import (
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
 	"net"
@@ -75,6 +77,10 @@ type (
 
 type Pubkey [64]byte
 
+func (e Pubkey) ID() enode.ID {
+	return enode.ID(crypto.Keccak256Hash(e[:]))
+}
+
 type Node struct {
 	IP  net.IP // len 4 for IPv4 or 16 for IPv6
 	UDP uint16 // for discovery protocol
@@ -87,6 +93,16 @@ type Endpoint struct {
 	IP  net.IP // len 4 for IPv4 or 16 for IPv6
 	UDP uint16 // for discovery protocol
 	TCP uint16 // for RLPx protocol
+}
+
+func NewEndpoint(addr *net.UDPAddr, tcpPort uint16) Endpoint {
+	ip := net.IP{}
+	if ip4 := addr.IP.To4(); ip4 != nil {
+		ip = ip4
+	} else if ip6 := addr.IP.To16(); ip6 != nil {
+		ip = ip6
+	}
+	return Endpoint{IP: ip, UDP: uint16(addr.Port), TCP: tcpPort}
 }
 
 type Packet interface {
