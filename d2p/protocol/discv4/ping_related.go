@@ -5,53 +5,38 @@ import (
 	"net"
 	"time"
 
-	"github.com/ethereum/go-ethereum/p2p/discover/v4wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
+func (t *UDPv4) sendPing(n *enode.Node, callback func()) (seq uint64, err error) {
+	toid := n.ID()
+	toaddr := &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
 
-func (t *UDPv4) Self() *enode.Node {
-	return t.localNode.Node()
-}
-
-func (t *UDPv4) ourEndpoint() Endpoint {
-	n := t.Self()
-	a := &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
-	return Endpoint{IP: a.IP, UDP: uint16(a.Port), TCP: uint16(n.TCP())}
-}
-
-func (t *UDPv4) Ping(n *enode.Node) error {
-	_, err := t.ping(n)
-	return err
-}
-
-func (t *UDPv4) ping(n *enode.Node) (seq uint64, err error) {
-	rm := t.sendPing(n.ID(), &net.UDPAddr{IP: n.IP(), Port: n.UDP()}, nil)
-	if err = <-rm.errc; err == nil {
-		seq = rm.reply.(*Pong).ENRSeq
-	}
-	return seq, err
-}
-
-func (t *UDPv4) sendPing(toid enode.ID, toaddr *net.UDPAddr, callback func()) *replyMatcher {
 	req := t.makePing(toaddr)
 	packet, hash, err := Encode(t.priv, req)
 	if err != nil {
-		errc := make(chan error, 1)
-		errc <- err
-		return &replyMatcher{errc: errc}
+		return 0, err
 	}
 
-	rm := t.pending(toid, toaddr.IP, v4wire.PongPacket, func(p v4wire.Packet) (matched bool, requestDone bool) {
+	rm := t.pending(toid, toaddr.IP, PongPacket, func(p Packet) (matched bool, requestDone bool) {
 		matched = bytes.Equal(p.(*Pong).ReplyTok, hash)
 		if matched && callback != nil {
 			callback()
 		}
 		return matched, matched
 	})
-	t.write(toaddr, toid, req.Name(), packet)
-	return rm
+
+	err = t.write(toaddr, toid, req.Name(), packet)
+	if err != nil {
+		return 0, err
+	}
+
+	if err = <-rm.errc; err == nil {
+		seq = rm.reply.(*Pong).ENRSeq
+	}
+	return seq, err
 }
+
 
 func (t *UDPv4) makePing(toaddr *net.UDPAddr) *Ping {
 	return &Ping{
@@ -79,4 +64,12 @@ func (t *UDPv4) write(toaddr *net.UDPAddr, toid enode.ID, what string, packet []
 	_, err := t.conn.WriteToUDP(packet, toaddr)
 	t.log.Trace(">> "+what, "id", toid, "addr", toaddr, "err", err)
 	return err
+}
+
+func (t *UDPv4) send(toaddr *net.UDPAddr, toid enode.ID, req Packet) ([]byte, error) {
+	packet, hash, err := Encode(t.priv, req)
+	if err != nil {
+		return hash, err
+	}
+	return hash, t.write(toaddr, toid, req.Name(), packet)
 }
