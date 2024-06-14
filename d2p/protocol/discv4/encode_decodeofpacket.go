@@ -3,10 +3,14 @@ package discv4
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"errors"
 	"fmt"
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
+	"math/big"
 	"time"
 )
 
@@ -100,3 +104,22 @@ func recoverNodeKey(hash, sig []byte) (key Pubkey, err error) {
 	return key, nil
 }
 
+// EncodePubkey encodes a secp256k1 public key.
+func EncodePubkey(key *ecdsa.PublicKey) Pubkey {
+	var e Pubkey
+	math.ReadBits(key.X, e[:len(e)/2])
+	math.ReadBits(key.Y, e[len(e)/2:])
+	return e
+}
+
+// DecodePubkey reads an encoded secp256k1 public key.
+func DecodePubkey(curve elliptic.Curve, e Pubkey) (*ecdsa.PublicKey, error) {
+	p := &ecdsa.PublicKey{Curve: curve, X: new(big.Int), Y: new(big.Int)}
+	half := len(e) / 2
+	p.X.SetBytes(e[:half])
+	p.Y.SetBytes(e[half:])
+	if !p.Curve.(*secp256k1.KoblitzCurve).IsOnCurve(p.X, p.Y) {
+		return nil, ErrBadPoint
+	}
+	return p, nil
+}

@@ -75,6 +75,8 @@ type (
 	}
 )
 
+const MaxNeighbors = 12
+
 type Pubkey [64]byte
 
 func (e Pubkey) ID() enode.ID {
@@ -129,3 +131,4 @@ func (req *ENRRequest) Kind() byte   { return ENRRequestPacket }
 
 func (req *ENRResponse) Name() string { return "ENRRESPONSE/v4" }
 func (req *ENRResponse) Kind() byte   { return ENRResponsePacket }
+
