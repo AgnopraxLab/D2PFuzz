@@ -1,7 +1,6 @@
 package fuzzing
 
-func Factory(fName, protocol string) func *CliMaker{
+func Factory(fName, protocol, engine string) {
 
-}
-	return nil
+	return
 }

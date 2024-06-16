@@ -50,6 +50,7 @@ func initApp() *cli.App {
 		fileFlag,
 		forkFlag,
 		protocolFlag,
+		engineFlag,
 		common.VerbosityFlag,
 	)
 	app.Action = startFuzzer
@@ -72,10 +73,11 @@ func startFuzzer(ctx *cli.Context) (err error) {
 		fName    = ctx.String(fileFlag.Name)
 		fork     = ctx.Int(forkFlag.Name)
 		protocol = ctx.String(protocolFlag.Name)
+		engine   = ctx.String(engineFlag.Name)
 	)
 	var factory common.GeneratorFn
 	if fork == 1 {
-		factory = fuzzing.Factory(fName, protocol)
+		factory = fuzzing.Factory(fName, protocol, engine)
 		if factory == nil {
 			return fmt.Errorf("unknown target %v", fName)
 		}
