@@ -3,6 +3,9 @@ package discv4
 import (
 	"context"
 	"crypto/ecdsa"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rlp"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -77,4 +80,57 @@ func (t *UDPv4) ourEndpoint() Endpoint {
 	n := t.Self()
 	a := &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
 	return Endpoint{IP: a.IP, UDP: uint16(a.Port), TCP: uint16(n.TCP())}
+}
+
+func (t *UDPv4) pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchFunc) *replyMatcher {
+	ch := make(chan error, 1)
+	p := &replyMatcher{from: id, ip: ip, ptype: ptype, callback: callback, errc: ch}
+	select {
+	case t.addReplyMatcher <- p:
+		// loop will handle it
+	case <-t.closeCtx.Done():
+		ch <- errClosed
+	}
+	return p
+}
+
+type node struct {
+	enode.Node
+	addedAt        time.Time // time when the node was added to the table
+	livenessChecks uint      // how often liveness was checked
+}
+
+// packetHandlerV4 wraps a packet with handler functions.
+type packetHandlerV4 struct {
+	Packet
+	senderKey *ecdsa.PublicKey // used for ping
+
+	// preverify checks whether the packet is valid and should be handled at all.
+	preverify func(p *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, fromKey Pubkey) error
+	// handle the packet.
+	handle func(req *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, mac []byte)
+}
+
+// Secp256k1 is the "secp256k1" key, which holds a public key.
+type Secp256k1 ecdsa.PublicKey
+
+func (v Secp256k1) ENRKey() string { return "secp256k1" }
+
+// EncodeRLP implements rlp.Encoder.
+func (v Secp256k1) EncodeRLP(w io.Writer) error {
+	return rlp.Encode(w, crypto.CompressPubkey((*ecdsa.PublicKey)(&v)))
+}
+
+// DecodeRLP implements rlp.Decoder.
+func (v *Secp256k1) DecodeRLP(s *rlp.Stream) error {
+	buf, err := s.Bytes()
+	if err != nil {
+		return err
+	}
+	pk, err := crypto.DecompressPubkey(buf)
+	if err != nil {
+		return err
+	}
+	*v = (Secp256k1)(*pk)
+	return nil
 }
