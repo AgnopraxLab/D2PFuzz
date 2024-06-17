@@ -24,12 +24,12 @@ type UDPConn interface {
 
 // UDPv4 implements the v4 wire protocol.
 type UDPv4 struct {
-	conn        UDPConn
-	log         log.Logger
-	priv        *ecdsa.PrivateKey
-	localNode   *enode.LocalNode
-	closeOnce   sync.Once
-	wg          sync.WaitGroup
+	conn      UDPConn
+	log       log.Logger
+	priv      *ecdsa.PrivateKey
+	localNode *enode.LocalNode
+	closeOnce sync.Once
+	wg        sync.WaitGroup
 
 	addReplyMatcher chan *replyMatcher
 	gotreply        chan reply
