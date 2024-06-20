@@ -4,27 +4,32 @@ import (
 	"D2PFuzz/d2p"
 	"D2PFuzz/d2p/protocol/discv4"
 	"bufio"
+	"context"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/urfave/cli/v2"
 	"net"
 	"os"
+	"os/signal"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
 var (
-	protocolFlag = &cli.StringFlag{
+	ProtocolFlag = &cli.StringFlag{
 		Name:    "protocol",
 		Aliases: []string{"p"},
 		Usage:   "Specify the protocol to test",
 		Value:   "discv4",
 	}
-	fileFlag = &cli.StringFlag{
+	FileFlag = &cli.StringFlag{
 		Name:     "file",
 		Aliases:  []string{"f"},
 		Usage:    "Specify the file containing test data",
@@ -56,7 +61,7 @@ var (
 func initCli(c *cli.Context) []d2p.ConnClient {
 	var (
 		thread   = c.Int(ThreadFlag.Name)
-		protocol = c.String(protocolFlag.Name)
+		protocol = c.String(ProtocolFlag.Name)
 		clients  []d2p.ConnClient
 		basePort = 30000
 	)
@@ -103,7 +108,7 @@ func ExecuteFuzzer(c *cli.Context, cleanupFiles bool) error {
 		clients     = initCli(c)
 		skipTrace   = c.Bool(SkipTraceFlag.Name)
 		numClients  = len(clients)
-		nodeList, _ = GetList(c.String(fileFlag.Name))
+		nodeList, _ = GetList(c.String(FileFlag.Name))
 	)
 	if len(clients) == 0 {
 		return fmt.Errorf("need at least one vm to participate")
@@ -120,6 +125,71 @@ func ExecuteFuzzer(c *cli.Context, cleanupFiles bool) error {
 		meta.fuzzingLoop(skipTrace, numClients)
 		cancel()
 	}()
+	meta.wg.Add(1)
+	go func() {
+		defer meta.wg.Done()
+		var (
+			tStart    = time.Now()
+			ticker    = time.NewTicker(8 * time.Second)
+			testCount = uint64(0)
+			ticks     = 0
+		)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				ticks++
+				n := meta.numTests.Load()
+				testsSinceLastUpdate := n - testCount
+				testCount = n
+				timeSpent := time.Since(tStart)
+				// Update global counter
+				globalCount := uint64(0)
+				if content, err := os.ReadFile(".fuzzcounter"); err == nil {
+					if count, err := strconv.Atoi((string(content))); err == nil {
+						globalCount = uint64(count)
+					}
+				}
+				globalCount += testsSinceLastUpdate
+				if err := os.WriteFile(".fuzzcounter", []byte(fmt.Sprintf("%d", globalCount)), 0755); err != nil {
+					log.Error("Error saving progress", "err", err)
+				}
+				log.Info("Executing",
+					"tests", n,
+					"time", common.PrettyDuration(timeSpent),
+					"test/s", fmt.Sprintf("%.01f", float64(uint64(time.Second)*n)/float64(timeSpent)),
+					"avg steps", fmt.Sprintf("%.01f", traceLengthSA.Avg()),
+					"global", globalCount,
+				)
+				for _, cli := range clients {
+					log.Info(fmt.Sprintf("Stats %v", cli.Name()), cli.Stats()...)
+				}
+				switch ticks {
+				case 5:
+					// Decrease stats-reporting after 40s
+					ticker.Reset(time.Minute)
+				case 65:
+					// Decrease stats-reporting after one hour
+					ticker.Reset(time.Hour)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+
+	}()
+	// Cancel ability
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case <-sigs:
+	case <-ctx.Done():
+	}
+	log.Info("Waiting for processes to exit")
+	meta.abort.Store(true)
+	cancel()
+	meta.wg.Wait()
+	return nil
 }
 
 type testMeta struct {

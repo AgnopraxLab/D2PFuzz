@@ -26,11 +26,13 @@ func initApp() *cli.App {
 	app.Authors = []*cli.Author{{Name: "Kimmich Wu"}}
 	app.Usage = "A simple fuzzer with various options"
 	app.Flags = append(app.Flags,
-		fileFlag,
-		protocolFlag,
 		engineFlag,
 		common.VerbosityFlag,
 		common.SkipTraceFlag,
+		common.ThreadFlag,
+		common.LocationFlag,
+		common.FileFlag,
+		common.ProtocolFlag,
 	)
 	app.Action = startFuzzer
 	return app
