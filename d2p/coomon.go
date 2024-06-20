@@ -5,6 +5,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"net"
 )
 
@@ -13,6 +14,10 @@ type UDPConn interface {
 	WriteToUDP(b []byte, addr *net.UDPAddr) (n int, err error)
 	Close() error
 	LocalAddr() net.Addr
+}
+
+type ConnClient interface {
+	Self() *enode.Node
 }
 
 type Config struct {
@@ -25,6 +30,10 @@ type Config struct {
 	Clock        mclock.Clock
 }
 
-func GenKey() (*ecdsa.PrivateKey, error) {
-	return crypto.GenerateKey()
+func GenKey() *ecdsa.PrivateKey {
+	privateKey, err := crypto.GenerateKey()
+	if err != nil {
+		log.Error("failed to generate private key: %v", err)
+	}
+	return privateKey
 }

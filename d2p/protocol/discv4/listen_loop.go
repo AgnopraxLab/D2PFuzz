@@ -1,6 +1,7 @@
 package discv4
 
 import (
+	"D2PFuzz/d2p"
 	"container/list"
 	"context"
 	"crypto/ecdsa"
@@ -43,10 +44,9 @@ const (
 	// Packets larger than this size will be cut at the end and treated
 	// as invalid because their hash won't match.
 	maxPacketSize = 1280
-	ntpPool   = "pool.ntp.org" // ntpPool is the NTP server to query for the current time
-	ntpChecks = 3              // Number of measurements to do against the NTP server
+	ntpPool       = "pool.ntp.org" // ntpPool is the NTP server to query for the current time
+	ntpChecks     = 3              // Number of measurements to do against the NTP server
 )
-
 
 // Config holds settings for the discovery listener.
 type Config struct {
@@ -56,7 +56,7 @@ type Config struct {
 	// All remaining settings are optional.
 
 	// Packet handling configuration:
-	Unhandled   chan<- ReadPacket // unhandled packets are sent on this channel
+	Unhandled chan<- ReadPacket // unhandled packets are sent on this channel
 
 	// The options below are useful in very specific cases, like in unit tests.
 	V5ProtocolID *[6]byte
@@ -88,10 +88,10 @@ func (cfg Config) withDefaults() Config {
 }
 
 type meteredUdpConn struct {
-	UDPConn
+	d2p.UDPConn
 }
 
-func newMeteredConn(conn UDPConn) UDPConn {
+func newMeteredConn(conn d2p.UDPConn) d2p.UDPConn {
 	// Short circuit if metrics are disabled
 	if !metrics.Enabled {
 		return conn
@@ -99,7 +99,7 @@ func newMeteredConn(conn UDPConn) UDPConn {
 	return &meteredUdpConn{UDPConn: conn}
 }
 
-func ListenV4(c UDPConn, ln *enode.LocalNode, cfg Config) (*UDPv4, error) {
+func ListenV4(c d2p.UDPConn, ln *enode.LocalNode, cfg Config) (*UDPv4, error) {
 	cfg = cfg.withDefaults()
 	closeCtx, cancel := context.WithCancel(context.Background())
 	t := &UDPv4{
@@ -221,7 +221,6 @@ func (t *UDPv4) loop() {
 		}
 	}
 }
-
 
 // readLoop runs in its own goroutine. it handles incoming UDP packets.
 func (t *UDPv4) readLoop(unhandled chan<- ReadPacket) {

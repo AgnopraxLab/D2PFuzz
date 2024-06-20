@@ -1,6 +1,7 @@
 package discv4
 
 import (
+	"D2PFuzz/d2p"
 	"context"
 	"crypto/ecdsa"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -15,16 +16,9 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
-type UDPConn interface {
-	ReadFromUDP(b []byte) (n int, addr *net.UDPAddr, err error)
-	WriteToUDP(b []byte, addr *net.UDPAddr) (n int, err error)
-	Close() error
-	LocalAddr() net.Addr
-}
-
 // UDPv4 implements the v4 wire protocol.
 type UDPv4 struct {
-	conn      UDPConn
+	conn      d2p.UDPConn
 	log       log.Logger
 	priv      *ecdsa.PrivateKey
 	localNode *enode.LocalNode
