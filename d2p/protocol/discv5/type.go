@@ -59,7 +59,7 @@ type (
 		Nonce Nonce
 	}
 
-	// WHOAREYOU contains the handshake challenge.
+	// Whoareyou contains the handshake challenge.
 	Whoareyou struct {
 		ChallengeData []byte   // Encoded challenge
 		Nonce         Nonce    // Nonce of request packet
@@ -73,13 +73,13 @@ type (
 		sent mclock.AbsTime // for handshake GC.
 	}
 
-	// PING is sent during liveness checks.
+	// Ping is sent during liveness checks.
 	Ping struct {
 		ReqID  []byte
 		ENRSeq uint64
 	}
 
-	// PONG is the reply to PING.
+	// Pong is the reply to PING.
 	Pong struct {
 		ReqID  []byte
 		ENRSeq uint64
@@ -87,7 +87,7 @@ type (
 		ToPort uint16 // packet, which provides a way to discover the external address (after NAT).
 	}
 
-	// FINDNODE is a query for nodes in the given bucket.
+	// Findnode is a query for nodes in the given bucket.
 	Findnode struct {
 		ReqID     []byte
 		Distances []uint
@@ -97,21 +97,21 @@ type (
 		OpID uint64 `rlp:"-"`
 	}
 
-	// NODES is a response to FINDNODE.
+	// Nodes is a response to FINDNODE.
 	Nodes struct {
 		ReqID     []byte
 		RespCount uint8 // total number of responses to the request
 		Nodes     []*enr.Record
 	}
 
-	// TALKREQ is an application-level request.
+	// TalkRequest TALKREQ is an application-level request.
 	TalkRequest struct {
 		ReqID    []byte
 		Protocol string
 		Message  []byte
 	}
 
-	// TALKRESP is the reply to TALKREQ.
+	// TalkResponse TALKRESP is the reply to TALKREQ.
 	TalkResponse struct {
 		ReqID   []byte
 		Message []byte
