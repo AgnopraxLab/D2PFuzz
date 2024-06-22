@@ -3,6 +3,7 @@ package common
 import (
 	"D2PFuzz/d2p"
 	"D2PFuzz/d2p/protocol/discv4"
+	utils "D2PFuzz/util"
 	"bufio"
 	"context"
 	"fmt"
@@ -30,10 +31,9 @@ var (
 		Value:   "discv4",
 	}
 	FileFlag = &cli.StringFlag{
-		Name:     "file",
-		Aliases:  []string{"f"},
-		Usage:    "Specify the file containing test data",
-		Required: true,
+		Name:    "file",
+		Aliases: []string{"f"},
+		Usage:   "Specify the file containing test data",
 	}
 	LocationFlag = &cli.StringFlag{
 		Name:  "outdir",
@@ -56,12 +56,20 @@ var (
 			"This mode is faster, and can be used even if the clients-under-test has known errors in the trace-output, \n" +
 			"but has a very high chance of missing cases which could be exploitable.",
 	}
+	TypeFlag = &cli.StringFlag{
+		Name:  "type",
+		Usage: "Type of packet to generate (e.g., 'ping')",
+	}
+	CountFlag = &cli.IntFlag{
+		Name:  "count",
+		Usage: "Number of packets to generate",
+		Value: 1,
+	}
+	traceLengthSA = utils.NewSlidingAverage()
 )
 
-func initCli(c *cli.Context) []d2p.ConnClient {
+func initCli(protocol string, thread int) []d2p.ConnClient {
 	var (
-		thread   = c.Int(ThreadFlag.Name)
-		protocol = c.String(ProtocolFlag.Name)
 		clients  []d2p.ConnClient
 		basePort = 30000
 	)
@@ -94,6 +102,7 @@ func initCli(c *cli.Context) []d2p.ConnClient {
 			client, _ := discv4.ListenV4(udpConn, ln, cfg)
 			clients = append(clients, client)
 		}
+
 	case "discv5":
 		break
 	default:
@@ -105,7 +114,7 @@ func initCli(c *cli.Context) []d2p.ConnClient {
 
 func ExecuteFuzzer(c *cli.Context, cleanupFiles bool) error {
 	var (
-		clients     = initCli(c)
+		clients     = initCli(c.String(ProtocolFlag.Name), c.Int(ThreadFlag.Name))
 		skipTrace   = c.Bool(SkipTraceFlag.Name)
 		numClients  = len(clients)
 		nodeList, _ = GetList(c.String(FileFlag.Name))
@@ -120,6 +129,7 @@ func ExecuteFuzzer(c *cli.Context, cleanupFiles bool) error {
 		targets: nodeList,
 		outdir:  c.String(LocationFlag.Name),
 	}
+	meta.wg.Add(1)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		meta.fuzzingLoop(skipTrace, numClients)
@@ -161,9 +171,10 @@ func ExecuteFuzzer(c *cli.Context, cleanupFiles bool) error {
 					"avg steps", fmt.Sprintf("%.01f", traceLengthSA.Avg()),
 					"global", globalCount,
 				)
-				for _, cli := range clients {
-					log.Info(fmt.Sprintf("Stats %v", cli.Name()), cli.Stats()...)
-				}
+				//TODO: Save Client Stats
+				//for _, cli := range clients {
+				//	log.Info(fmt.Sprintf("Stats %v", cli.Name()), cli.Stats()...)
+				//}
 				switch ticks {
 				case 5:
 					// Decrease stats-reporting after 40s
@@ -205,14 +216,10 @@ type testMeta struct {
 	deleteFilesWhenDone bool
 }
 
-func (meta *testMeta) fuzzingLoop(skipTrace bool) {
-	var (
-		ready        []int
-		testIndex    = 0
-		taskChannels []chan *task
-		resultCh     = make(chan *task)
-		cleanCh      = make(chan *cleanTask)
-	)
+func (meta *testMeta) fuzzingLoop(skipTrace bool, clientCount int) {
+	skipTrace = true
+	clientCount = 0
+	return
 }
 
 type task struct {
@@ -276,4 +283,38 @@ func getLocalIP() net.IP {
 		}
 	}
 	return nil
+}
+
+func ExecuteGenerator(c *cli.Context) {
+	var (
+		protocol   = c.String(ProtocolFlag.Name)
+		packetType = c.String(TypeFlag.Name)
+		count      = c.Int(CountFlag.Name)
+		target     = c.String(FileFlag.Name)
+	)
+
+	cli := initCli(protocol, 1)
+	for i := 0; i < count; i++ {
+		packet := cli.GeneratePacket(packetType, protocol)
+		if target != "" {
+			// Simulate sending the packet to the target
+			fmt.Printf("Sending packet to %s: %s\n", target, packet)
+			// Implement actual sending logic here
+		} else {
+			// Print the packet
+			fmt.Println(packet)
+		}
+	}
+}
+
+func (cli d2p.ConnClient) GeneratePacket(packetType string) string {
+	switch packetType {
+	case "ping":
+		return "DiscV4 Ping Packet"
+	case "pong":
+		return "DiscV4 Pong Packet"
+	// Add more packet types as needed
+	default:
+		return "Unknown Packet Type"
+	}
 }
