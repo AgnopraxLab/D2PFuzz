@@ -187,7 +187,6 @@ func ExecuteFuzzer(c *cli.Context, cleanupFiles bool) error {
 				return
 			}
 		}
-
 	}()
 	// Cancel ability
 	sigs := make(chan os.Signal, 1)
