@@ -37,3 +37,10 @@ func GenKey() *ecdsa.PrivateKey {
 	}
 	return privateKey
 }
+
+// ReadPacket is a packet that couldn't be handled. Those packets are sent to the unhandled
+// channel if configured.
+type ReadPacket struct {
+	Data []byte
+	Addr *net.UDPAddr
+}
