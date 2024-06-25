@@ -3,9 +3,11 @@ package common
 import (
 	"D2PFuzz/d2p"
 	"D2PFuzz/d2p/protocol/discv4"
+	"D2PFuzz/d2p/protocol/discv5"
 	"D2PFuzz/utils"
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -69,9 +71,9 @@ var (
 	traceLengthSA = utils.NewSlidingAverage()
 )
 
-func initCli(protocol string, thread int) []d2p.ConnClient {
+func initDiscv4(thread int) []*discv4.UDPv4 {
 	var (
-		clients  []d2p.ConnClient
+		clients  []*discv4.UDPv4
 		basePort = 30000
 	)
 
@@ -105,24 +107,44 @@ func initCli(protocol string, thread int) []d2p.ConnClient {
 	return clients
 }
 
-func ExecuteFuzzer(c *cli.Context, cleanupFiles bool) error {
+func initDiscv5(thread int) []*discv5.UDPv5 {
+	var clients []*discv5.UDPv5
+
+	return clients
+}
+
+func GenerateAndExecute(c *cli.Context) error {
 	var (
 		protocol    = c.String(ProtocolFlag.Name)
-		clients     = initCli(protocol, c.Int(ThreadFlag.Name))
-		skipTrace   = c.Bool(SkipTraceFlag.Name)
 		nodeList, _ = GetList(c.String(FileFlag.Name))
+	)
+	switch protocol {
+	case "discv4":
+		return discv4Fuzzer(c, nodeList, false)
+	case "discv5":
+		return discv5Fuzzer(c, nodeList, false)
+	case "rlpx":
+		return nil
+	default:
+		return errors.New("unsupported protocol")
+	}
+}
+
+func discv4Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) error {
+	var (
+		clients   = initDiscv4(c.Int(ThreadFlag.Name))
+		skipTrace = c.Bool(SkipTraceFlag.Name)
 	)
 	if len(clients) == 0 {
 		return fmt.Errorf("need at least one vm to participate")
 	}
 	numClients := len(clients)
 	log.Info("Fuzzing started...")
-	meta := &testMeta{
-		testCh:   make(chan string, 4), // channel where we'll deliver tests
-		clis:     clients,
-		targets:  nodeList,
-		outdir:   c.String(LocationFlag.Name),
-		protocol: protocol,
+	meta := &discv4Meta{
+		testCh:  make(chan string, 4), // channel where we'll deliver tests
+		clis:    clients,
+		targets: nodeList,
+		outdir:  c.String(LocationFlag.Name),
 	}
 	meta.wg.Add(1)
 
@@ -198,13 +220,16 @@ func ExecuteFuzzer(c *cli.Context, cleanupFiles bool) error {
 	return nil
 }
 
-type testMeta struct {
+func discv5Fuzzer(c *cli.Context, nodelist []*enode.Node, cleanupFiles bool) error {
+	return nil
+}
+
+type discv4Meta struct {
 	abort       atomic.Bool
 	testCh      chan string
 	wg          sync.WaitGroup
-	clis        []d2p.ConnClient
+	clis        []*discv4.UDPv4
 	targets     []*enode.Node
-	protocol    string
 	numTests    atomic.Uint64
 	outdir      string
 	notifyTopic string
@@ -212,7 +237,7 @@ type testMeta struct {
 	deleteFilesWhenDone bool
 }
 
-func (meta *testMeta) fuzzingLoop(skipTrace bool, clientCount int) {
+func (meta *discv4Meta) fuzzingLoop(skipTrace bool, clientCount int) {
 	var (
 		ready        []int
 		taskChannels []chan *task
@@ -221,7 +246,7 @@ func (meta *testMeta) fuzzingLoop(skipTrace bool, clientCount int) {
 	)
 	defer meta.wg.Done()
 	defer close(cleanCh)
-	// Start n vmLoops.
+	// Start n Loops.
 	for i, cli := range meta.clis {
 		var taskCh = make(chan *task)
 		taskChannels = append(taskChannels, taskCh)
@@ -232,13 +257,8 @@ func (meta *testMeta) fuzzingLoop(skipTrace bool, clientCount int) {
 	return
 }
 
-func (meta *testMeta) cliLoop(cli d2p.ConnClient, taskCh, resultCh chan *task) {
-	switch meta.protocol {
-	case "dicv4":
-		pv4 := cli.(*discv4.UDPv4)
-		pv4.
-	}
-
+func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, taskCh, resultCh chan *task) {
+	return
 }
 
 type task struct {
@@ -304,36 +324,41 @@ func getLocalIP() net.IP {
 	return nil
 }
 
-func ExecuteGenerator(c *cli.Context) {
+func ExecuteGenerator(c *cli.Context) error {
 	var (
-		protocol   = c.String(ProtocolFlag.Name)
-		packetType = c.String(TypeFlag.Name)
-		count      = c.Int(CountFlag.Name)
-		target     = c.String(FileFlag.Name)
+		protocol    = c.String(ProtocolFlag.Name)
+		packetType  = c.String(TypeFlag.Name)
+		count       = c.Int(CountFlag.Name)
+		nodeList, _ = GetList(c.String(FileFlag.Name))
 	)
-
-	cli := initCli(protocol, 1)
-	for i := 0; i < count; i++ {
-		packet := cli.GeneratePacket(packetType, protocol)
-		if target != "" {
-			// Simulate sending the packet to the target
-			fmt.Printf("Sending packet to %s: %s\n", target, packet)
-			// Implement actual sending logic here
-		} else {
-			// Print the packet
-			fmt.Println(packet)
-		}
+	switch protocol {
+	case "discv4":
+		return discv4Generator(packetType, count, nodeList)
+	case "discv5":
+		return discv5Generator(packetType, count, nodeList)
+	case "rlpx":
+		return nil
+	default:
+		return errors.New("unsupported protocol")
 	}
 }
 
-func (cli d2p.ConnClient) GeneratePacket(packetType string) string {
-	switch packetType {
-	case "ping":
-		return "DiscV4 Ping Packet"
-	case "pong":
-		return "DiscV4 Pong Packet"
-	// Add more packet types as needed
-	default:
-		return "Unknown Packet Type"
+func discv4Generator(packetType string, count int, nodeList []*enode.Node) error {
+	var (
+		client *discv4.UDPv4
+		node   *enode.Node
+	)
+	clients := initDiscv4(1)
+	client = clients[0]
+	node = nodeList[0]
+	for i := 0; i < count; i++ {
+		packet := client.GenPacket(packetType, count, node)
+		println(packet.OutPut())
 	}
+	return nil
+}
+
+func discv5Generator(packetType string, count int, nodeList []*enode.Node) error {
+
+	return nil
 }

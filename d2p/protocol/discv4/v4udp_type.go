@@ -128,3 +128,13 @@ func (v *Secp256k1) DecodeRLP(s *rlp.Stream) error {
 	*v = (Secp256k1)(*pk)
 	return nil
 }
+
+func (t *UDPv4) GenPacket(packetType string, count int, n *enode.Node) Packet {
+	addr := &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
+	switch packetType {
+	case "ping":
+		return t.makePing(addr)
+	default:
+		return nil
+	}
+}

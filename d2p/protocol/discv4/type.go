@@ -112,23 +112,30 @@ type Packet interface {
 	Name() string
 	// Kind is the packet type, for logging purposes.
 	Kind() byte
+	// OutPut is the print of packet
+	OutPut() string
 }
 
-func (req *Ping) Name() string { return "PING/v4" }
-func (req *Ping) Kind() byte   { return PingPacket }
+func (req *Ping) Name() string   { return "PING/v4" }
+func (req *Ping) Kind() byte     { return PingPacket }
+func (req *Ping) OutPut() string { return "PING/v4" }
 
-func (req *Pong) Name() string { return "PONG/v4" }
-func (req *Pong) Kind() byte   { return PongPacket }
+func (req *Pong) Name() string   { return "PONG/v4" }
+func (req *Pong) Kind() byte     { return PongPacket }
+func (req *Pong) OutPut() string { return "PONG/v4" }
 
-func (req *Findnode) Name() string { return "FINDNODE/v4" }
-func (req *Findnode) Kind() byte   { return FindnodePacket }
+func (req *Findnode) Name() string   { return "FINDNODE/v4" }
+func (req *Findnode) Kind() byte     { return FindnodePacket }
+func (req *Findnode) OutPut() string { return "FINDNODE/v4" }
 
-func (req *Neighbors) Name() string { return "NEIGHBORS/v4" }
-func (req *Neighbors) Kind() byte   { return NeighborsPacket }
+func (req *Neighbors) Name() string   { return "NEIGHBORS/v4" }
+func (req *Neighbors) Kind() byte     { return NeighborsPacket }
+func (req *Neighbors) OutPut() string { return "NEIGHBORS/v4" }
 
-func (req *ENRRequest) Name() string { return "ENRREQUEST/v4" }
-func (req *ENRRequest) Kind() byte   { return ENRRequestPacket }
+func (req *ENRRequest) Name() string   { return "ENRREQUEST/v4" }
+func (req *ENRRequest) Kind() byte     { return ENRRequestPacket }
+func (req *ENRRequest) OutPut() string { return "ENRREQUEST/v4" }
 
-func (req *ENRResponse) Name() string { return "ENRRESPONSE/v4" }
-func (req *ENRResponse) Kind() byte   { return ENRResponsePacket }
-
+func (req *ENRResponse) Name() string   { return "ENRRESPONSE/v4" }
+func (req *ENRResponse) Kind() byte     { return ENRResponsePacket }
+func (req *ENRResponse) OutPut() string { return "ENRRESPONSE/v4" }

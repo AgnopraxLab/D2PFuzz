@@ -3,11 +3,12 @@ package main
 import (
 	"D2PFuzz/common"
 	"fmt"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/urfave/cli/v2"
 	"log/slog"
 	"os"
 	"path/filepath"
+
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -50,5 +51,5 @@ func startFuzzer(ctx *cli.Context) (err error) {
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, loglevel, true)))
 	log.Root().Write(loglevel, "Set loglevel", "level", loglevel)
 
-	return common.ExecuteFuzzer(ctx, false)
+	return common.GenerateAndExecute(ctx)
 }
