@@ -3,15 +3,10 @@ package common
 import (
 	"D2PFuzz/d2p"
 	"D2PFuzz/d2p/protocol/discv4"
-	utils "D2PFuzz/util"
+	"D2PFuzz/utils"
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/mclock"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/urfave/cli/v2"
 	"net"
 	"os"
 	"os/signal"
@@ -21,6 +16,12 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/mclock"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -74,39 +75,31 @@ func initCli(protocol string, thread int) []d2p.ConnClient {
 		basePort = 30000
 	)
 
-	switch protocol {
-	case "discv4":
-		for i := 0; i < thread; i++ {
-			cfg := discv4.Config{
-				PrivateKey:   d2p.GenKey(),
-				Unhandled:    make(chan discv4.ReadPacket, 10),
-				Log:          log.Root(),
-				ValidSchemes: enode.ValidSchemes,
-				Clock:        mclock.System{},
-			}
-			ip := getLocalIP()
-			if ip == nil {
-				fmt.Printf("failed to get local IP address for thread %d\n", i)
-				continue
-			}
-			port := basePort + i
-			addr := &net.UDPAddr{IP: ip, Port: port}
-			udpConn, err := net.ListenUDP("udp", addr)
-			if err != nil {
-				fmt.Printf("failed to create UDP connection for thread %d: %v\n", i, err)
-				continue
-			}
-			db, _ := enode.OpenDB("")
-			nodeKey := d2p.GenKey()
-			ln := enode.NewLocalNode(db, nodeKey)
-			client, _ := discv4.ListenV4(udpConn, ln, cfg)
-			clients = append(clients, client)
+	for i := 0; i < thread; i++ {
+		cfg := discv4.Config{
+			PrivateKey:   d2p.GenKey(),
+			Unhandled:    make(chan discv4.ReadPacket, 10),
+			Log:          log.Root(),
+			ValidSchemes: enode.ValidSchemes,
+			Clock:        mclock.System{},
 		}
-
-	case "discv5":
-		break
-	default:
-		fmt.Printf("Unknown protocol: %s\n", protocol)
+		ip := getLocalIP()
+		if ip == nil {
+			fmt.Printf("failed to get local IP address for thread %d\n", i)
+			continue
+		}
+		port := basePort + i
+		addr := &net.UDPAddr{IP: ip, Port: port}
+		udpConn, err := net.ListenUDP("udp", addr)
+		if err != nil {
+			fmt.Printf("failed to create UDP connection for thread %d: %v\n", i, err)
+			continue
+		}
+		db, _ := enode.OpenDB("")
+		nodeKey := d2p.GenKey()
+		ln := enode.NewLocalNode(db, nodeKey)
+		client, _ := discv4.ListenV4(udpConn, ln, cfg)
+		clients = append(clients, client)
 	}
 
 	return clients
@@ -114,22 +107,25 @@ func initCli(protocol string, thread int) []d2p.ConnClient {
 
 func ExecuteFuzzer(c *cli.Context, cleanupFiles bool) error {
 	var (
-		clients     = initCli(c.String(ProtocolFlag.Name), c.Int(ThreadFlag.Name))
+		protocol    = c.String(ProtocolFlag.Name)
+		clients     = initCli(protocol, c.Int(ThreadFlag.Name))
 		skipTrace   = c.Bool(SkipTraceFlag.Name)
-		numClients  = len(clients)
 		nodeList, _ = GetList(c.String(FileFlag.Name))
 	)
 	if len(clients) == 0 {
 		return fmt.Errorf("need at least one vm to participate")
 	}
+	numClients := len(clients)
 	log.Info("Fuzzing started...")
 	meta := &testMeta{
-		testCh:  make(chan string, 4), // channel where we'll deliver tests
-		cli:     clients,
-		targets: nodeList,
-		outdir:  c.String(LocationFlag.Name),
+		testCh:   make(chan string, 4), // channel where we'll deliver tests
+		clis:     clients,
+		targets:  nodeList,
+		outdir:   c.String(LocationFlag.Name),
+		protocol: protocol,
 	}
 	meta.wg.Add(1)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		meta.fuzzingLoop(skipTrace, numClients)
@@ -206,8 +202,9 @@ type testMeta struct {
 	abort       atomic.Bool
 	testCh      chan string
 	wg          sync.WaitGroup
-	cli         []d2p.ConnClient
+	clis        []d2p.ConnClient
 	targets     []*enode.Node
+	protocol    string
 	numTests    atomic.Uint64
 	outdir      string
 	notifyTopic string
@@ -216,9 +213,32 @@ type testMeta struct {
 }
 
 func (meta *testMeta) fuzzingLoop(skipTrace bool, clientCount int) {
-	skipTrace = true
-	clientCount = 0
+	var (
+		ready        []int
+		taskChannels []chan *task
+		resultCh     = make(chan *task)
+		cleanCh      = make(chan *cleanTask)
+	)
+	defer meta.wg.Done()
+	defer close(cleanCh)
+	// Start n vmLoops.
+	for i, cli := range meta.clis {
+		var taskCh = make(chan *task)
+		taskChannels = append(taskChannels, taskCh)
+		meta.wg.Add(1)
+		go meta.cliLoop(cli, taskCh, resultCh)
+		ready = append(ready, i)
+	}
 	return
+}
+
+func (meta *testMeta) cliLoop(cli d2p.ConnClient, taskCh, resultCh chan *task) {
+	switch meta.protocol {
+	case "dicv4":
+		pv4 := cli.(*discv4.UDPv4)
+		pv4.
+	}
+
 }
 
 type task struct {
