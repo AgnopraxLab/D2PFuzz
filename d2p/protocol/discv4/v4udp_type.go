@@ -2,18 +2,19 @@ package discv4
 
 import (
 	"D2PFuzz/d2p"
+	"D2PFuzz/fuzzing"
 	"context"
 	"crypto/ecdsa"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rlp"
 	"io"
+	"math/rand"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p/discover/v4wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // UDPv4 implements the v4 wire protocol.
@@ -52,7 +53,7 @@ type replyMatcher struct {
 
 	errc chan error
 
-	reply v4wire.Packet
+	reply Packet
 }
 
 type replyMatchFunc func(Packet) (matched bool, requestDone bool)
@@ -130,11 +131,50 @@ func (v *Secp256k1) DecodeRLP(s *rlp.Stream) error {
 }
 
 func (t *UDPv4) GenPacket(packetType string, count int, n *enode.Node) Packet {
-	addr := &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
-	switch packetType {
-	case "ping":
-		return t.makePing(addr)
-	default:
-		return nil
+	var (
+		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
+		target      = fuzzing.RandHex(64)
+		pubkey      Pubkey
+		packetTypes = []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
+	)
+	copy(pubkey[:], target)
+
+	for i := 0; i < count; i++ {
+		switch packetType {
+		case "ping":
+			return t.makePing(addr)
+		case "pong":
+			return t.makePong(addr, nil, nil)
+		case "findnode":
+			return t.makeFindnode(pubkey)
+		case "neighbors":
+			return nil
+		case "ENRRequest":
+			return t.makeENRRequest()
+		case "ENRResponse":
+			return t.makeENRResponse([]byte(fuzzing.RandHex(64)))
+		case "random":
+			randomType := packetTypes[rand.Intn(len(packetTypes))]
+			switch randomType {
+			case "ping":
+				return t.makePing(addr)
+			case "pong":
+				return t.makePong(addr, nil, nil)
+			case "findnode":
+				target := fuzzing.RandHex(64)
+				var pubkey Pubkey
+				copy(pubkey[:], target)
+				return t.makeFindnode(pubkey)
+			case "neighbors":
+				return nil
+			case "ENRRequest":
+				return t.makeENRRequest()
+			case "ENRResponse":
+				return t.makeENRResponse([]byte(fuzzing.RandHex(64)))
+			}
+		default:
+			return nil
+		}
 	}
+	return nil
 }

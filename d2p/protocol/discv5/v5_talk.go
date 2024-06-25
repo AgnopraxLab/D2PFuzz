@@ -1,8 +1,6 @@
 package discv5
 
 import (
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"net"
 	"sync"
@@ -52,40 +50,40 @@ func (t *talkSystem) register(protocol string, handler TalkRequestHandler) {
 	t.mutex.Unlock()
 }
 
-// handleRequest handles a talk request.
-func (t *talkSystem) handleRequest(id enode.ID, addr *net.UDPAddr, req *v5wire.TalkRequest) {
-	t.mutex.Lock()
-	handler, ok := t.handlers[req.Protocol]
-	t.mutex.Unlock()
-
-	if !ok {
-		resp := &v5wire.TalkResponse{ReqID: req.ReqID}
-		t.transport.sendResponse(id, addr, resp)
-		return
-	}
-
-	// Wait for a slot to become available, then run the handler.
-	timeout := time.NewTimer(talkHandlerLaunchTimeout)
-	defer timeout.Stop()
-	select {
-	case <-t.slots:
-		go func() {
-			defer func() { t.slots <- struct{}{} }()
-			respMessage := handler(id, addr, req.Message)
-			resp := &v5wire.TalkResponse{ReqID: req.ReqID, Message: respMessage}
-			t.transport.sendFromAnotherThread(id, addr, resp)
-		}()
-	case <-timeout.C:
-		// Couldn't get it in time, drop the request.
-		if time.Since(t.lastLog) > 5*time.Second {
-			log.Warn("Dropping TALKREQ due to overload", "ndrop", t.dropCount)
-			t.lastLog = time.Now()
-			t.dropCount++
-		}
-	case <-t.transport.closeCtx.Done():
-		// Transport closed, drop the request.
-	}
-}
+//// handleRequest handles a talk request.
+//func (t *talkSystem) handleRequest(id enode.ID, addr *net.UDPAddr, req *v5wire.TalkRequest) {
+//	t.mutex.Lock()
+//	handler, ok := t.handlers[req.Protocol]
+//	t.mutex.Unlock()
+//
+//	if !ok {
+//		resp := &v5wire.TalkResponse{ReqID: req.ReqID}
+//		t.transport.sendResponse(id, addr, resp)
+//		return
+//	}
+//
+//	// Wait for a slot to become available, then run the handler.
+//	timeout := time.NewTimer(talkHandlerLaunchTimeout)
+//	defer timeout.Stop()
+//	select {
+//	case <-t.slots:
+//		go func() {
+//			defer func() { t.slots <- struct{}{} }()
+//			respMessage := handler(id, addr, req.Message)
+//			resp := &v5wire.TalkResponse{ReqID: req.ReqID, Message: respMessage}
+//			t.transport.sendFromAnotherThread(id, addr, resp)
+//		}()
+//	case <-timeout.C:
+//		// Couldn't get it in time, drop the request.
+//		if time.Since(t.lastLog) > 5*time.Second {
+//			log.Warn("Dropping TALKREQ due to overload", "ndrop", t.dropCount)
+//			t.lastLog = time.Now()
+//			t.dropCount++
+//		}
+//	case <-t.transport.closeCtx.Done():
+//		// Transport closed, drop the request.
+//	}
+//}
 
 // wait blocks until all active requests have finished, and prevents new request
 // handlers from being launched.
