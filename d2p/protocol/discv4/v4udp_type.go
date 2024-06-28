@@ -142,35 +142,72 @@ func (t *UDPv4) GenPacket(packetType string, count int, n *enode.Node) Packet {
 	for i := 0; i < count; i++ {
 		switch packetType {
 		case "ping":
-			return t.makePing(addr)
+			return &Ping{
+				Version:    4,
+				From:       t.ourEndpoint(),
+				To:         NewEndpoint(addr, 0),
+				Expiration: uint64(time.Now().Add(expiration).Unix()),
+				ENRSeq:     t.localNode.Node().Seq(),
+			}
+		//case "ping":
+		//	return t.makePing(addr)
 		case "pong":
-			return t.makePong(addr, nil, nil)
+			return &Pong{
+				To:         NewEndpoint(addr, 0),
+				ReplyTok:   []byte(fuzzing.RandHex(64)),
+				Expiration: uint64(time.Now().Add(expiration).Unix()),
+				ENRSeq:     t.localNode.Node().Seq(),
+			}
 		case "findnode":
-			return t.makeFindnode(pubkey)
+			return &Findnode{
+				Target:     pubkey,
+				Expiration: uint64(time.Now().Add(expiration).Unix()),
+			}
 		case "neighbors":
 			return nil
 		case "ENRRequest":
-			return t.makeENRRequest()
+			return &ENRRequest{
+				Expiration: uint64(time.Now().Add(expiration).Unix()),
+			}
 		case "ENRResponse":
-			return t.makeENRResponse([]byte(fuzzing.RandHex(64)))
+			return &ENRResponse{
+				ReplyTok: []byte(fuzzing.RandHex(64)),
+				Record:   *t.localNode.Node().Record(),
+			}
 		case "random":
 			randomType := packetTypes[rand.Intn(len(packetTypes))]
 			switch randomType {
 			case "ping":
-				return t.makePing(addr)
+				return &Ping{
+					Version:    4,
+					From:       t.ourEndpoint(),
+					To:         NewEndpoint(addr, 0),
+					Expiration: uint64(time.Now().Add(expiration).Unix()),
+					ENRSeq:     t.localNode.Node().Seq(),
+				}
 			case "pong":
-				return t.makePong(addr, nil, nil)
+				return &Pong{
+					To:         NewEndpoint(addr, 0),
+					ReplyTok:   []byte(fuzzing.RandHex(64)),
+					Expiration: uint64(time.Now().Add(expiration).Unix()),
+					ENRSeq:     t.localNode.Node().Seq(),
+				}
 			case "findnode":
-				target := fuzzing.RandHex(64)
-				var pubkey Pubkey
-				copy(pubkey[:], target)
-				return t.makeFindnode(pubkey)
+				return &Findnode{
+					Target:     pubkey,
+					Expiration: uint64(time.Now().Add(expiration).Unix()),
+				}
 			case "neighbors":
 				return nil
 			case "ENRRequest":
-				return t.makeENRRequest()
+				return &ENRRequest{
+					Expiration: uint64(time.Now().Add(expiration).Unix()),
+				}
 			case "ENRResponse":
-				return t.makeENRResponse([]byte(fuzzing.RandHex(64)))
+				return &ENRResponse{
+					ReplyTok: []byte(fuzzing.RandHex(64)),
+					Record:   *t.localNode.Node().Record(),
+				}
 			}
 		default:
 			return nil

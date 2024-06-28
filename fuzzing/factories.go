@@ -1,6 +1,6 @@
 package fuzzing
 
-func Factory(fName, protocol, engine string) {
+func Factory(fName, protocol string) {
 
 	return
 }

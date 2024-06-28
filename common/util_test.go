@@ -18,7 +18,7 @@ func TestGetList(t *testing.T) {
 
 func TestDiscv4Generator(t *testing.T) {
 	// Replace with your test data and assertions
-	packetType := "ENRResponse"
+	packetType := "ping"
 	count := 5
 	nodeList := []*enode.Node{
 		// Replace with mock nodes or load from test file

@@ -337,7 +337,7 @@ func ExecuteGenerator(c *cli.Context) error {
 	case "discv5":
 		return discv5Generator(packetType, count, nodeList)
 	case "rlpx":
-		return nil
+		return rlpxGenerator(packetType, count, nodeList)
 	default:
 		return errors.New("unsupported protocol")
 	}
@@ -359,6 +359,11 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node) error
 }
 
 func discv5Generator(packetType string, count int, nodeList []*enode.Node) error {
+
+	return nil
+}
+
+func rlpxGenerator(packetType string, count int, nodeList []*enode.Node) error {
 
 	return nil
 }
