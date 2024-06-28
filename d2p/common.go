@@ -24,6 +24,7 @@ type Config struct {
 	// These settings are required and configure the UDP listener:
 	PrivateKey *ecdsa.PrivateKey
 
+	Unhandled   chan<- ReadPacket // unhandled packets are sent on this channel
 	// The options below are useful in very specific cases, like in unit tests.
 	V5ProtocolID *[6]byte
 	Log          log.Logger // if set, log messages go here
@@ -43,4 +44,16 @@ func GenKey() *ecdsa.PrivateKey {
 type ReadPacket struct {
 	Data []byte
 	Addr *net.UDPAddr
+}
+
+func (cfg Config) WithDefaults() Config {
+
+	// Debug/test settings:
+	if cfg.Log == nil {
+		cfg.Log = log.Root()
+	}
+	if cfg.Clock == nil {
+		cfg.Clock = mclock.System{}
+	}
+	return cfg
 }

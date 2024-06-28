@@ -4,14 +4,11 @@ import (
 	"D2PFuzz/d2p"
 	"container/list"
 	"context"
-	"crypto/ecdsa"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/p2p/netutil"
 	"io"
 	"net"
@@ -33,9 +30,7 @@ var (
 const (
 	respTimeout    = 500 * time.Millisecond
 	expiration     = 20 * time.Second
-	bondExpiration = 24 * time.Hour
 
-	maxFindnodeFailures = 5                // nodes exceeding this limit are dropped
 	ntpFailureThreshold = 32               // Continuous timeouts after which to check NTP
 	ntpWarningCooldown  = 10 * time.Minute // Minimum amount of time to pass before repeating NTP warning
 	driftThreshold      = 10 * time.Second // Allowed clock drift before warning user
@@ -47,45 +42,6 @@ const (
 	ntpPool       = "pool.ntp.org" // ntpPool is the NTP server to query for the current time
 	ntpChecks     = 3              // Number of measurements to do against the NTP server
 )
-
-// Config holds settings for the discovery listener.
-type Config struct {
-	// These settings are required and configure the UDP listener:
-	PrivateKey *ecdsa.PrivateKey
-
-	// All remaining settings are optional.
-
-	// Packet handling configuration:
-	Unhandled chan<- ReadPacket // unhandled packets are sent on this channel
-
-	// The options below are useful in very specific cases, like in unit tests.
-	V5ProtocolID *[6]byte
-	Log          log.Logger         // if set, log messages go here
-	ValidSchemes enr.IdentityScheme // allowed identity schemes
-	Clock        mclock.Clock
-}
-
-// ReadPacket is a packet that couldn't be handled. Those packets are sent to the unhandled
-// channel if configured.
-type ReadPacket struct {
-	Data []byte
-	Addr *net.UDPAddr
-}
-
-func (cfg Config) withDefaults() Config {
-
-	// Debug/test settings:
-	if cfg.Log == nil {
-		cfg.Log = log.Root()
-	}
-	if cfg.ValidSchemes == nil {
-		cfg.ValidSchemes = enode.ValidSchemes
-	}
-	if cfg.Clock == nil {
-		cfg.Clock = mclock.System{}
-	}
-	return cfg
-}
 
 type meteredUdpConn struct {
 	d2p.UDPConn
@@ -99,8 +55,8 @@ func newMeteredConn(conn d2p.UDPConn) d2p.UDPConn {
 	return &meteredUdpConn{UDPConn: conn}
 }
 
-func ListenV4(c d2p.UDPConn, ln *enode.LocalNode, cfg Config) (*UDPv4, error) {
-	cfg = cfg.withDefaults()
+func ListenV4(c d2p.UDPConn, ln *enode.LocalNode, cfg d2p.Config) (*UDPv4, error) {
+	cfg = cfg.WithDefaults()
 	closeCtx, cancel := context.WithCancel(context.Background())
 	t := &UDPv4{
 		conn:            newMeteredConn(c),
@@ -223,7 +179,7 @@ func (t *UDPv4) loop() {
 }
 
 // readLoop runs in its own goroutine. it handles incoming UDP packets.
-func (t *UDPv4) readLoop(unhandled chan<- ReadPacket) {
+func (t *UDPv4) readLoop(unhandled chan<- d2p.ReadPacket) {
 	defer t.wg.Done()
 	if unhandled != nil {
 		defer close(unhandled)
@@ -245,7 +201,10 @@ func (t *UDPv4) readLoop(unhandled chan<- ReadPacket) {
 		}
 		if t.handlePacket(from, buf[:nbytes]) != nil && unhandled != nil {
 			select {
-			case unhandled <- ReadPacket{buf[:nbytes], from}:
+			case unhandled <- d2p.ReadPacket{
+				Data: buf[:nbytes],
+				Addr: from,
+			}:
 			default:
 			}
 		}
