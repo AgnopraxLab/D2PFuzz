@@ -134,11 +134,8 @@ func (v *Secp256k1) DecodeRLP(s *rlp.Stream) error {
 func (t *UDPv4) GenPacket(packetType string, count int, n *enode.Node) Packet {
 	var (
 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
-		target      = fuzzing.RandHex(64)
-		pubkey      Pubkey
 		packetTypes = []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
 	)
-	copy(pubkey[:], target)
 
 	for i := 0; i < count; i++ {
 		switch packetType {
@@ -160,10 +157,9 @@ func (t *UDPv4) GenPacket(packetType string, count int, n *enode.Node) Packet {
 				ENRSeq:     t.localNode.Node().Seq(),
 			}
 		case "findnode":
-			return &Findnode{
-				Target:     pubkey,
-				Expiration: uint64(time.Now().Add(expiration).Unix()),
-			}
+			req := Findnode{Expiration: uint64(time.Now().Add(expiration).Unix())}
+			rand.Read(req.Target[:])
+			return &req
 		case "neighbors":
 			// 创建一个自定义的节点记录
 			key, _ := crypto.GenerateKey()
@@ -218,10 +214,9 @@ func (t *UDPv4) GenPacket(packetType string, count int, n *enode.Node) Packet {
 					ENRSeq:     t.localNode.Node().Seq(),
 				}
 			case "findnode":
-				return &Findnode{
-					Target:     pubkey,
-					Expiration: uint64(time.Now().Add(expiration).Unix()),
-				}
+				req := Findnode{Expiration: uint64(time.Now().Add(expiration).Unix())}
+				rand.Read(req.Target[:])
+				return &req
 			case "neighbors":
 				// 创建一个自定义的节点记录
 				key, _ := crypto.GenerateKey()
