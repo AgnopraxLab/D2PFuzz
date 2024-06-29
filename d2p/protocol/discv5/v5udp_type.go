@@ -17,10 +17,7 @@ import (
 )
 
 const (
-	lookupRequestLimit      = 3  // max requests against a single node during lookup
 	findnodeResultLimit     = 16 // applies in FINDNODE handler
-	totalNodesResponseLimit = 5  // applies in waitForNodes
-
 	respTimeoutV5 = 700 * time.Millisecond
 )
 
@@ -156,24 +153,6 @@ func (t *UDPv5) LocalNode() *enode.LocalNode {
 	return t.localNode
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 func (t *UDPv5) GenPacket(packetType string, count int, n *enode.Node) Packet {
 	var (
 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
@@ -253,7 +232,6 @@ func (t *UDPv5) GenPacket(packetType string, count int, n *enode.Node) Packet {
 			crand.Read(reqID)
 			talkRespPacket.SetRequestID(reqID)
 			return talkRespPacket
-
 		case "whoareyou":
 			whoareyouPacket := &Whoareyou{
 				ChallengeData: make([]byte, 32),
