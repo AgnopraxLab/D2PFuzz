@@ -1,9 +1,11 @@
 package discv5
 
 import (
+	"D2PFuzz/d2p"
 	crand "crypto/rand"
 	"errors"
 	"github.com/ethereum/go-ethereum/common/mclock"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"net"
 )
@@ -12,6 +14,54 @@ var (
 	errTimeout          = errors.New("RPC timeout")
 	errClosed           = errors.New("socket closed")
 )
+
+// handlePacket decodes and processes an incoming packet from the network.
+func (t *UDPv5) handlePacket(rawpacket []byte, fromAddr *net.UDPAddr) error {
+	addr := fromAddr.String()
+	fromID, _, packet, err := t.codec.Decode(rawpacket, addr)
+	if err != nil {
+		if t.unhandled != nil && v5wire.IsInvalidHeader(err) {
+			// The packet seems unrelated to discv5, send it to the next protocol.
+			// t.log.Trace("Unhandled discv5 packet", "id", fromID, "addr", addr, "err", err)
+			up := d2p.ReadPacket{Data: make([]byte, len(rawpacket)), Addr: fromAddr}
+			copy(up.Data, rawpacket)
+			t.unhandled <- up
+			return nil
+		}
+		t.log.Debug("Bad discv5 packet", "id", fromID, "addr", addr, "err", err)
+		return err
+	}
+	if packet.Kind() != v5wire.WhoareyouPacket {
+		// WHOAREYOU logged separately to report errors.
+		t.logcontext = append(t.logcontext[:0], "id", fromID, "addr", addr)
+		t.logcontext = packet.AppendLogInfo(t.logcontext)
+		t.log.Trace("<< "+packet.Name(), t.logcontext...)
+	}
+	t.handle(packet, fromID, fromAddr)
+	return nil
+}
+
+// handle processes incoming packets according to their message type.
+func (t *UDPv5) handle(p Packet, fromID enode.ID, fromAddr *net.UDPAddr) {
+	switch p := p.(type) {
+	case *Unknown:
+		t.handleUnknown(p, fromID, fromAddr)
+	case *Whoareyou:
+		t.handleWhoareyou(p, fromID, fromAddr)
+	case *Ping:
+		t.handlePing(p, fromID, fromAddr)
+	case *Pong:
+		t.handleCallResponse(fromID, fromAddr, p)
+	case *Findnode:
+		t.handleFindnode(p, fromID, fromAddr)
+	case *Nodes:
+		t.handleCallResponse(fromID, fromAddr, p)
+	case *TalkRequest:
+		t.talk.handleRequest(fromID, fromAddr, p)
+	case *TalkResponse:
+		t.handleCallResponse(fromID, fromAddr, p)
+	}
+}
 
 // callToNode sends the given call and sets up a handler for response packets (of message
 // type responseType). Responses are dispatched to the call's response channel.
@@ -123,4 +173,20 @@ func (t *UDPv5) sendCall(c *callV5) {
 	c.nonce = newNonce
 	t.activeCallByAuth[newNonce] = c
 	t.startResponseTimeout(c)
+}
+
+// sendNextCall sends the next call in the call queue if there is no active call.
+func (t *UDPv5) sendNextCall(id enode.ID) {
+	queue := t.callQueue[id]
+	if len(queue) == 0 || t.activeCallByNode[id] != nil {
+		return
+	}
+	t.activeCallByNode[id] = queue[0]
+	t.sendCall(t.activeCallByNode[id])
+	if len(queue) == 1 {
+		delete(t.callQueue, id)
+	} else {
+		copy(queue, queue[1:])
+		t.callQueue[id] = queue[:len(queue)-1]
+	}
 }

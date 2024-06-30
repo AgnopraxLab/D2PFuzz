@@ -8,9 +8,9 @@ import (
 	"encoding/binary"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -40,7 +40,7 @@ type UDPv5 struct {
 	conn         d2p.UDPConn
 	priv         *ecdsa.PrivateKey
 	localNode    *enode.LocalNode
-	log          Logger
+	log          log.Logger
 	clock        mclock.Clock
 	validSchemes enr.IdentityScheme
 
@@ -103,44 +103,7 @@ type callTimeout struct {
 	timer mclock.Timer
 }
 
-// A Logger writes key/value pairs to a Handler
-type Logger interface {
-	// With returns a new Logger that has this logger's attributes plus the given attributes
-	With(ctx ...interface{}) Logger
 
-	// New With returns a new Logger that has this logger's attributes plus the given attributes. Identical to 'With'.
-	New(ctx ...interface{}) Logger
-
-	// Log logs a message at the specified level with context key/value pairs
-	Log(level slog.Level, msg string, ctx ...interface{})
-
-	// Trace logs a message at the trace level with context key/value pairs
-	Trace(msg string, ctx ...interface{})
-
-	// Debug logs a message at the debug level with context key/value pairs
-	Debug(msg string, ctx ...interface{})
-
-	// Info logs a message at the info level with context key/value pairs
-	Info(msg string, ctx ...interface{})
-
-	// Warn logs a message at to warn level with context key/value pairs
-	Warn(msg string, ctx ...interface{})
-
-	// Error logs a message at the error level with context key/value pairs
-	Error(msg string, ctx ...interface{})
-
-	// Crit logs a message at the crit level with context key/value pairs, and exits
-	Crit(msg string, ctx ...interface{})
-
-	// Write logs a message at the specified level
-	Write(level slog.Level, msg string, attrs ...any)
-
-	// Enabled reports whether l emits log records at the given context and level.
-	Enabled(ctx context.Context, level slog.Level) bool
-
-	// Handler returns the underlying handler of the inner logger.
-	Handler() slog.Handler
-}
 
 // Self returns the local node record.
 func (t *UDPv5) Self() *enode.Node {
