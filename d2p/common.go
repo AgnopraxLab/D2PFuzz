@@ -21,11 +21,20 @@ type ConnClient interface {
 	Self() *enode.Node
 }
 
+type Packet interface {
+	// Name is the name of the package, for logging purposes.
+	Name() string
+	// Kind is the packet type, for logging purposes.
+	Kind() byte
+	// OutPut is the print of packet
+	OutPut() string
+}
+
 type Config struct {
 	// These settings are required and configure the UDP listener:
 	PrivateKey *ecdsa.PrivateKey
 
-	Unhandled   chan<- ReadPacket // unhandled packets are sent on this channel
+	Unhandled chan<- ReadPacket // unhandled packets are sent on this channel
 	// The options below are useful in very specific cases, like in unit tests.
 	V5ProtocolID *[6]byte
 	Log          log.Logger // if set, log messages go here

@@ -4,6 +4,7 @@ import (
 	"D2PFuzz/d2p"
 	"D2PFuzz/d2p/protocol/discv4"
 	"D2PFuzz/d2p/protocol/discv5"
+	"D2PFuzz/d2p/protocol/rlpx"
 	"D2PFuzz/utils"
 	"bufio"
 	"context"
@@ -78,12 +79,10 @@ func initDiscv4(thread int) []*discv4.UDPv4 {
 	)
 
 	for i := 0; i < thread; i++ {
-		cfg := discv4.Config{
-			PrivateKey:   d2p.GenKey(),
-			Unhandled:    make(chan discv4.ReadPacket, 10),
-			Log:          log.Root(),
-			ValidSchemes: enode.ValidSchemes,
-			Clock:        mclock.System{},
+		cfg := d2p.Config{
+			PrivateKey: d2p.GenKey(),
+			Log:        log.Root(),
+			Clock:      mclock.System{},
 		}
 		ip := getLocalIP()
 		if ip == nil {
@@ -111,6 +110,23 @@ func initDiscv5(thread int) []*discv5.UDPv5 {
 	var clients []*discv5.UDPv5
 
 	return clients
+}
+
+func initrlpx(thread int, dest *enode.Node) ([]*rlpx.Conn, error) {
+	var (
+		clients []*rlpx.Conn
+	)
+
+	for i := 0; i < thread; i++ {
+		fd, err := net.Dial("tcp", fmt.Sprintf("%v:%d", dest.IP(), dest.TCP()))
+		if err != nil {
+			return nil, err
+		}
+		client := rlpx.NewConn(fd, dest.Pubkey())
+		clients = append(clients, client)
+	}
+
+	return clients, nil
 }
 
 func GenerateAndExecute(c *cli.Context) error {
@@ -352,7 +368,7 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node) error
 	client = clients[0]
 	node = nodeList[0]
 	for i := 0; i < count; i++ {
-		packet := client.GenPacket(packetType, count, node)
+		packet := client.GenPacket(packetType, node)
 		println(packet.OutPut())
 	}
 	return nil
@@ -364,6 +380,22 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node) error
 }
 
 func rlpxGenerator(packetType string, count int, nodeList []*enode.Node) error {
+	var (
+		client *rlpx.Conn
+		dest   *enode.Node
+	)
+
+	dest = nodeList[0]
+	clients, err := initrlpx(1, dest)
+	if err != nil {
+		return errors.New("clients init error")
+	}
+	client = clients[0]
+
+	for i := 0; i < count; i++ {
+		packet := client.GenPacket(packetType)
+		println(packet)
+	}
 
 	return nil
 }

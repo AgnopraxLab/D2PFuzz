@@ -1,6 +1,7 @@
 package discv4
 
 import (
+	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -17,6 +18,13 @@ const (
 	ENRRequestPacket
 	ENRResponsePacket
 )
+
+type Packet interface {
+	// Name is the name of the package, for logging purposes.
+	Name() string
+	// Kind is the packet type, for logging purposes.
+	Kind() byte
+}
 
 type (
 	Ping struct {
@@ -107,18 +115,12 @@ func NewEndpoint(addr *net.UDPAddr, tcpPort uint16) Endpoint {
 	return Endpoint{IP: ip, UDP: uint16(addr.Port), TCP: tcpPort}
 }
 
-type Packet interface {
-	// Name is the name of the package, for logging purposes.
-	Name() string
-	// Kind is the packet type, for logging purposes.
-	Kind() byte
-	// OutPut is the print of packet
-	OutPut() string
+func (req *Ping) Name() string { return "PING/v4" }
+func (req *Ping) Kind() byte   { return PingPacket }
+func (req *Ping) OutPut() string {
+	return fmt.Sprintf("Version: %d\nExpiration: %d\nENRSeq: %d",
+		req.Version, req.Expiration, req.ENRSeq)
 }
-
-func (req *Ping) Name() string   { return "PING/v4" }
-func (req *Ping) Kind() byte     { return PingPacket }
-func (req *Ping) OutPut() string { return "PING/v4" }
 
 func (req *Pong) Name() string   { return "PONG/v4" }
 func (req *Pong) Kind() byte     { return PongPacket }

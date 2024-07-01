@@ -3,12 +3,11 @@ package rlpx
 import (
 	"crypto/cipher"
 	"crypto/ecdsa"
-	"hash"
-	"net"
-
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
 	"github.com/ethereum/go-ethereum/rlp"
+	"hash"
+	"net"
 )
 
 // Constants for the handshake.
@@ -19,6 +18,11 @@ const (
 	shaLen = 32                     // hash length (for nonce etc)
 
 	eciesOverhead = 65 /* pubkey */ + 16 /* IV */ + 32 /* MAC */
+)
+
+const (
+	AuthMsgV4 = iota + 1 // zero is 'reserved'
+	AuthRespV4
 )
 
 type Conn struct {
@@ -32,7 +36,6 @@ type Conn struct {
 	snappyWriteBuffer []byte
 }
 
-// sessionState contains the session keys.
 type sessionState struct {
 	enc cipher.Stream
 	dec cipher.Stream
@@ -91,3 +94,11 @@ type authRespV4 struct {
 	// Ignore additional fields (forward-compatibility)
 	Rest []rlp.RawValue `rlp:"tail"`
 }
+
+func (req *authMsgV4) Name() string   { return "AuthMsg/V4" }
+func (req *authMsgV4) Kind() byte     { return AuthMsgV4 }
+func (req *authMsgV4) OutPut() string { return "AuthMsg/V4" }
+
+func (req *authRespV4) Name() string   { return "AuthResp/V4" }
+func (req *authRespV4) Kind() byte     { return AuthRespV4 }
+func (req *authRespV4) OutPut() string { return "AuthResp/V4" }
