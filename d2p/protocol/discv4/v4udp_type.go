@@ -131,6 +131,10 @@ func (v *Secp256k1) DecodeRLP(s *rlp.Stream) error {
 	return nil
 }
 
+func (t *UDPv4) GetPri() *ecdsa.PrivateKey {
+	return t.priv
+}
+
 func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 	var (
 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}

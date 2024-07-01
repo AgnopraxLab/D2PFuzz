@@ -8,6 +8,7 @@ import (
 	"D2PFuzz/utils"
 	"bufio"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -369,7 +370,12 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node) error
 	node = nodeList[0]
 	for i := 0; i < count; i++ {
 		packet := client.GenPacket(packetType, node)
-		println(packet.OutPut())
+		println(packet.String())
+		en_packet, hash, err := discv4.Encode(client.GetPri(), packet)
+		if err != nil {
+			fmt.Printf("encode fail")
+		}
+		fmt.Sprintf("Encode Packet: %s\nHash: %s", hex.EncodeToString(en_packet), hex.EncodeToString(hash))
 	}
 	return nil
 }

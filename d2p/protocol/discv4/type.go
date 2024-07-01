@@ -1,6 +1,7 @@
 package discv4
 
 import (
+	"encoding/hex"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -105,6 +106,10 @@ type Endpoint struct {
 	TCP uint16 // for RLPx protocol
 }
 
+func (e Endpoint) String() string {
+	return fmt.Sprintf("%s (UDP: %d, TCP: %d)", e.IP, e.UDP, e.TCP)
+}
+
 func NewEndpoint(addr *net.UDPAddr, tcpPort uint16) Endpoint {
 	ip := net.IP{}
 	if ip4 := addr.IP.To4(); ip4 != nil {
@@ -117,27 +122,36 @@ func NewEndpoint(addr *net.UDPAddr, tcpPort uint16) Endpoint {
 
 func (req *Ping) Name() string { return "PING/v4" }
 func (req *Ping) Kind() byte   { return PingPacket }
-func (req *Ping) OutPut() string {
-	return fmt.Sprintf("Version: %d\nExpiration: %d\nENRSeq: %d",
-		req.Version, req.Expiration, req.ENRSeq)
+func (req *Ping) String() string {
+	return fmt.Sprintf("Version: %d\nFrom: %s\nTo: %s\nExpiration: %d\nENRSeq: %d",
+		req.Version, req.From.String(), req.To.String(), req.Expiration, req.ENRSeq)
 }
 
-func (req *Pong) Name() string   { return "PONG/v4" }
-func (req *Pong) Kind() byte     { return PongPacket }
-func (req *Pong) OutPut() string { return "PONG/v4" }
+func (req *Pong) Name() string { return "PONG/v4" }
+func (req *Pong) Kind() byte   { return PongPacket }
+func (req *Pong) String() string {
+	return fmt.Sprintf("To: %s\nReplyTok: %s\nExpiration: %d\nENRSeq: %d",
+		req.To, hex.EncodeToString(req.ReplyTok), req.Expiration, req.ENRSeq)
+}
 
-func (req *Findnode) Name() string   { return "FINDNODE/v4" }
-func (req *Findnode) Kind() byte     { return FindnodePacket }
-func (req *Findnode) OutPut() string { return "FINDNODE/v4" }
+func (req *Findnode) Name() string { return "FINDNODE/v4" }
+func (req *Findnode) Kind() byte   { return FindnodePacket }
+func (req *Findnode) String() string {
+	return fmt.Sprintf("Target: %s\nExpiration: %d", hex.EncodeToString(req.Target[:]), req.Expiration)
+}
 
 func (req *Neighbors) Name() string   { return "NEIGHBORS/v4" }
 func (req *Neighbors) Kind() byte     { return NeighborsPacket }
-func (req *Neighbors) OutPut() string { return "NEIGHBORS/v4" }
+func (req *Neighbors) String() string { return "NEIGHBORS/v4" }
 
-func (req *ENRRequest) Name() string   { return "ENRREQUEST/v4" }
-func (req *ENRRequest) Kind() byte     { return ENRRequestPacket }
-func (req *ENRRequest) OutPut() string { return "ENRREQUEST/v4" }
+func (req *ENRRequest) Name() string { return "ENRREQUEST/v4" }
+func (req *ENRRequest) Kind() byte   { return ENRRequestPacket }
+func (req *ENRRequest) String() string {
+	return fmt.Sprintf("Expiration: %d", req.Expiration)
+}
 
-func (req *ENRResponse) Name() string   { return "ENRRESPONSE/v4" }
-func (req *ENRResponse) Kind() byte     { return ENRResponsePacket }
-func (req *ENRResponse) OutPut() string { return "ENRRESPONSE/v4" }
+func (req *ENRResponse) Name() string { return "ENRRESPONSE/v4" }
+func (req *ENRResponse) Kind() byte   { return ENRResponsePacket }
+func (req *ENRResponse) String() string {
+	return fmt.Sprintf("ReplyTok: %s", hex.EncodeToString(req.ReplyTok))
+}

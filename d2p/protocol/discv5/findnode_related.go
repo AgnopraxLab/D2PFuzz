@@ -5,20 +5,23 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/crypto"
 	"math/big"
+
+	"github.com/ethereum/go-ethereum/crypto"
+
+	"net"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/p2p/netutil"
-	"net"
 )
 
 const (
-	totalNodesResponseLimit = 5  // applies in waitForNodes
+	totalNodesResponseLimit = 5 // applies in waitForNodes
 )
+
 var (
-	errLowPort          = errors.New("low port")
+	errLowPort = errors.New("low port")
 )
 
 // RequestENR requests n's record.
@@ -68,7 +71,7 @@ func (t *UDPv5) waitForNodes(c *callV5, distances []uint) ([]*enode.Node, error)
 				nodes = append(nodes, node)
 			}
 			if total == -1 {
-				total = min[int](int(response.RespCount), totalNodesResponseLimit)
+				total = min(int(response.RespCount), totalNodesResponseLimit)
 			}
 			if received++; received == total {
 				return nodes, nil
@@ -164,7 +167,6 @@ func generateRandomNode(dist uint) *enode.Node {
 	// 创建节点
 	return enode.NewV4(&privateKey.PublicKey, ip, int(port), int(port))
 }
-
 
 // packNodes creates NODES response packets for the given node list.
 func packNodes(reqid []byte, nodes []*enode.Node) []*Nodes {

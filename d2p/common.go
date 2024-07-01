@@ -26,8 +26,8 @@ type Packet interface {
 	Name() string
 	// Kind is the packet type, for logging purposes.
 	Kind() byte
-	// OutPut is the print of packet
-	OutPut() string
+	// String is the print of packet
+	String() string
 }
 
 type Config struct {
@@ -37,7 +37,7 @@ type Config struct {
 	Unhandled chan<- ReadPacket // unhandled packets are sent on this channel
 	// The options below are useful in very specific cases, like in unit tests.
 	V5ProtocolID *[6]byte
-	Log          log.Logger // if set, log messages go here
+	Log          log.Logger         // if set, log messages go here
 	ValidSchemes enr.IdentityScheme // allowed identity schemes
 	Clock        mclock.Clock
 }

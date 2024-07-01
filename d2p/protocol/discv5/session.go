@@ -4,11 +4,12 @@ import (
 	"crypto/ecdsa"
 	crand "crypto/rand"
 	"encoding/binary"
+	"time"
+
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"time"
 )
 
 const handshakeTimeout = time.Second
@@ -74,7 +75,7 @@ func (sc *SessionCache) nextNonce(s *session) (Nonce, error) {
 
 // session returns the current session for the given node, if any.
 func (sc *SessionCache) session(id enode.ID, addr string) *session {
-	item, _ := sc.sessions.Get[sessionID, *session](sessionID{id, addr})
+	item, _ := sc.sessions.Get(sessionID{id, addr})
 	return item
 }
 
@@ -88,7 +89,7 @@ func (sc *SessionCache) readKey(id enode.ID, addr string) []byte {
 
 // storeNewSession stores new encryption keys in the cache.
 func (sc *SessionCache) storeNewSession(id enode.ID, addr string, s *session) {
-	sc.sessions.Add[sessionID, *session](sessionID{id, addr}, s)
+	sc.sessions.Add(sessionID{id, addr}, s)
 }
 
 // getHandshake gets the handshake challenge we previously sent to the given remote node.
