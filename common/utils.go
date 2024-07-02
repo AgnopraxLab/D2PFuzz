@@ -108,7 +108,34 @@ func initDiscv4(thread int) []*discv4.UDPv4 {
 }
 
 func initDiscv5(thread int) []*discv5.UDPv5 {
-	var clients []*discv5.UDPv5
+	var (
+		clients  []*discv5.UDPv5
+		basePort = 30000
+	)
+
+	for i := 0; i < thread; i++ {
+		cfg := d2p.Config{
+			PrivateKey: d2p.GenKey(),
+			Log:        log.Root(),
+			Clock:      mclock.System{},
+		}
+		ip := getLocalIP()
+		if ip == nil {
+			fmt.Printf("failed to get local IP address for thread %d\n", i)
+			continue
+		}
+		port := basePort + i
+		addr := &net.UDPAddr{IP: ip, Port: port}
+		udpConn, err := net.ListenUDP("udp", addr)
+		if err != nil {
+			fmt.Printf("failed to create UDP connection for thread %d: %v\n", i, err)
+			continue
+		}
+		db, _ := enode.OpenDB("")
+		ln := enode.NewLocalNode(db, cfg.PrivateKey)
+		client, _ := discv5.ListenV5(udpConn, ln, cfg)
+		clients = append(clients, client)
+	}
 
 	return clients
 }
@@ -237,7 +264,93 @@ func discv4Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) err
 	return nil
 }
 
-func discv5Fuzzer(c *cli.Context, nodelist []*enode.Node, cleanupFiles bool) error {
+func discv5Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) error {
+	var (
+		clients   = initDiscv5(c.Int(ThreadFlag.Name))
+		skipTrace = c.Bool(SkipTraceFlag.Name)
+	)
+	if len(clients) == 0 {
+		return fmt.Errorf("need at least one vm to participate")
+	}
+	numClients := len(clients)
+	log.Info("Fuzzing started...")
+	meta := &discv5Meta{
+		testCh:  make(chan string, 4), // channel where we'll deliver tests
+		clis:    clients,
+		targets: nodeList,
+		outdir:  c.String(LocationFlag.Name),
+	}
+	meta.wg.Add(1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		meta.fuzzingLoop(skipTrace, numClients)
+		cancel()
+	}()
+	meta.wg.Add(1)
+	go func() {
+		defer meta.wg.Done()
+		var (
+			tStart    = time.Now()
+			ticker    = time.NewTicker(8 * time.Second)
+			testCount = uint64(0)
+			ticks     = 0
+		)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				ticks++
+				n := meta.numTests.Load()
+				testsSinceLastUpdate := n - testCount
+				testCount = n
+				timeSpent := time.Since(tStart)
+				// Update global counter
+				globalCount := uint64(0)
+				if content, err := os.ReadFile(".fuzzcounter"); err == nil {
+					if count, err := strconv.Atoi((string(content))); err == nil {
+						globalCount = uint64(count)
+					}
+				}
+				globalCount += testsSinceLastUpdate
+				if err := os.WriteFile(".fuzzcounter", []byte(fmt.Sprintf("%d", globalCount)), 0755); err != nil {
+					log.Error("Error saving progress", "err", err)
+				}
+				log.Info("Executing",
+					"tests", n,
+					"time", common.PrettyDuration(timeSpent),
+					"test/s", fmt.Sprintf("%.01f", float64(uint64(time.Second)*n)/float64(timeSpent)),
+					"avg steps", fmt.Sprintf("%.01f", traceLengthSA.Avg()),
+					"global", globalCount,
+				)
+				//TODO: Save Client Stats
+				//for _, cli := range clients {
+				// log.Info(fmt.Sprintf("Stats %v", cli.Name()), cli.Stats()...)
+				//}
+				switch ticks {
+				case 5:
+					// Decrease stats-reporting after 40s
+					ticker.Reset(time.Minute)
+				case 65:
+					// Decrease stats-reporting after one hour
+					ticker.Reset(time.Hour)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	// Cancel ability
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case <-sigs:
+	case <-ctx.Done():
+	}
+	log.Info("Waiting for processes to exit")
+	meta.abort.Store(true)
+	cancel()
+	meta.wg.Wait()
 	return nil
 }
 
@@ -246,6 +359,19 @@ type discv4Meta struct {
 	testCh      chan string
 	wg          sync.WaitGroup
 	clis        []*discv4.UDPv4
+	targets     []*enode.Node
+	numTests    atomic.Uint64
+	outdir      string
+	notifyTopic string
+
+	deleteFilesWhenDone bool
+}
+
+type discv5Meta struct {
+	abort       atomic.Bool
+	testCh      chan string
+	wg          sync.WaitGroup
+	clis        []*discv5.UDPv5
 	targets     []*enode.Node
 	numTests    atomic.Uint64
 	outdir      string
@@ -274,7 +400,31 @@ func (meta *discv4Meta) fuzzingLoop(skipTrace bool, clientCount int) {
 	return
 }
 
+func (meta *discv5Meta) fuzzingLoop(skipTrace bool, clientCount int) {
+	var (
+		ready        []int
+		taskChannels []chan *task
+		resultCh     = make(chan *task)
+		cleanCh      = make(chan *cleanTask)
+	)
+	defer meta.wg.Done()
+	defer close(cleanCh)
+	// Start n Loops.
+	for i, cli := range meta.clis {
+		var taskCh = make(chan *task)
+		taskChannels = append(taskChannels, taskCh)
+		meta.wg.Add(1)
+		go meta.cliLoop(cli, taskCh, resultCh)
+		ready = append(ready, i)
+	}
+	return
+}
+
 func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, taskCh, resultCh chan *task) {
+	return
+}
+
+func (meta *discv5Meta) cliLoop(cli *discv5.UDPv5, taskCh, resultCh chan *task) {
 	return
 }
 
@@ -370,7 +520,7 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node) error
 	node = nodeList[0]
 	for i := 0; i < count; i++ {
 		packet := client.GenPacket(packetType, node)
-		println(packet.String())
+		println(packet.String()) // 有问题
 		en_packet, hash, err := discv4.Encode(client.GetPri(), packet)
 		if err != nil {
 			fmt.Printf("encode fail")
@@ -381,7 +531,24 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node) error
 }
 
 func discv5Generator(packetType string, count int, nodeList []*enode.Node) error {
-
+	var (
+		client *discv5.UDPv5
+		node   *enode.Node
+	)
+	clients := initDiscv5(1)
+	client = clients[0]
+	node = nodeList[0]
+	for i := 0; i < count; i++ {
+		packet := client.GenPacket(packetType, node)
+		println(packet.String())
+		toID := node.ID()
+		addr := net.JoinHostPort(node.IP().String(), fmt.Sprintf("%d", node.UDP()))
+		en_packet, nonce, err := client.EncodePacket(toID, addr, packet, nil)
+		if err != nil {
+			return fmt.Errorf("encoding error: %v", err)
+		}
+		fmt.Printf("Encoded Packet: %x\nNonce: %x\n", en_packet, nonce[:])
+	}
 	return nil
 }
 

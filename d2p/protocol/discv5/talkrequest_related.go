@@ -19,7 +19,6 @@ func (t *UDPv5) makeTalkRequest(protocol string, message []byte) *TalkRequest {
 	return &TalkRequest{
 		Protocol: protocol,
 		Message:  message,
-		// 如果 TalkRequest 需要其他字段，可以在这里添加
 	}
 }
 

@@ -103,7 +103,7 @@ func (t *UDPv4) loop() {
 		if plist.Front() == nil || nextTimeout == plist.Front().Value {
 			return
 		}
-		// Start the timer so it fires when the next pending reply has expired.
+		// Start the timer, so it fires when the next pending reply has expired.
 		now := time.Now()
 		for el := plist.Front(); el != nil; el = el.Next() {
 			nextTimeout = el.Value.(*replyMatcher)

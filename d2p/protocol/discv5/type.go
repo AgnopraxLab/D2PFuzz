@@ -31,7 +31,8 @@ type Packet interface {
 	Kind() byte          // Kind returns the message type.
 	RequestID() []byte   // Returns the request ID.
 	SetRequestID([]byte) // Sets the request ID.
-
+	// String is the print of packet
+	String() string
 	// AppendLogInfo returns its argument 'ctx' with additional fields
 	// appended for logging purposes.
 	AppendLogInfo(ctx []interface{}) []interface{}
@@ -144,82 +145,114 @@ func DecodeMessage(ptype byte, body []byte) (Packet, error) {
 	return dec, nil
 }
 
-func (*Whoareyou) Name() string        { return "WHOAREYOU/v5" }
-func (*Whoareyou) Kind() byte          { return WhoareyouPacket }
-func (*Whoareyou) RequestID() []byte   { return nil }
-func (*Whoareyou) SetRequestID([]byte) {}
+func (req *Whoareyou) Name() string        { return "WHOAREYOU/v5" }
+func (req *Whoareyou) Kind() byte          { return WhoareyouPacket }
+func (req *Whoareyou) RequestID() []byte   { return nil }
+func (req *Whoareyou) SetRequestID([]byte) {}
+func (req *Whoareyou) String() string {
+	return fmt.Sprintf("ChallengeData: %x\nIDNonce: %x\nRecordSeq: %d",
+		req.ChallengeData, req.IDNonce, req.RecordSeq)
+}
 
-func (*Whoareyou) AppendLogInfo(ctx []interface{}) []interface{} {
+func (req *Whoareyou) AppendLogInfo(ctx []interface{}) []interface{} {
 	return ctx
 }
 
-func (*Unknown) Name() string        { return "UNKNOWN/v5" }
-func (*Unknown) Kind() byte          { return UnknownPacket }
-func (*Unknown) RequestID() []byte   { return nil }
-func (*Unknown) SetRequestID([]byte) {}
+func (req *Unknown) Name() string        { return "UNKNOWN/v5" }
+func (req *Unknown) Kind() byte          { return UnknownPacket }
+func (req *Unknown) RequestID() []byte   { return nil }
+func (req *Unknown) SetRequestID([]byte) {}
+func (req *Unknown) String() string {
+	return fmt.Sprintf("Nonce: %x\n",
+		req.Nonce)
+}
 
-func (*Unknown) AppendLogInfo(ctx []interface{}) []interface{} {
+func (req *Unknown) AppendLogInfo(ctx []interface{}) []interface{} {
 	return ctx
 }
 
-func (*Ping) Name() string             { return "PING/v5" }
-func (*Ping) Kind() byte               { return PingMsg }
-func (p *Ping) RequestID() []byte      { return p.ReqID }
-func (p *Ping) SetRequestID(id []byte) { p.ReqID = id }
-
-func (p *Ping) AppendLogInfo(ctx []interface{}) []interface{} {
-	return append(ctx, "req", hexutil.Bytes(p.ReqID), "enrseq", p.ENRSeq)
+func (req *Ping) Name() string           { return "PING/v5" }
+func (req *Ping) Kind() byte             { return PingMsg }
+func (req *Ping) RequestID() []byte      { return req.ReqID }
+func (req *Ping) SetRequestID(id []byte) { req.ReqID = id }
+func (req *Ping) String() string {
+	return fmt.Sprintf("ReqID: %x\nENRSeq: %d\n",
+		req.ReqID, req.ENRSeq)
 }
 
-func (*Pong) Name() string             { return "PONG/v5" }
-func (*Pong) Kind() byte               { return PongMsg }
-func (p *Pong) RequestID() []byte      { return p.ReqID }
-func (p *Pong) SetRequestID(id []byte) { p.ReqID = id }
-
-func (p *Pong) AppendLogInfo(ctx []interface{}) []interface{} {
-	return append(ctx, "req", hexutil.Bytes(p.ReqID), "enrseq", p.ENRSeq)
+func (req *Ping) AppendLogInfo(ctx []interface{}) []interface{} {
+	return append(ctx, "req", hexutil.Bytes(req.ReqID), "enrseq", req.ENRSeq)
 }
 
-func (p *Findnode) Name() string           { return "FINDNODE/v5" }
-func (p *Findnode) Kind() byte             { return FindnodeMsg }
-func (p *Findnode) RequestID() []byte      { return p.ReqID }
-func (p *Findnode) SetRequestID(id []byte) { p.ReqID = id }
+func (req *Pong) Name() string           { return "PONG/v5" }
+func (req *Pong) Kind() byte             { return PongMsg }
+func (req *Pong) RequestID() []byte      { return req.ReqID }
+func (req *Pong) SetRequestID(id []byte) { req.ReqID = id }
+func (req *Pong) String() string {
+	return fmt.Sprintf("ReqID: %x\nENRSeq: %d\nToIP: %s\nToPort: %d\n",
+		req.ReqID, req.ENRSeq, req.ToIP.String(), req.ToPort)
+}
 
-func (p *Findnode) AppendLogInfo(ctx []interface{}) []interface{} {
-	ctx = append(ctx, "req", hexutil.Bytes(p.ReqID))
-	if p.OpID != 0 {
-		ctx = append(ctx, "opid", p.OpID)
+func (req *Pong) AppendLogInfo(ctx []interface{}) []interface{} {
+	return append(ctx, "req", hexutil.Bytes(req.ReqID), "enrseq", req.ENRSeq)
+}
+
+func (req *Findnode) Name() string           { return "FINDNODE/v5" }
+func (req *Findnode) Kind() byte             { return FindnodeMsg }
+func (req *Findnode) RequestID() []byte      { return req.ReqID }
+func (req *Findnode) SetRequestID(id []byte) { req.ReqID = id }
+func (req *Findnode) String() string {
+	return fmt.Sprintf("ReqID: %s\nDistances: %d\n",
+		req.ReqID, req.Distances)
+}
+
+func (req *Findnode) AppendLogInfo(ctx []interface{}) []interface{} {
+	ctx = append(ctx, "req", hexutil.Bytes(req.ReqID))
+	if req.OpID != 0 {
+		ctx = append(ctx, "opid", req.OpID)
 	}
 	return ctx
 }
 
-func (*Nodes) Name() string             { return "NODES/v5" }
-func (*Nodes) Kind() byte               { return NodesMsg }
-func (p *Nodes) RequestID() []byte      { return p.ReqID }
-func (p *Nodes) SetRequestID(id []byte) { p.ReqID = id }
+func (req *Nodes) Name() string           { return "NODES/v5" }
+func (req *Nodes) Kind() byte             { return NodesMsg }
+func (req *Nodes) RequestID() []byte      { return req.ReqID }
+func (req *Nodes) SetRequestID(id []byte) { req.ReqID = id }
+func (req *Nodes) String() string {
+	return fmt.Sprintf("ReqID: %s\nDistances: %d\n",
+		req.ReqID, req.RespCount)
+}
 
-func (p *Nodes) AppendLogInfo(ctx []interface{}) []interface{} {
+func (req *Nodes) AppendLogInfo(ctx []interface{}) []interface{} {
 	return append(ctx,
-		"req", hexutil.Bytes(p.ReqID),
-		"tot", p.RespCount,
-		"n", len(p.Nodes),
+		"req", hexutil.Bytes(req.ReqID),
+		"tot", req.RespCount,
+		"n", len(req.Nodes),
 	)
 }
 
-func (*TalkRequest) Name() string             { return "TALKREQ/v5" }
-func (*TalkRequest) Kind() byte               { return TalkRequestMsg }
-func (p *TalkRequest) RequestID() []byte      { return p.ReqID }
-func (p *TalkRequest) SetRequestID(id []byte) { p.ReqID = id }
-
-func (p *TalkRequest) AppendLogInfo(ctx []interface{}) []interface{} {
-	return append(ctx, "proto", p.Protocol, "req", hexutil.Bytes(p.ReqID), "len", len(p.Message))
+func (req *TalkRequest) Name() string           { return "TALKREQ/v5" }
+func (*TalkRequest) Kind() byte                 { return TalkRequestMsg }
+func (req *TalkRequest) RequestID() []byte      { return req.ReqID }
+func (req *TalkRequest) SetRequestID(id []byte) { req.ReqID = id }
+func (req *TalkRequest) String() string {
+	return fmt.Sprintf("ReqID: %s\nProtocol: %s\nMessage: %s\n",
+		req.ReqID, req.Protocol, req.Message)
 }
 
-func (*TalkResponse) Name() string             { return "TALKRESP/v5" }
-func (*TalkResponse) Kind() byte               { return TalkResponseMsg }
-func (p *TalkResponse) RequestID() []byte      { return p.ReqID }
-func (p *TalkResponse) SetRequestID(id []byte) { p.ReqID = id }
+func (req *TalkRequest) AppendLogInfo(ctx []interface{}) []interface{} {
+	return append(ctx, "proto", req.Protocol, "req", hexutil.Bytes(req.ReqID), "len", len(req.Message))
+}
 
-func (p *TalkResponse) AppendLogInfo(ctx []interface{}) []interface{} {
-	return append(ctx, "req", hexutil.Bytes(p.ReqID), "len", len(p.Message))
+func (req *TalkResponse) Name() string           { return "TALKRESP/v5" }
+func (req *TalkResponse) Kind() byte             { return TalkResponseMsg }
+func (req *TalkResponse) RequestID() []byte      { return req.ReqID }
+func (req *TalkResponse) SetRequestID(id []byte) { req.ReqID = id }
+func (req *TalkResponse) String() string {
+	return fmt.Sprintf("ReqID: %s\nMessage: %s\n",
+		req.ReqID, req.Message)
+}
+
+func (req *TalkResponse) AppendLogInfo(ctx []interface{}) []interface{} {
+	return append(ctx, "req", hexutil.Bytes(req.ReqID), "len", len(req.Message))
 }
