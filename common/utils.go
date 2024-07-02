@@ -4,13 +4,14 @@ import (
 	"D2PFuzz/d2p"
 	"D2PFuzz/d2p/protocol/discv4"
 	"D2PFuzz/d2p/protocol/discv5"
-	"D2PFuzz/d2p/protocol/rlpx"
+	"D2PFuzz/d2p/protocol/eth"
 	"D2PFuzz/utils"
 	"bufio"
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
 	"net"
 	"os"
 	"os/signal"
@@ -69,6 +70,10 @@ var (
 		Name:  "count",
 		Usage: "Number of packets to generate",
 		Value: 1,
+	}
+	ChainDirFlag = &cli.StringFlag{
+		Name:  "chain",
+		Usage: "Test chain directory (required)",
 	}
 	traceLengthSA = utils.NewSlidingAverage()
 )
@@ -140,17 +145,17 @@ func initDiscv5(thread int) []*discv5.UDPv5 {
 	return clients
 }
 
-func initrlpx(thread int, dest *enode.Node) ([]*rlpx.Conn, error) {
+func initeth(thread int, dest []*enode.Node, dir string) ([]*eth.Suite, error) {
 	var (
-		clients []*rlpx.Conn
+		clients []*eth.Suite
 	)
 
 	for i := 0; i < thread; i++ {
-		fd, err := net.Dial("tcp", fmt.Sprintf("%v:%d", dest.IP(), dest.TCP()))
+		pri, _ := crypto.GenerateKey()
+		client, err := eth.NewSuite(dest, dir, pri)
 		if err != nil {
-			return nil, err
+			return nil, errors.New("New Suite fail")
 		}
-		client := rlpx.NewConn(fd, dest.Pubkey())
 		clients = append(clients, client)
 	}
 
@@ -167,7 +172,7 @@ func GenerateAndExecute(c *cli.Context) error {
 		return discv4Fuzzer(c, nodeList, false)
 	case "discv5":
 		return discv5Fuzzer(c, nodeList, false)
-	case "rlpx":
+	case "eth":
 		return nil
 	default:
 		return errors.New("unsupported protocol")
@@ -497,14 +502,15 @@ func ExecuteGenerator(c *cli.Context) error {
 		packetType  = c.String(TypeFlag.Name)
 		count       = c.Int(CountFlag.Name)
 		nodeList, _ = GetList(c.String(FileFlag.Name))
+		chainDir    = c.String(ChainDirFlag.Name)
 	)
 	switch protocol {
 	case "discv4":
 		return discv4Generator(packetType, count, nodeList)
 	case "discv5":
 		return discv5Generator(packetType, count, nodeList)
-	case "rlpx":
-		return rlpxGenerator(packetType, count, nodeList)
+	case "eth":
+		return ethGenerator(chainDir, 0, count, nodeList)
 	default:
 		return errors.New("unsupported protocol")
 	}
@@ -523,9 +529,9 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node) error
 		println(packet.String()) // 有问题
 		en_packet, hash, err := discv4.Encode(client.GetPri(), packet)
 		if err != nil {
-			fmt.Printf("encode fail")
+			return errors.New("encode fail")
 		}
-		fmt.Sprintf("Encode Packet: %s\nHash: %s", hex.EncodeToString(en_packet), hex.EncodeToString(hash))
+		println("Encode Packet: %s\nHash: %s", hex.EncodeToString(en_packet), hex.EncodeToString(hash))
 	}
 	return nil
 }
@@ -552,21 +558,20 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node) error
 	return nil
 }
 
-func rlpxGenerator(packetType string, count int, nodeList []*enode.Node) error {
-	var (
-		client *rlpx.Conn
-		dest   *enode.Node
-	)
+func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node) error {
 
-	dest = nodeList[0]
-	clients, err := initrlpx(1, dest)
+	clients, err := initeth(1, nodeList, dir)
 	if err != nil {
 		return errors.New("clients init error")
 	}
-	client = clients[0]
+	client := clients[0]
 
 	for i := 0; i < count; i++ {
-		packet := client.GenPacket(packetType)
+
+		packet, err := client.GenPacket(packetType)
+		if err != nil {
+			return errors.New("GenPacket fail")
+		}
 		println(packet)
 	}
 

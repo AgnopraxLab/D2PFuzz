@@ -13,3 +13,9 @@ func RandHex(maxSize int) string {
 	_, _ = crand.Read(b)
 	return hexutil.Encode(b)
 }
+
+func RandBuff(size int) []byte {
+	buf := make([]byte, size*1024)
+	rand.Read(buf)
+	return buf
+}
