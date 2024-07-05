@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/enr"
 	"net"
 	"os"
 	"os/signal"
@@ -105,6 +106,8 @@ func initDiscv4(thread int) []*discv4.UDPv4 {
 		db, _ := enode.OpenDB("")
 		nodeKey := d2p.GenKey()
 		ln := enode.NewLocalNode(db, nodeKey)
+		ln.Set(enr.IP(ip))
+		ln.Set(enr.UDP(uint16(port)))
 		client, _ := discv4.ListenV4(udpConn, ln, cfg)
 		clients = append(clients, client)
 	}
@@ -426,6 +429,7 @@ func (meta *discv5Meta) fuzzingLoop(skipTrace bool, clientCount int) {
 }
 
 func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, taskCh, resultCh chan *task) {
+
 	return
 }
 
