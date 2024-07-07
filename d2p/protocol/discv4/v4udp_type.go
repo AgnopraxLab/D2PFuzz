@@ -166,14 +166,10 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 	case "neighbors":
 		// 创建一个自定义的节点记录
 		key, _ := crypto.GenerateKey()
-		var r enr.Record
-		r.Set(enr.IP(net.IP{127, 0, 0, 1}))
-		r.Set(enr.UDP(30303))
-		r.Set(enr.TCP(30303))
-		r.Set(Secp256k1(key.PublicKey))
 
-		// 使用节点记录创建一个新的 enode.Node 对象
-		customNode, _ := enode.New(enode.ValidSchemes, &r)
+		// 创建一个新的 enode.Node
+		ip := net.IP{127, 0, 0, 1}
+		customNode := enode.NewV4(&key.PublicKey, ip, 30303, 30303)
 
 		// 将自定义节点作为最接近的节点
 		closest := []*node{wrapNode(customNode)}
