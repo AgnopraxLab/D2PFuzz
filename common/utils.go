@@ -64,13 +64,15 @@ var (
 			"but has a very high chance of missing cases which could be exploitable.",
 	}
 	TypeFlag = &cli.StringFlag{
-		Name:  "type",
-		Usage: "Type of packet to generate (e.g., 'ping')",
+		Name:    "type",
+		Aliases: []string{"t"},
+		Usage:   "Type of packet to generate (e.g., 'ping')",
 	}
 	CountFlag = &cli.IntFlag{
-		Name:  "count",
-		Usage: "Number of packets to generate",
-		Value: 1,
+		Name:    "count",
+		Aliases: []string{"c"},
+		Usage:   "Number of packets to generate",
+		Value:   1,
 	}
 	ChainDirFlag = &cli.StringFlag{
 		Name:  "chain",

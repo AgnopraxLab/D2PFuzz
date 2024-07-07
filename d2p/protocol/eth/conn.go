@@ -3,10 +3,16 @@ package eth
 import (
 	"crypto/ecdsa"
 	"fmt"
+	"github.com/ethereum/go-ethereum/rlp"
 	"net"
+	"time"
 
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/rlpx"
+)
+
+var (
+	timeout = 2 * time.Second
 )
 
 func (s *Suite) dial(num int) (*Conn, error) {
@@ -41,4 +47,23 @@ type Conn struct {
 	ourHighestProtoVersion     uint
 	ourHighestSnapProtoVersion uint
 	caps                       []p2p.Cap
+}
+
+func (c *Conn) Read() (uint64, []byte, error) {
+	c.SetReadDeadline(time.Now().Add(timeout))
+	code, data, _, err := c.Conn.Read()
+	if err != nil {
+		return 0, nil, err
+	}
+	return code, data, nil
+}
+
+func (c *Conn) Write(proto Proto, code uint64, msg any) error {
+	c.SetWriteDeadline(time.Now().Add(timeout))
+	payload, err := rlp.EncodeToBytes(msg)
+	if err != nil {
+		return err
+	}
+	_, err = c.Conn.Write(protoOffset(proto)+code, payload)
+	return err
 }
