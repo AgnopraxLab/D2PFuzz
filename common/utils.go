@@ -533,11 +533,11 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node) error
 	for i := 0; i < count; i++ {
 		packet := client.GenPacket(packetType, node)
 		println(packet.String()) // 有问题
-		en_packet, hash, err := discv4.Encode(client.GetPri(), packet)
+		enPacket, hash, err := discv4.Encode(client.GetPri(), packet)
 		if err != nil {
 			return errors.New("encode fail")
 		}
-		println("Encode Packet: %s\nHash: %s", hex.EncodeToString(en_packet), hex.EncodeToString(hash))
+		println("Encode Packet: %s\nHash: %s", hex.EncodeToString(enPacket), hex.EncodeToString(hash))
 	}
 	return nil
 }
@@ -553,13 +553,17 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node) error
 	for i := 0; i < count; i++ {
 		packet := client.GenPacket(packetType, node)
 		println(packet.String())
+		remoteAddr := &net.UDPAddr{
+			IP:   node.IP(),
+			Port: node.UDP(),
+		}
 		toID := node.ID()
-		addr := net.JoinHostPort(node.IP().String(), fmt.Sprintf("%d", node.UDP()))
-		en_packet, nonce, err := client.EncodePacket(toID, addr, packet, nil)
+		addr := remoteAddr.String()
+		enPacket, nonce, err := client.EncodePacket(toID, addr, packet, nil)
 		if err != nil {
 			return fmt.Errorf("encoding error: %v", err)
 		}
-		fmt.Printf("Encoded Packet: %x\nNonce: %x\n", en_packet, nonce[:])
+		fmt.Printf("Encoded Packet: %x\nNonce: %x\n", enPacket, nonce[:])
 	}
 	return nil
 }
