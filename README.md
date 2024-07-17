@@ -6,9 +6,9 @@ D2PFuzz is a fuzzer tool for analyze the Ethernet DevP2P protocol. It is able to
 
 Introduction of some files and directories:
 
-- `README.md`: basic information about D2PFuzz
+- `README.md`: Basic information about D2PFuzz
 - `cmd/`: Executable commands
-- `d2p/`: ethereum devp2p protocol
+- `d2p/`: Ethereum devp2p protocol
 - `fuzzing/` : Mutation tools used in fuzz testing
 - `utils/` : External Toolkit
 - `test/`: Test Data
@@ -21,7 +21,7 @@ Run:
 
 ```
 Usage:
-  packet-generator [flag]
+  packet-generator [flag] args
 
 Flags:
   -p, --protocol   Specify the protocol to test

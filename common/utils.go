@@ -117,37 +117,20 @@ func initDiscv4(thread int) []*discv4.UDPv4 {
 	return clients
 }
 
-func initDiscv5(thread int) []*discv5.UDPv5 {
+func initDiscv5(thread int, dest []*enode.Node) ([]*discv5.Suite, error) {
 	var (
-		clients  []*discv5.UDPv5
-		basePort = 30000
+		clients []*discv5.Suite
 	)
 
 	for i := 0; i < thread; i++ {
-		cfg := d2p.Config{
-			PrivateKey: d2p.GenKey(),
-			Log:        log.Root(),
-			Clock:      mclock.System{},
-		}
-		ip := getLocalIP()
-		if ip == nil {
-			fmt.Printf("failed to get local IP address for thread %d\n", i)
-			continue
-		}
-		port := basePort + i
-		addr := &net.UDPAddr{IP: ip, Port: port}
-		udpConn, err := net.ListenUDP("udp", addr)
+		client, err := discv5.NewSuite(dest)
 		if err != nil {
-			fmt.Printf("failed to create UDP connection for thread %d: %v\n", i, err)
-			continue
+			return nil, errors.New("New Suite fail")
 		}
-		db, _ := enode.OpenDB("")
-		ln := enode.NewLocalNode(db, cfg.PrivateKey)
-		client, _ := discv5.ListenV5(udpConn, ln, cfg)
 		clients = append(clients, client)
 	}
 
-	return clients
+	return clients, nil
 }
 
 func initeth(thread int, dest []*enode.Node, dir string) ([]*eth.Suite, error) {
@@ -275,10 +258,13 @@ func discv4Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) err
 }
 
 func discv5Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) error {
-	var (
-		clients   = initDiscv5(c.Int(ThreadFlag.Name))
-		skipTrace = c.Bool(SkipTraceFlag.Name)
-	)
+
+	clients, err := initDiscv5(c.Int(ThreadFlag.Name), nodeList)
+	if err != nil {
+		return errors.New("clients init error")
+	}
+	skipTrace := c.Bool(SkipTraceFlag.Name)
+
 	if len(clients) == 0 {
 		return fmt.Errorf("need at least one vm to participate")
 	}
@@ -381,7 +367,7 @@ type discv5Meta struct {
 	abort       atomic.Bool
 	testCh      chan string
 	wg          sync.WaitGroup
-	clis        []*discv5.UDPv5
+	clis        []*discv5.Suite
 	targets     []*enode.Node
 	numTests    atomic.Uint64
 	outdir      string
@@ -435,7 +421,7 @@ func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, taskCh, resultCh chan *task) 
 	return
 }
 
-func (meta *discv5Meta) cliLoop(cli *discv5.UDPv5, taskCh, resultCh chan *task) {
+func (meta *discv5Meta) cliLoop(cli *discv5.Suite, taskCh, resultCh chan *task) {
 	return
 }
 
@@ -533,33 +519,37 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node) error
 	for i := 0; i < count; i++ {
 		packet := client.GenPacket(packetType, node)
 		println(packet.String()) // 有问题
-		en_packet, hash, err := discv4.Encode(client.GetPri(), packet)
+		enPacket, hash, err := discv4.Encode(client.GetPri(), packet)
 		if err != nil {
 			return errors.New("encode fail")
 		}
-		println("Encode Packet: %s\nHash: %s", hex.EncodeToString(en_packet), hex.EncodeToString(hash))
+		println("Encode Packet: %s\nHash: %s", hex.EncodeToString(enPacket), hex.EncodeToString(hash))
 	}
 	return nil
 }
 
 func discv5Generator(packetType string, count int, nodeList []*enode.Node) error {
 	var (
-		client *discv5.UDPv5
+		client *discv5.Suite
 		node   *enode.Node
 	)
-	clients := initDiscv5(1)
+	clients, err := initDiscv5(1, nodeList)
+	if err != nil {
+		return errors.New("clients init error")
+	}
 	client = clients[0]
 	node = nodeList[0]
+	remoteAddr := &net.UDPAddr{IP: node.IP(), Port: node.UDP()}
 	for i := 0; i < count; i++ {
-		packet := client.GenPacket(packetType, node)
+		packet, err := client.GenPacket(packetType, node)
 		println(packet.String())
 		toID := node.ID()
-		addr := net.JoinHostPort(node.IP().String(), fmt.Sprintf("%d", node.UDP()))
-		en_packet, nonce, err := client.EncodePacket(toID, addr, packet, nil)
+		addr := remoteAddr.String()
+		enPacket, nonce, err := client.EncodePacket(toID, addr, packet, nil)
 		if err != nil {
 			return fmt.Errorf("encoding error: %v", err)
 		}
-		fmt.Printf("Encoded Packet: %x\nNonce: %x\n", en_packet, nonce[:])
+		fmt.Printf("Encoded Packet: %x\nNonce: %x\n", enPacket, nonce[:])
 	}
 	return nil
 }

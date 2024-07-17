@@ -41,6 +41,6 @@ func TestDiscv5Generator(t *testing.T) {
 	}
 
 	err := discv5Generator(packetType, count, nodeList)
-	assert.NoError(t, err, "Discv4Generator should not return error")
+	assert.NoError(t, err, "Discv5Generator should not return error")
 	// Add additional assertions as needed
 }

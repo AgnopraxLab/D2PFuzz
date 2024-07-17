@@ -22,9 +22,6 @@ func NewSuite(dest []*enode.Node, chainDir string, pri *ecdsa.PrivateKey) (*Suit
 	if err != nil {
 		return nil, err
 	}
-	if err != nil {
-		return nil, err
-	}
 
 	return &Suite{
 		DestList: dest,
