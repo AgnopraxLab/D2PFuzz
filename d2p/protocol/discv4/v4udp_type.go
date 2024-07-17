@@ -5,7 +5,6 @@ import (
 	"D2PFuzz/fuzzing"
 	"context"
 	"crypto/ecdsa"
-	"github.com/ethereum/go-ethereum/p2p/enr"
 	"io"
 	"math/rand"
 	"net"
@@ -196,62 +195,7 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 		}
 	case "random":
 		randomType := packetTypes[rand.Intn(len(packetTypes))]
-		switch randomType {
-		case "ping":
-			return &Ping{
-				Version:    4,
-				From:       t.ourEndpoint(),
-				To:         NewEndpoint(addr, 0),
-				Expiration: uint64(time.Now().Add(expiration).Unix()),
-				ENRSeq:     t.localNode.Node().Seq(),
-			}
-		case "pong":
-			return &Pong{
-				To:         NewEndpoint(addr, 0),
-				ReplyTok:   []byte(fuzzing.RandHex(64)),
-				Expiration: uint64(time.Now().Add(expiration).Unix()),
-				ENRSeq:     t.localNode.Node().Seq(),
-			}
-		case "findnode":
-			req := Findnode{Expiration: uint64(time.Now().Add(expiration).Unix())}
-			rand.Read(req.Target[:])
-			return &req
-		case "neighbors":
-			// 创建一个自定义的节点记录
-			key, _ := crypto.GenerateKey()
-			var r enr.Record
-			r.Set(enr.IP(net.IP{127, 0, 0, 1}))
-			r.Set(enr.UDP(30303))
-			r.Set(enr.TCP(30303))
-			r.Set(Secp256k1(key.PublicKey))
-
-			// 使用节点记录创建一个新的 enode.Node 对象
-			customNode, _ := enode.New(enode.ValidSchemes, &r)
-
-			// 将自定义节点作为最接近的节点
-			closest := []*node{wrapNode(customNode)}
-
-			// 创建 Neighbors 结构
-			neighbors := &Neighbors{
-				Expiration: uint64(time.Now().Add(expiration).Unix()),
-			}
-
-			// 将 closest 中的节点转换为 Neighbors 结构中的格式
-			for _, n := range closest {
-				neighbors.Nodes = append(neighbors.Nodes, nodeToRPC(n))
-			}
-
-			return neighbors
-		case "ENRRequest":
-			return &ENRRequest{
-				Expiration: uint64(time.Now().Add(expiration).Unix()),
-			}
-		case "ENRResponse":
-			return &ENRResponse{
-				ReplyTok: []byte(fuzzing.RandHex(64)),
-				Record:   *t.localNode.Node().Record(),
-			}
-		}
+		t.GenPacket(randomType, n)
 	default:
 		return nil
 	}

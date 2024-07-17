@@ -587,8 +587,13 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node) ([][]
 	for i := 0; i < count; i++ {
 		packet := client.GenPacket(packetType, node)
 		println(packet.String())
+		remoteAddr := &net.UDPAddr{
+			IP:   node.IP(),
+			Port: node.UDP(),
+		}
 		toID := node.ID()
-		addr := net.JoinHostPort(node.IP().String(), fmt.Sprintf("%d", node.UDP()))
+
+		addr := remoteAddr.String()
 
 		fmt.Printf("address: %s\n", addr)
 		// 在调用 EncodePacket 之前打印输入
@@ -605,6 +610,7 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node) ([][]
 		fmt.Printf("EncodePacket Output:\n")
 		fmt.Printf("  en_packet: %x\n", en_packet)
 		fmt.Printf("  nonce: %x\n", nonce)
+
 		if err != nil {
 			return nil, nil, fmt.Errorf("encoding error: %v", err)
 		}
@@ -612,6 +618,7 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node) ([][]
 		nonces = append(nonces, nonce[:])
 		fmt.Printf("Encoded Packet: %x\n", en_packet)
 		fmt.Printf("Nonce: %x\n", nonce[:])
+
 	}
 	return encodedPackets, nonces, nil
 }
