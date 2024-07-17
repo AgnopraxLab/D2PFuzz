@@ -8,7 +8,6 @@ import (
 	"D2PFuzz/utils"
 	"bufio"
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -115,6 +114,12 @@ func initDiscv4(thread int) []*discv4.UDPv4 {
 	}
 
 	return clients
+}
+
+// Suite is the discv5 test suite.
+type Suite struct {
+	Dest    *enode.Node
+	Listen1 string // listening addresses
 }
 
 func initDiscv5(thread int) []*discv5.UDPv5 {
@@ -512,9 +517,27 @@ func ExecuteGenerator(c *cli.Context) error {
 	)
 	switch protocol {
 	case "discv4":
-		return discv4Generator(packetType, count, nodeList)
+		encodedPackets, hashes, err := discv4Generator(packetType, count, nodeList)
+		if err != nil {
+			return err
+		}
+		// 选择如何处理生成的数据包和哈希值
+		for i, packet := range encodedPackets {
+			fmt.Printf("Packet %d: %x\n", i, packet)
+			fmt.Printf("Hash %d: %x\n", i, hashes[i])
+		}
+		return nil
 	case "discv5":
-		return discv5Generator(packetType, count, nodeList)
+		encodedPackets, nonces, err := discv5Generator(packetType, count, nodeList)
+		if err != nil {
+			return err
+		}
+		// 选择如何处理生成的数据包和哈希值
+		for i, packet := range encodedPackets {
+			fmt.Printf("Packet %d: %x\n", i, packet)
+			fmt.Printf("Hash %d: %x\n", i, nonces[i])
+		}
+		return nil
 	case "eth":
 		return ethGenerator(chainDir, 0, count, nodeList)
 	default:
@@ -522,7 +545,7 @@ func ExecuteGenerator(c *cli.Context) error {
 	}
 }
 
-func discv4Generator(packetType string, count int, nodeList []*enode.Node) error {
+func discv4Generator(packetType string, count int, nodeList []*enode.Node) ([][]byte, [][]byte, error) {
 	var (
 		client *discv4.UDPv4
 		node   *enode.Node
@@ -530,19 +553,26 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node) error
 	clients := initDiscv4(1)
 	client = clients[0]
 	node = nodeList[0]
+
+	encodedPackets := make([][]byte, 0, count)
+	hashes := make([][]byte, 0, count)
+
 	for i := 0; i < count; i++ {
 		packet := client.GenPacket(packetType, node)
 		println(packet.String()) // 有问题
 		en_packet, hash, err := discv4.Encode(client.GetPri(), packet)
 		if err != nil {
-			return errors.New("encode fail")
+			return nil, nil, errors.New("encode fail")
 		}
-		println("Encode Packet: %s\nHash: %s", hex.EncodeToString(en_packet), hex.EncodeToString(hash))
+		encodedPackets = append(encodedPackets, en_packet)
+		hashes = append(hashes, hash)
+		fmt.Printf("Encode Packet: %x\n", en_packet)
+		fmt.Printf("Hash: %x\n", hash)
 	}
-	return nil
+	return encodedPackets, hashes, nil
 }
 
-func discv5Generator(packetType string, count int, nodeList []*enode.Node) error {
+func discv5Generator(packetType string, count int, nodeList []*enode.Node) ([][]byte, [][]byte, error) {
 	var (
 		client *discv5.UDPv5
 		node   *enode.Node
@@ -550,18 +580,40 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node) error
 	clients := initDiscv5(1)
 	client = clients[0]
 	node = nodeList[0]
+
+	encodedPackets := make([][]byte, 0, count)
+	nonces := make([][]byte, 0, count)
+
 	for i := 0; i < count; i++ {
 		packet := client.GenPacket(packetType, node)
 		println(packet.String())
 		toID := node.ID()
 		addr := net.JoinHostPort(node.IP().String(), fmt.Sprintf("%d", node.UDP()))
+
+		fmt.Printf("address: %s\n", addr)
+		// 在调用 EncodePacket 之前打印输入
+		fmt.Printf("EncodePacket Input:\n")
+		fmt.Printf("  toID: %v\n", toID)
+		fmt.Printf("  addr: %s\n", addr)
+		fmt.Printf("  packet: %+v\n", packet)
+		fmt.Printf("  challenge: nil\n")
+
+		// 调用 EncodePacket
 		en_packet, nonce, err := client.EncodePacket(toID, addr, packet, nil)
+
+		// 打印输出
+		fmt.Printf("EncodePacket Output:\n")
+		fmt.Printf("  en_packet: %x\n", en_packet)
+		fmt.Printf("  nonce: %x\n", nonce)
 		if err != nil {
-			return fmt.Errorf("encoding error: %v", err)
+			return nil, nil, fmt.Errorf("encoding error: %v", err)
 		}
-		fmt.Printf("Encoded Packet: %x\nNonce: %x\n", en_packet, nonce[:])
+		encodedPackets = append(encodedPackets, en_packet)
+		nonces = append(nonces, nonce[:])
+		fmt.Printf("Encoded Packet: %x\n", en_packet)
+		fmt.Printf("Nonce: %x\n", nonce[:])
 	}
-	return nil
+	return encodedPackets, nonces, nil
 }
 
 func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node) error {

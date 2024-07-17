@@ -176,8 +176,7 @@ func (req *Ping) Kind() byte             { return PingMsg }
 func (req *Ping) RequestID() []byte      { return req.ReqID }
 func (req *Ping) SetRequestID(id []byte) { req.ReqID = id }
 func (req *Ping) String() string {
-	return fmt.Sprintf("ReqID: %x\nENRSeq: %d\n",
-		req.ReqID, req.ENRSeq)
+	return fmt.Sprintf("Ping{ReqID: %x, ENRSeq: %d}", req.ReqID, req.ENRSeq)
 }
 
 func (req *Ping) AppendLogInfo(ctx []interface{}) []interface{} {

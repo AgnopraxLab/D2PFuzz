@@ -123,12 +123,19 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 	switch packetType {
 	case "ping":
 		pingPacket := &Ping{
-			ENRSeq: t.localNode.Seq(),
+			//ENRSeq: t.localNode.Node().Seq(),
+			ReqID:  []byte("foo"), // 使用固定的 ReqID 用于测试
+			ENRSeq: 0,
 		}
-		reqID := make([]byte, 8)
-		crand.Read(reqID)
-		pingPacket.SetRequestID(reqID)
 		return pingPacket
+	/*case "ping":
+	pingPacket := &Ping{
+		ENRSeq: t.localNode.Seq(),
+	}
+	reqID := make([]byte, 8)
+	crand.Read(reqID)
+	pingPacket.SetRequestID(reqID)
+	return pingPacket*/
 
 	case "pong":
 		pongPacket := &Pong{

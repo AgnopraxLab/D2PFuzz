@@ -29,7 +29,7 @@ var (
 
 const (
 	respTimeout = 500 * time.Millisecond
-	expiration  = 20 * time.Second
+	expiration  = 20 * time.Minute
 
 	ntpFailureThreshold = 32               // Continuous timeouts after which to check NTP
 	ntpWarningCooldown  = 10 * time.Minute // Minimum amount of time to pass before repeating NTP warning
