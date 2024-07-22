@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	crand "crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -112,6 +113,26 @@ func (t *UDPv5) Self() *enode.Node {
 // protocol.
 func (t *UDPv5) LocalNode() *enode.LocalNode {
 	return t.localNode
+}
+
+func (t *UDPv5) Send(n *enode.Node, p Packet, challenge *Whoareyou) Nonce {
+	addr := &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
+	packet, nonce, err := t.codec.Encode(n.ID(), addr.String(), p, challenge)
+	if err != nil {
+		panic(fmt.Errorf("can't encode %v packet: %v", p.Name(), err))
+	}
+	// print test
+	fmt.Printf("EncodePacket Output:\n")
+	fmt.Printf("packet: %x\n", packet)
+	fmt.Printf("nonce: %x\n", nonce)
+
+	//may be some problem
+	if _, err := t.conn.WriteToUDP(packet, addr); err != nil {
+		panic(fmt.Errorf("can't send %v: %v", p.Name(), err))
+	} else {
+		fmt.Printf(">> %s", p.Name())
+	}
+	return nonce
 }
 
 func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
@@ -222,15 +243,10 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 	default:
 		return nil
 	}
-	return nil
 }
 
 func cryptoRandIntn(n int) int {
 	b := make([]byte, 4)
 	crand.Read(b)
 	return int(binary.BigEndian.Uint32(b) % uint32(n))
-}
-
-func (t *UDPv5) EncodePacket(id enode.ID, addr string, packet Packet, challenge *Whoareyou) ([]byte, Nonce, error) {
-	return t.codec.Encode(id, addr, packet, challenge)
 }

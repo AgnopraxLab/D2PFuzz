@@ -215,6 +215,5 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 	default:
 		return nil
 	}
-
 	return nil
 }
