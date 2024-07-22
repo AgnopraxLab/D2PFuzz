@@ -83,7 +83,7 @@ var (
 func initDiscv4(thread int) []*discv4.UDPv4 {
 	var (
 		clients  []*discv4.UDPv4
-		basePort = 30000
+		basePort = 40000
 	)
 
 	for i := 0; i < thread; i++ {
@@ -124,15 +124,17 @@ type Suite struct {
 
 func initDiscv5(thread int) []*discv5.UDPv5 {
 	var (
-		clients  []*discv5.UDPv5
-		basePort = 30000
+		clients           []*discv5.UDPv5
+		basePort          = 50000
+		DefaultProtocolID = [6]byte{'d', 'i', 's', 'c', 'v', '5'}
 	)
 
 	for i := 0; i < thread; i++ {
 		cfg := d2p.Config{
-			PrivateKey: d2p.GenKey(),
-			Log:        log.Root(),
-			Clock:      mclock.System{},
+			PrivateKey:   d2p.GenKey(),
+			V5ProtocolID: &DefaultProtocolID,
+			Log:          log.Root(),
+			Clock:        mclock.System{},
 		}
 		ip := getLocalIP()
 		if ip == nil {
@@ -140,7 +142,7 @@ func initDiscv5(thread int) []*discv5.UDPv5 {
 			continue
 		}
 		port := basePort + i
-		addr := &net.UDPAddr{IP: ip, Port: port}
+		addr := &net.UDPAddr{IP: net.IP{127, 0, 0, 1}, Port: port}
 		udpConn, err := net.ListenUDP("udp", addr)
 		if err != nil {
 			fmt.Printf("failed to create UDP connection for thread %d: %v\n", i, err)
@@ -148,6 +150,8 @@ func initDiscv5(thread int) []*discv5.UDPv5 {
 		}
 		db, _ := enode.OpenDB("")
 		ln := enode.NewLocalNode(db, cfg.PrivateKey)
+		ln.Set(enr.IP(ip))
+		ln.Set(enr.UDP(uint16(port)))
 		client, _ := discv5.ListenV5(udpConn, ln, cfg)
 		clients = append(clients, client)
 	}
@@ -517,14 +521,8 @@ func ExecuteGenerator(c *cli.Context) error {
 	)
 	switch protocol {
 	case "discv4":
-		encodedPackets, hashes, err := discv4Generator(packetType, count, nodeList)
-		if err != nil {
-			return err
-		}
-		// 选择如何处理生成的数据包和哈希值
-		for i, packet := range encodedPackets {
-			fmt.Printf("Packet %d: %x\n", i, packet)
-			fmt.Printf("Hash %d: %x\n", i, hashes[i])
+		if err := discv4Generator(packetType, count, nodeList); err != nil {
+			panic(fmt.Errorf("can't generat %v: %v", packetType, err))
 		}
 		return nil
 	case "discv5":
@@ -545,7 +543,7 @@ func ExecuteGenerator(c *cli.Context) error {
 	}
 }
 
-func discv4Generator(packetType string, count int, nodeList []*enode.Node) ([][]byte, [][]byte, error) {
+func discv4Generator(packetType string, count int, nodeList []*enode.Node) error {
 	var (
 		client *discv4.UDPv4
 		node   *enode.Node
@@ -554,22 +552,12 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node) ([][]
 	client = clients[0]
 	node = nodeList[0]
 
-	encodedPackets := make([][]byte, 0, count)
-	hashes := make([][]byte, 0, count)
-
 	for i := 0; i < count; i++ {
-		packet := client.GenPacket(packetType, node)
-		println(packet.String()) // 有问题
-		en_packet, hash, err := discv4.Encode(client.GetPri(), packet)
-		if err != nil {
-			return nil, nil, errors.New("encode fail")
-		}
-		encodedPackets = append(encodedPackets, en_packet)
-		hashes = append(hashes, hash)
-		fmt.Printf("Encode Packet: %x\n", en_packet)
-		fmt.Printf("Hash: %x\n", hash)
+		req := client.GenPacket(packetType, node)
+		println(req.String()) // 有问题
+		client.Send(node, req)
 	}
-	return encodedPackets, hashes, nil
+	return nil
 }
 
 func discv5Generator(packetType string, count int, nodeList []*enode.Node) ([][]byte, [][]byte, error) {
@@ -591,24 +579,25 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node) ([][]
 			IP:   node.IP(),
 			Port: node.UDP(),
 		}
-		toID := node.ID()
-
+		lnID := client.LocalNode().ID()
 		addr := remoteAddr.String()
+
+		fmt.Printf("  lnIP: %v\n", client.LocalNode().Node().IP().String())
 
 		fmt.Printf("address: %s\n", addr)
 		// 在调用 EncodePacket 之前打印输入
 		fmt.Printf("EncodePacket Input:\n")
-		fmt.Printf("  toID: %v\n", toID)
+		fmt.Printf("  lnID: %v\n", lnID)
 		fmt.Printf("  addr: %s\n", addr)
 		fmt.Printf("  packet: %+v\n", packet)
 		fmt.Printf("  challenge: nil\n")
 
 		// 调用 EncodePacket
-		en_packet, nonce, err := client.EncodePacket(toID, addr, packet, nil)
+		en_packet, nonce, err := client.EncodePacket(node.ID(), addr, packet, nil)
 
 		// 打印输出
 		fmt.Printf("EncodePacket Output:\n")
-		fmt.Printf("  en_packet: %x\n", en_packet)
+		fmt.Printf("en_packet: %x\n", en_packet)
 		fmt.Printf("  nonce: %x\n", nonce)
 
 		if err != nil {
