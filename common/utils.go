@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"net"
 	"os"
@@ -124,15 +125,17 @@ type Suite struct {
 
 func initDiscv5(thread int) []*discv5.UDPv5 {
 	var (
-		clients  []*discv5.UDPv5
-		basePort = 30000
+		clients           []*discv5.UDPv5
+		basePort          = 30000
+		DefaultProtocolID = [6]byte{'d', 'i', 's', 'c', 'v', '5'}
 	)
 
 	for i := 0; i < thread; i++ {
 		cfg := d2p.Config{
-			PrivateKey: d2p.GenKey(),
-			Log:        log.Root(),
-			Clock:      mclock.System{},
+			PrivateKey:   d2p.GenKey(),
+			V5ProtocolID: &DefaultProtocolID,
+			Log:          log.Root(),
+			Clock:        mclock.System{},
 		}
 		ip := getLocalIP()
 		if ip == nil {
@@ -586,13 +589,14 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node) ([][]
 
 	for i := 0; i < count; i++ {
 		packet := client.GenPacket(packetType, node)
-		println(packet.String())
+		// println(packet.String())
+
 		remoteAddr := &net.UDPAddr{
 			IP:   node.IP(),
 			Port: node.UDP(),
 		}
-		toID := node.ID()
 
+		toID := node.ID()
 		addr := remoteAddr.String()
 
 		fmt.Printf("address: %s\n", addr)
@@ -641,4 +645,17 @@ func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node) err
 	}
 
 	return nil
+}
+
+func decodeDiscv5Packet(encodedPacket []byte, fromAddr *net.UDPAddr) (enode.ID, *enode.Node, v5wire.Packet, error) {
+	var (
+		client *discv5.UDPv5
+	)
+	// 创建一个新的 UDPv5 实例用于解码
+	clients := initDiscv5(1)
+	client = clients[0]
+	defer client.Close()
+
+	// 使用 client 的 DecodePacket 方法来解码数据包
+	return client.DecodePacket(encodedPacket, fromAddr.String())
 }

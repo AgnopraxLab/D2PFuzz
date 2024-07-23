@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"net"
@@ -123,19 +124,12 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 	switch packetType {
 	case "ping":
 		pingPacket := &Ping{
-			//ENRSeq: t.localNode.Node().Seq(),
-			ReqID:  []byte("foo"), // 使用固定的 ReqID 用于测试
-			ENRSeq: 0,
+			ENRSeq: t.localNode.Seq(),
 		}
+		reqID := make([]byte, 8)
+		crand.Read(reqID)
+		pingPacket.SetRequestID(reqID)
 		return pingPacket
-	/*case "ping":
-	pingPacket := &Ping{
-		ENRSeq: t.localNode.Seq(),
-	}
-	reqID := make([]byte, 8)
-	crand.Read(reqID)
-	pingPacket.SetRequestID(reqID)
-	return pingPacket*/
 
 	case "pong":
 		pongPacket := &Pong{
@@ -199,11 +193,30 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		crand.Read(reqID)
 		talkRespPacket.SetRequestID(reqID)
 		return talkRespPacket
+	/*case "whoareyou":
+	whoareyouPacket := &Whoareyou{
+		ChallengeData: make([]byte, 32),
+		RecordSeq:     1721275104493,
+		Node:          t.localNode.Node(),
+	}
+	crand.Read(whoareyouPacket.IDNonce[:])
+	crand.Read(whoareyouPacket.Nonce[:])
+	whoareyouPacket.sent = t.clock.Now()
+	return whoareyouPacket*/
 	case "whoareyou":
+		// 创建一个新的 enr.Record
+		r := enr.Record{}
+		r.Set(enr.UDP(30303))   // 设置 UDP 端口
+		r.SetSeq(1721275398453) // 设置序列号
+
+		// 创建一个新的 enode.Node
+		id := enode.HexID("6516a94edcc63ec65b32ab7ea215e45fdce8ded08dccc8878c9d1642fd3eba85")
+		remoteNode := enode.SignNull(&r, id)
+
 		whoareyouPacket := &Whoareyou{
 			ChallengeData: make([]byte, 32),
-			RecordSeq:     t.localNode.Seq(),
-			Node:          t.localNode.Node(),
+			RecordSeq:     1721275398453, // 使用打印出的 RecordSeq
+			Node:          remoteNode,    // 使用新创建的 Node
 		}
 		crand.Read(whoareyouPacket.IDNonce[:])
 		crand.Read(whoareyouPacket.Nonce[:])
@@ -233,4 +246,8 @@ func cryptoRandIntn(n int) int {
 
 func (t *UDPv5) EncodePacket(id enode.ID, addr string, packet Packet, challenge *Whoareyou) ([]byte, Nonce, error) {
 	return t.codec.Encode(id, addr, packet, challenge)
+}
+
+func (t *UDPv5) DecodePacket(input []byte, fromAddr string) (enode.ID, *enode.Node, v5wire.Packet, error) {
+	return t.codec.Decode(input, fromAddr)
 }
