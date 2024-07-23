@@ -592,7 +592,10 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node, genTe
 		// 调用 EncodePacket
 		//en_packet, nonce, err := client.EncodePacket(node.ID(), addr, packet, nil)
 		if genTest {
-			nonce := client.Send(node, req, nil)
+			nonce, err := client.Send(node, req, nil)
+			if err != nil {
+				panic(fmt.Errorf("can't send %v: %v", packetType, err))
+			}
 			nonceQueue = append(nonceQueue, nonce)
 		}
 		reqQueues = append(reqQueues, req)

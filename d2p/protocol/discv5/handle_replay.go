@@ -4,15 +4,17 @@ import (
 	"D2PFuzz/d2p"
 	crand "crypto/rand"
 	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"net"
 )
+
 // Errors
 var (
-	errTimeout          = errors.New("RPC timeout")
-	errClosed           = errors.New("socket closed")
+	errTimeout = errors.New("RPC timeout")
+	errClosed  = errors.New("socket closed")
 )
 
 // handlePacket decodes and processes an incoming packet from the network.
@@ -43,6 +45,9 @@ func (t *UDPv5) handlePacket(rawpacket []byte, fromAddr *net.UDPAddr) error {
 
 // handle processes incoming packets according to their message type.
 func (t *UDPv5) handle(p Packet, fromID enode.ID, fromAddr *net.UDPAddr) {
+	//print test
+	fmt.Println(p.String())
+
 	switch p := p.(type) {
 	case *Unknown:
 		t.handleUnknown(p, fromID, fromAddr)

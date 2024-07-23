@@ -115,24 +115,25 @@ func (t *UDPv5) LocalNode() *enode.LocalNode {
 	return t.localNode
 }
 
-func (t *UDPv5) Send(n *enode.Node, p Packet, challenge *Whoareyou) Nonce {
+func (t *UDPv5) Send(n *enode.Node, p Packet, challenge *Whoareyou) (Nonce, error) {
 	addr := &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
-	packet, nonce, err := t.codec.Encode(n.ID(), addr.String(), p, challenge)
+	t.logcontext = append(t.logcontext[:0], "id", n.ID(), "addr", addr)
+	t.logcontext = p.AppendLogInfo(t.logcontext)
+
+	enc, nonce, err := t.codec.Encode(n.ID(), addr.String(), p, challenge)
 	if err != nil {
-		panic(fmt.Errorf("can't encode %v packet: %v", p.Name(), err))
+		t.logcontext = append(t.logcontext, "err", err)
+		t.log.Warn(">> "+p.Name(), t.logcontext...)
+		return nonce, err
 	}
 	// print test
 	fmt.Printf("EncodePacket Output:\n")
-	fmt.Printf("packet: %x\n", packet)
+	fmt.Printf("packet: %x\n", enc)
 	fmt.Printf("nonce: %x\n", nonce)
 
-	//may be some problem
-	if _, err := t.conn.WriteToUDP(packet, addr); err != nil {
-		panic(fmt.Errorf("can't send %v: %v", p.Name(), err))
-	} else {
-		fmt.Printf(">> %s", p.Name())
-	}
-	return nonce
+	_, err = t.conn.WriteToUDP(enc, addr)
+	t.log.Trace(">> "+p.Name(), t.logcontext...)
+	return nonce, err
 }
 
 func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {

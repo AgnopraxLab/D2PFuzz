@@ -1,6 +1,7 @@
 package discv4
 
 import (
+	"fmt"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -12,6 +13,10 @@ import (
 // whether any matcher considered the packet acceptable.
 func (t *UDPv4) handleReply(from enode.ID, fromIP net.IP, req Packet) bool {
 	matched := make(chan bool, 1)
+
+	//print testing
+	fmt.Println(req.String())
+
 	select {
 	case t.gotreply <- reply{from, fromIP, req, matched}:
 		// loop will handle it
@@ -34,7 +39,6 @@ func (t *UDPv4) send(toaddr *net.UDPAddr, toid enode.ID, req Packet) ([]byte, er
 	}
 	return hash, t.write(toaddr, toid, req.Name(), packet)
 }
-
 
 // checkBond checks if the given node has a recent enough endpoint proof.
 func (t *UDPv4) checkBond(id enode.ID, ip net.IP) bool {
@@ -83,14 +87,14 @@ func (t *UDPv4) handlePing(h *packetHandlerV4, from *net.UDPAddr, fromID enode.I
 
 	// Ping back if our last pong on file is too far in the past.
 	/*
-	n := wrapNode(enode.NewV4(h.senderKey, from.IP, int(req.From.TCP), from.Port))
-	if time.Since(t.db.LastPongReceived(n.ID(), from.IP)) > bondExpiration {
-		t.sendPing(fromID, from, func() {
+		n := wrapNode(enode.NewV4(h.senderKey, from.IP, int(req.From.TCP), from.Port))
+		if time.Since(t.db.LastPongReceived(n.ID(), from.IP)) > bondExpiration {
+			t.sendPing(fromID, from, func() {
+				t.tab.addVerifiedNode(n)
+			})
+		} else {
 			t.tab.addVerifiedNode(n)
-		})
-	} else {
-		t.tab.addVerifiedNode(n)
-	}
+		}
 	*/
 
 	// Update node database and endpoint predictor.
