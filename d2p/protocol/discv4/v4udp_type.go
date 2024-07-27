@@ -5,6 +5,7 @@ import (
 	"D2PFuzz/fuzzing"
 	"context"
 	"crypto/ecdsa"
+	"fmt"
 	"io"
 	"math/rand"
 	"net"
@@ -134,6 +135,21 @@ func (t *UDPv4) GetPri() *ecdsa.PrivateKey {
 	return t.priv
 }
 
+func (t *UDPv4) Send(n *enode.Node, req Packet) []byte {
+	toaddr := &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
+	toid := n.ID()
+	packet, hash, err := Encode(t.GetPri(), req)
+	if err != nil {
+		panic(fmt.Errorf("can't encode %v packet: %v", req.Name(), err))
+	}
+	fmt.Printf("Packet: %x\n", packet)
+	fmt.Printf("Hash: %x\n", hash)
+	if err := t.write(toaddr, toid, req.Name(), packet); err != nil {
+		panic(fmt.Errorf("can't send %v: %v", req.Name(), err))
+	}
+	return hash
+}
+
 func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 	var (
 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
@@ -199,6 +215,5 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 	default:
 		return nil
 	}
-
 	return nil
 }

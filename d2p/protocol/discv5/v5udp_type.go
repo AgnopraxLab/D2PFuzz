@@ -6,6 +6,7 @@ import (
 	"crypto/ecdsa"
 	crand "crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -115,6 +116,27 @@ func (t *UDPv5) LocalNode() *enode.LocalNode {
 	return t.localNode
 }
 
+func (t *UDPv5) Send(n *enode.Node, p Packet, challenge *Whoareyou) (Nonce, error) {
+	addr := &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
+	t.logcontext = append(t.logcontext[:0], "id", n.ID(), "addr", addr)
+	t.logcontext = p.AppendLogInfo(t.logcontext)
+
+	enc, nonce, err := t.codec.Encode(n.ID(), addr.String(), p, challenge)
+	if err != nil {
+		t.logcontext = append(t.logcontext, "err", err)
+		t.log.Warn(">> "+p.Name(), t.logcontext...)
+		return nonce, err
+	}
+	// print test
+	fmt.Printf("EncodePacket Output:\n")
+	fmt.Printf("packet: %x\n", enc)
+	fmt.Printf("nonce: %x\n", nonce)
+
+	_, err = t.conn.WriteToUDP(enc, addr)
+	t.log.Trace(">> "+p.Name(), t.logcontext...)
+	return nonce, err
+}
+
 func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 	var (
 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
@@ -124,7 +146,13 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 	switch packetType {
 	case "ping":
 		pingPacket := &Ping{
+<<<<<<< HEAD
 			ENRSeq: t.localNode.Seq(),
+=======
+			//ENRSeq: t.localNode.Node().Seq(),
+			ReqID:  []byte("reqid"), // 使用固定的 ReqID 用于测试
+			ENRSeq: 5,
+>>>>>>> d4227be1dbd9dfcbcf50d2781a0e63bf0ef97443
 		}
 		reqID := make([]byte, 8)
 		crand.Read(reqID)
@@ -235,7 +263,6 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 	default:
 		return nil
 	}
-	return nil
 }
 
 func cryptoRandIntn(n int) int {
@@ -243,6 +270,7 @@ func cryptoRandIntn(n int) int {
 	crand.Read(b)
 	return int(binary.BigEndian.Uint32(b) % uint32(n))
 }
+<<<<<<< HEAD
 
 func (t *UDPv5) EncodePacket(id enode.ID, addr string, packet Packet, challenge *Whoareyou) ([]byte, Nonce, error) {
 	return t.codec.Encode(id, addr, packet, challenge)
@@ -251,3 +279,5 @@ func (t *UDPv5) EncodePacket(id enode.ID, addr string, packet Packet, challenge 
 func (t *UDPv5) DecodePacket(input []byte, fromAddr string) (enode.ID, *enode.Node, v5wire.Packet, error) {
 	return t.codec.Decode(input, fromAddr)
 }
+=======
+>>>>>>> d4227be1dbd9dfcbcf50d2781a0e63bf0ef97443

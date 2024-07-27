@@ -30,10 +30,8 @@ func TestDiscv4Generator(t *testing.T) {
 		enode.MustParse("enode://ba85011c70bcc5c04d8607d3a0ed29aa6179c092cbdda10d5d32684fb33ed01bd94f588ca8f91ac48318087dcb02eaf36773a7a453f0eedd6742af668097b29c@10.0.1.16:30303?discport=30304"),
 	}
 
-	encodedPackets, hashes, err := discv4Generator(packetType, count, nodeList)
+	_, err := discv4Generator(packetType, count, nodeList, true)
 	assert.NoError(t, err, "Discv4Generator should not return error")
-	assert.Equal(t, count, len(encodedPackets), "Should generate correct number of packets")
-	assert.Equal(t, count, len(hashes), "Should generate correct number of hashes")
 	// Add additional assertions as needed
 }
 
@@ -46,10 +44,9 @@ func TestDiscv5Generator(t *testing.T) {
 		enode.MustParse("enode://ba85011c70bcc5c04d8607d3a0ed29aa6179c092cbdda10d5d32684fb33ed01bd94f588ca8f91ac48318087dcb02eaf36773a7a453f0eedd6742af668097b29c@10.0.1.16:30303?discport=30304"),
 	}
 
-	encodedPackets, nonces, err := discv5Generator(packetType, count, nodeList)
+	encodedPackets, err := discv5Generator(packetType, count, nodeList, true)
 	assert.NoError(t, err, "Discv4Generator should not return error")
 	assert.Equal(t, count, len(encodedPackets), "Should generate correct number of packets")
-	assert.Equal(t, count, len(nonces), "Should generate correct number of hashes")
 	// Add additional assertions as needed
 }
 

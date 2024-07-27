@@ -31,6 +31,12 @@ import (
 )
 
 var (
+	GenTestFlag = &cli.BoolFlag{
+		Name:    "genTest",
+		Aliases: []string{"gt"},
+		Usage:   "Specify the protocol to test",
+		Value:   true,
+	}
 	ProtocolFlag = &cli.StringFlag{
 		Name:    "protocol",
 		Aliases: []string{"p"},
@@ -84,7 +90,7 @@ var (
 func initDiscv4(thread int) []*discv4.UDPv4 {
 	var (
 		clients  []*discv4.UDPv4
-		basePort = 30000
+		basePort = 40000
 	)
 
 	for i := 0; i < thread; i++ {
@@ -126,7 +132,11 @@ type Suite struct {
 func initDiscv5(thread int) []*discv5.UDPv5 {
 	var (
 		clients           []*discv5.UDPv5
+<<<<<<< HEAD
 		basePort          = 30000
+=======
+		basePort          = 50000
+>>>>>>> d4227be1dbd9dfcbcf50d2781a0e63bf0ef97443
 		DefaultProtocolID = [6]byte{'d', 'i', 's', 'c', 'v', '5'}
 	)
 
@@ -151,6 +161,8 @@ func initDiscv5(thread int) []*discv5.UDPv5 {
 		}
 		db, _ := enode.OpenDB("")
 		ln := enode.NewLocalNode(db, cfg.PrivateKey)
+		ln.Set(enr.IP(ip))
+		ln.Set(enr.UDP(uint16(port)))
 		client, _ := discv5.ListenV5(udpConn, ln, cfg)
 		clients = append(clients, client)
 	}
@@ -517,38 +529,27 @@ func ExecuteGenerator(c *cli.Context) error {
 		count       = c.Int(CountFlag.Name)
 		nodeList, _ = GetList(c.String(FileFlag.Name))
 		chainDir    = c.String(ChainDirFlag.Name)
+		genTestFlag = c.Bool(GenTestFlag.Name)
 	)
 	switch protocol {
 	case "discv4":
-		encodedPackets, hashes, err := discv4Generator(packetType, count, nodeList)
-		if err != nil {
-			return err
-		}
-		// 选择如何处理生成的数据包和哈希值
-		for i, packet := range encodedPackets {
-			fmt.Printf("Packet %d: %x\n", i, packet)
-			fmt.Printf("Hash %d: %x\n", i, hashes[i])
+		if _, err := discv4Generator(packetType, count, nodeList, genTestFlag); err != nil {
+			panic(fmt.Errorf("can't generat %v: %v", packetType, err))
 		}
 		return nil
 	case "discv5":
-		encodedPackets, nonces, err := discv5Generator(packetType, count, nodeList)
-		if err != nil {
-			return err
-		}
-		// 选择如何处理生成的数据包和哈希值
-		for i, packet := range encodedPackets {
-			fmt.Printf("Packet %d: %x\n", i, packet)
-			fmt.Printf("Hash %d: %x\n", i, nonces[i])
+		if _, err := discv5Generator(packetType, count, nodeList, genTestFlag); err != nil {
+			panic(fmt.Errorf("can't generat %v: %v", packetType, err))
 		}
 		return nil
 	case "eth":
-		return ethGenerator(chainDir, 0, count, nodeList)
+		return ethGenerator(chainDir, 0, count, nodeList, genTestFlag)
 	default:
 		return errors.New("unsupported protocol")
 	}
 }
 
-func discv4Generator(packetType string, count int, nodeList []*enode.Node) ([][]byte, [][]byte, error) {
+func discv4Generator(packetType string, count int, nodeList []*enode.Node, genTest bool) ([]discv4.Packet, error) {
 	var (
 		client *discv4.UDPv4
 		node   *enode.Node
@@ -556,26 +557,21 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node) ([][]
 	clients := initDiscv4(1)
 	client = clients[0]
 	node = nodeList[0]
-
-	encodedPackets := make([][]byte, 0, count)
-	hashes := make([][]byte, 0, count)
+	reqQueue := make([]discv4.Packet, 0, count)
 
 	for i := 0; i < count; i++ {
-		packet := client.GenPacket(packetType, node)
-		println(packet.String()) // 有问题
-		en_packet, hash, err := discv4.Encode(client.GetPri(), packet)
-		if err != nil {
-			return nil, nil, errors.New("encode fail")
+		req := client.GenPacket(packetType, node)
+		println(req.String()) // 有问题
+		reqQueue = append(reqQueue, req)
+		//todo: need Fuzzer send generator just return array of raw packet
+		if genTest {
+			client.Send(node, req)
 		}
-		encodedPackets = append(encodedPackets, en_packet)
-		hashes = append(hashes, hash)
-		fmt.Printf("Encode Packet: %x\n", en_packet)
-		fmt.Printf("Hash: %x\n", hash)
 	}
-	return encodedPackets, hashes, nil
+	return reqQueue, nil
 }
 
-func discv5Generator(packetType string, count int, nodeList []*enode.Node) ([][]byte, [][]byte, error) {
+func discv5Generator(packetType string, count int, nodeList []*enode.Node, genTest bool) ([]discv5.Packet, error) {
 	var (
 		client *discv5.UDPv5
 		node   *enode.Node
@@ -584,10 +580,11 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node) ([][]
 	client = clients[0]
 	node = nodeList[0]
 
-	encodedPackets := make([][]byte, 0, count)
-	nonces := make([][]byte, 0, count)
+	reqQueues := make([]discv5.Packet, 0, count)
+	nonceQueue := make([]discv5.Nonce, 0, count)
 
 	for i := 0; i < count; i++ {
+<<<<<<< HEAD
 		packet := client.GenPacket(packetType, node)
 		// println(packet.String())
 
@@ -598,36 +595,33 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node) ([][]
 
 		toID := node.ID()
 		addr := remoteAddr.String()
+=======
+		req := client.GenPacket(packetType, node)
+		println(req.String())
 
-		fmt.Printf("address: %s\n", addr)
+		fmt.Printf("lnIP: %v\n", client.LocalNode().Node().IP().String())
+>>>>>>> d4227be1dbd9dfcbcf50d2781a0e63bf0ef97443
+
 		// 在调用 EncodePacket 之前打印输入
 		fmt.Printf("EncodePacket Input:\n")
-		fmt.Printf("  toID: %v\n", toID)
-		fmt.Printf("  addr: %s\n", addr)
-		fmt.Printf("  packet: %+v\n", packet)
+		fmt.Printf("  packet: %+v\n", req)
 		fmt.Printf("  challenge: nil\n")
 
 		// 调用 EncodePacket
-		en_packet, nonce, err := client.EncodePacket(toID, addr, packet, nil)
-
-		// 打印输出
-		fmt.Printf("EncodePacket Output:\n")
-		fmt.Printf("  en_packet: %x\n", en_packet)
-		fmt.Printf("  nonce: %x\n", nonce)
-
-		if err != nil {
-			return nil, nil, fmt.Errorf("encoding error: %v", err)
+		//en_packet, nonce, err := client.EncodePacket(node.ID(), addr, packet, nil)
+		if genTest {
+			nonce, err := client.Send(node, req, nil)
+			if err != nil {
+				panic(fmt.Errorf("can't send %v: %v", packetType, err))
+			}
+			nonceQueue = append(nonceQueue, nonce)
 		}
-		encodedPackets = append(encodedPackets, en_packet)
-		nonces = append(nonces, nonce[:])
-		fmt.Printf("Encoded Packet: %x\n", en_packet)
-		fmt.Printf("Nonce: %x\n", nonce[:])
-
+		reqQueues = append(reqQueues, req)
 	}
-	return encodedPackets, nonces, nil
+	return reqQueues, nil
 }
 
-func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node) error {
+func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node, genTest bool) error {
 
 	clients, err := initeth(1, nodeList, dir)
 	if err != nil {
