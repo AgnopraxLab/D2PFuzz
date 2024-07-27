@@ -211,9 +211,8 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 		}
 	case "random":
 		randomType := packetTypes[rand.Intn(len(packetTypes))]
-		t.GenPacket(randomType, n)
+		return t.GenPacket(randomType, n)
 	default:
 		return nil
 	}
-	return nil
 }

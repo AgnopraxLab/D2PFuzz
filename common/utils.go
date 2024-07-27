@@ -562,6 +562,8 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node, genTe
 		if genTest {
 			client.Send(node, req)
 		}
+
+		time.Sleep(time.Second)
 	}
 	return reqQueue, nil
 }
@@ -599,6 +601,8 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node, genTe
 			nonceQueue = append(nonceQueue, nonce)
 		}
 		reqQueues = append(reqQueues, req)
+
+		time.Sleep(time.Second)
 	}
 	return reqQueues, nil
 }
