@@ -132,11 +132,7 @@ type Suite struct {
 func initDiscv5(thread int) []*discv5.UDPv5 {
 	var (
 		clients           []*discv5.UDPv5
-<<<<<<< HEAD
-		basePort          = 30000
-=======
 		basePort          = 50000
->>>>>>> d4227be1dbd9dfcbcf50d2781a0e63bf0ef97443
 		DefaultProtocolID = [6]byte{'d', 'i', 's', 'c', 'v', '5'}
 	)
 
@@ -567,6 +563,8 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node, genTe
 		if genTest {
 			client.Send(node, req)
 		}
+
+		time.Sleep(time.Second)
 	}
 	return reqQueue, nil
 }
@@ -584,23 +582,10 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node, genTe
 	nonceQueue := make([]discv5.Nonce, 0, count)
 
 	for i := 0; i < count; i++ {
-<<<<<<< HEAD
-		packet := client.GenPacket(packetType, node)
-		// println(packet.String())
-
-		remoteAddr := &net.UDPAddr{
-			IP:   node.IP(),
-			Port: node.UDP(),
-		}
-
-		toID := node.ID()
-		addr := remoteAddr.String()
-=======
 		req := client.GenPacket(packetType, node)
 		println(req.String())
 
 		fmt.Printf("lnIP: %v\n", client.LocalNode().Node().IP().String())
->>>>>>> d4227be1dbd9dfcbcf50d2781a0e63bf0ef97443
 
 		// 在调用 EncodePacket 之前打印输入
 		fmt.Printf("EncodePacket Input:\n")
@@ -617,24 +602,43 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node, genTe
 			nonceQueue = append(nonceQueue, nonce)
 		}
 		reqQueues = append(reqQueues, req)
+
+		time.Sleep(time.Second)
 	}
 	return reqQueues, nil
 }
 
-func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node, genTest bool) error {
-
+func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node, genTestFlag bool) error {
 	clients, err := initeth(1, nodeList, dir)
 	if err != nil {
 		return errors.New("clients init error")
 	}
 	client := clients[0]
 
-	for i := 0; i < count; i++ {
+	state := eth.NewOracleState() // 创建Oracle状态
 
+	for i := 0; i < count; i++ {
 		packet, err := client.GenPacket(packetType)
 		if err != nil {
 			return errors.New("GenPacket fail")
 		}
+
+		// 使用Oracle检查并修正数据包
+		checkedPacket, err := eth.OracleCheck(packet, state)
+		if err != nil {
+			return errors.New("Oracle check fail")
+		}
+
+		state.PacketHistory = append(state.PacketHistory, checkedPacket)
+	}
+
+	// 在生成所有包后进行多包逻辑检验
+	err = eth.MultiPacketCheck(state)
+	if err != nil {
+		return errors.New("Multi-packet check fail")
+	}
+	// 输出修正后的包
+	for _, packet := range state.PacketHistory {
 		println(packet)
 	}
 

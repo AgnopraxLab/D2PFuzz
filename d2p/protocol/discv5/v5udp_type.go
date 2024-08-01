@@ -146,13 +146,9 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 	switch packetType {
 	case "ping":
 		pingPacket := &Ping{
-<<<<<<< HEAD
-			ENRSeq: t.localNode.Seq(),
-=======
 			//ENRSeq: t.localNode.Node().Seq(),
 			ReqID:  []byte("reqid"), // 使用固定的 ReqID 用于测试
 			ENRSeq: 5,
->>>>>>> d4227be1dbd9dfcbcf50d2781a0e63bf0ef97443
 		}
 		reqID := make([]byte, 8)
 		crand.Read(reqID)
@@ -270,7 +266,6 @@ func cryptoRandIntn(n int) int {
 	crand.Read(b)
 	return int(binary.BigEndian.Uint32(b) % uint32(n))
 }
-<<<<<<< HEAD
 
 func (t *UDPv5) EncodePacket(id enode.ID, addr string, packet Packet, challenge *Whoareyou) ([]byte, Nonce, error) {
 	return t.codec.Encode(id, addr, packet, challenge)
@@ -279,5 +274,3 @@ func (t *UDPv5) EncodePacket(id enode.ID, addr string, packet Packet, challenge 
 func (t *UDPv5) DecodePacket(input []byte, fromAddr string) (enode.ID, *enode.Node, v5wire.Packet, error) {
 	return t.codec.Decode(input, fromAddr)
 }
-=======
->>>>>>> d4227be1dbd9dfcbcf50d2781a0e63bf0ef97443

@@ -25,6 +25,7 @@ func initApp() *cli.App {
 		common.TypeFlag,
 		common.CountFlag,
 		common.FileFlag,
+		common.GenTestFlag,
 	)
 	app.Action = generate
 	return app
