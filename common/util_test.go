@@ -44,3 +44,22 @@ func TestDiscv5Generator(t *testing.T) {
 	assert.Equal(t, count, len(encodedPackets), "Should generate correct number of packets")
 	// Add additional assertions as needed
 }
+
+func TestEthGenerator(t *testing.T) {
+	// 准备测试数据
+	dir := "/tmp/ethtest" //这个如何设置
+	packetType := 1
+	count := 3 // 生成 3 个包
+	nodeList := []*enode.Node{
+		// 替换为模拟节点或从测试文件加载
+		enode.MustParse("enode://ba85011c70bcc5c04d8607d3a0ed29aa6179c092cbdda10d5d32684fb33ed01bd94f588ca8f91ac48318087dcb02eaf36773a7a453f0eedd6742af668097b29c@10.0.1.16:30303"),
+	}
+	genTestFlag := true
+
+	// 调用 ethGenerator 函数
+	err := ethGenerator(dir, packetType, count, nodeList, genTestFlag)
+
+	// 注：ethGenerator 函数直接打印包而不是返回它们，
+
+	assert.NoError(t, err, "测试成功")
+}
