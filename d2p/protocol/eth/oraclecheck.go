@@ -3,8 +3,11 @@ package eth
 import (
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
 )
 
@@ -16,12 +19,16 @@ type OracleState struct {
 	AccountNonces     map[common.Address]uint64
 	BlockHashes       map[uint64]common.Hash
 	TransactionHashes map[common.Hash]bool
+	TransactionTypes  map[common.Hash]byte
+	TransactionSizes  map[common.Hash]uint32
 	ProtocolVersion   uint32
 	NetworkID         uint64
 	GenesisHash       common.Hash
 	PacketHistory     []interface{}
 	LatestHeader      *types.Header
 	FirstStatusPacket *StatusPacket
+	BlockHeaders      map[uint64]*types.Header
+	RequestedTxHashes map[common.Hash]bool
 }
 
 // NewOracleState 创建一个新的OracleState
@@ -32,6 +39,10 @@ func NewOracleState() *OracleState {
 		AccountNonces:     make(map[common.Address]uint64),
 		BlockHashes:       make(map[uint64]common.Hash),
 		TransactionHashes: make(map[common.Hash]bool),
+		TransactionTypes:  make(map[common.Hash]byte),
+		TransactionSizes:  make(map[common.Hash]uint32),
+		BlockHeaders:      make(map[uint64]*types.Header),
+		RequestedTxHashes: make(map[common.Hash]bool),
 	}
 }
 
@@ -138,8 +149,11 @@ func MultiPacketCheck(state *OracleState) error {
 				}
 			}
 			*p = validTxs
-		//是否需要检查“接到请求后按要求返回？”
 		case *BlockHeadersPacket:
+			//记录区块头
+			for i, header := range p.BlockHeadersRequest {
+				state.BlockHeaders[uint64(i)] = header
+			}
 			for j, header := range p.BlockHeadersRequest {
 				// 检查区块号是否连续
 				if header.Number.Uint64() <= lastBlockNumber {
@@ -201,7 +215,7 @@ func MultiPacketCheck(state *OracleState) error {
 				}
 			}
 
-			// 创建一个新的区块，只包含有效的交易
+			// 创建一个新的区块，只包含有效的交易,可能有bug
 			newBlock := types.NewBlock(
 				p.Block.Header(),
 				&types.Body{
@@ -215,12 +229,56 @@ func MultiPacketCheck(state *OracleState) error {
 			p.Block = newBlock
 			// 更新状态
 			state.BlockHashes[p.Block.NumberU64()] = p.Block.Hash()
+		case *BlockBodiesPacket:
+			checkedPacket, err := checkBlockBodiesPacket(p, state)
+			if err != nil {
+				return err
+			}
+			state.PacketHistory[i] = checkedPacket
+		case *NewPooledTransactionHashesPacket:
+			for j, hash := range p.Hashes {
+				if existingType, ok := state.TransactionTypes[hash]; ok {
+					if existingType != p.Types[j] {
+						return fmt.Errorf("inconsistent transaction type for hash %s", hash.Hex())
+					}
+				}
+				if existingSize, ok := state.TransactionSizes[hash]; ok {
+					if existingSize != p.Sizes[j] {
+						return fmt.Errorf("inconsistent transaction size for hash %s", hash.Hex())
+					}
+				}
+			}
 
-			// 添加其他类型的包的检查和修正...
+			checkedPacket, err := checkNewPooledTransactionHashesPacket(p, state)
+			if err != nil {
+				return err
+			}
+			state.PacketHistory[i] = checkedPacket
+		case *GetPooledTransactionsPacket:
+			for _, hash := range p.GetPooledTransactionsRequest {
+				state.RequestedTxHashes[hash] = true
+			}
+		case *PooledTransactionsPacket:
+			checkedPacket, err := checkPooledTransactionsPacket(p, state)
+			if err != nil {
+				return err
+			}
+			state.PacketHistory[i] = checkedPacket
 
+			// 检查是否所有请求的交易都已返回
+			for _, tx := range checkedPacket.PooledTransactionsResponse {
+				delete(state.RequestedTxHashes, tx.Hash())
+			}
+		// 添加其他类型的包的检查和修正...
+		default:
+			//对于其他包直接返回
+			return nil
 		}
 		// 更新修正后的包
 		state.PacketHistory[i] = packet
+	}
+	if len(state.RequestedTxHashes) > 0 {
+		return fmt.Errorf("some requested transactions were not returned")
 	}
 	return nil
 }
@@ -337,14 +395,75 @@ func checkNewBlockPacket(p *NewBlockPacket, state *OracleState) (*NewBlockPacket
 }
 
 func checkBlockBodiesPacket(p *BlockBodiesPacket, state *OracleState) (*BlockBodiesPacket, error) {
-	for _, body := range p.BlockBodiesResponse {
-		for _, tx := range body.Transactions {
-			if _, exists := state.TransactionHashes[tx.Hash()]; !exists {
-				state.TransactionHashes[tx.Hash()] = true
+	// 确保我们有足够的区块头来匹配区块体
+	if len(p.BlockBodiesResponse) > len(state.BlockHeaders) {
+		return nil, fmt.Errorf("more block bodies than known headers")
+	}
+
+	for i, body := range p.BlockBodiesResponse {
+		// 获取对应的区块头
+		header := state.BlockHeaders[uint64(i)]
+		if header == nil {
+			return nil, fmt.Errorf("no matching block header for body at index %d", i)
+		}
+
+		// 检查交易根是否匹配
+		txHash := calcTxsHash(body.Transactions)
+		if txHash != header.TxHash {
+			return nil, fmt.Errorf("transaction root mismatch for body at index %d", i)
+		}
+
+		// 检查叔块根是否匹配
+		uncleHash := types.CalcUncleHash(body.Uncles)
+		if uncleHash != header.UncleHash {
+			return nil, fmt.Errorf("uncle root mismatch for body at index %d", i)
+		}
+
+		// 如果有提款字段，检查提款根是否匹配
+		if header.WithdrawalsHash != nil {
+			withdrawalHash := calcWithdrawalsHash(body.Withdrawals)
+			if *header.WithdrawalsHash != withdrawalHash {
+				return nil, fmt.Errorf("withdrawal root mismatch for body at index %d", i)
 			}
+		}
+		// 更新交易哈希状态
+		for _, tx := range body.Transactions {
+			state.TransactionHashes[tx.Hash()] = true
 		}
 	}
 	return p, nil
+}
+
+// 辅助函数：计算交易列表的根哈希
+func calcTxsHash(txs []*types.Transaction) common.Hash {
+	var txHashes []common.Hash
+	for _, tx := range txs {
+		txHashes = append(txHashes, tx.Hash())
+	}
+	return common.BytesToHash(crypto.Keccak256(concatHashes(txHashes)))
+}
+
+// 辅助函数：计算提款列表的根哈希
+func calcWithdrawalsHash(withdrawals types.Withdrawals) common.Hash {
+	var buf []byte
+	for _, w := range withdrawals {
+		withdrawalRLP, err := rlp.EncodeToBytes(w)
+		if err != nil {
+			// 处理错误，这里简单地跳过
+			continue
+		}
+		buf = append(buf, withdrawalRLP...)
+	}
+	return crypto.Keccak256Hash(buf)
+}
+
+// 辅助函数：连接哈希值
+func concatHashes(hashes []common.Hash) []byte {
+	var buf []byte
+	for _, h := range hashes {
+		buf = append(buf, h.Bytes()...)
+	}
+	return buf
 }
 
 func checkReceiptsPacket(p *ReceiptsPacket, state *OracleState) (*ReceiptsPacket, error) {
@@ -359,31 +478,73 @@ func checkReceiptsPacket(p *ReceiptsPacket, state *OracleState) (*ReceiptsPacket
 }
 
 func checkNewPooledTransactionHashesPacket(p *NewPooledTransactionHashesPacket, state *OracleState) (*NewPooledTransactionHashesPacket, error) {
+	if len(p.Hashes) != len(p.Types) || len(p.Hashes) != len(p.Sizes) {
+		return nil, errors.New("inconsistent lengths of hashes, types, and sizes")
+	}
+
 	uniqueHashes := make([]common.Hash, 0)
 	uniqueTypes := make([]byte, 0)
 	uniqueSizes := make([]uint32, 0)
+
 	for i, hash := range p.Hashes {
 		if _, exists := state.TransactionHashes[hash]; !exists {
 			uniqueHashes = append(uniqueHashes, hash)
 			uniqueTypes = append(uniqueTypes, p.Types[i])
 			uniqueSizes = append(uniqueSizes, p.Sizes[i])
 			state.TransactionHashes[hash] = true
+
+			// 存储交易类型和大小
+			state.TransactionTypes[hash] = p.Types[i]
+			state.TransactionSizes[hash] = p.Sizes[i]
 		}
 	}
+
 	p.Hashes = uniqueHashes
 	p.Types = uniqueTypes
 	p.Sizes = uniqueSizes
+
 	return p, nil
 }
 
 func checkPooledTransactionsPacket(p *PooledTransactionsPacket, state *OracleState) (*PooledTransactionsPacket, error) {
 	validTxs := make([]*types.Transaction, 0)
 	for _, tx := range p.PooledTransactionsResponse {
-		checkedTx, err := checkTransaction(tx, state)
-		if err == nil {
-			validTxs = append(validTxs, checkedTx)
+		txHash := tx.Hash()
+
+		// 检查交易是否是被请求的
+		if !state.RequestedTxHashes[txHash] {
+			return nil, fmt.Errorf("transaction %s was not requested", txHash.Hex())
 		}
+
+		// 检查交易是否重复
+		if state.TransactionHashes[txHash] {
+			continue
+		}
+
+		// 验证交易
+		from, err := types.Sender(types.NewEIP155Signer(big.NewInt(int64(state.NetworkID))), tx)
+		if err != nil {
+			return nil, fmt.Errorf("invalid transaction %s: %v", txHash.Hex(), err)
+		}
+
+		// 检查nonce
+		if tx.Nonce() != state.AccountNonces[from]+1 {
+			return nil, fmt.Errorf("invalid nonce for transaction %s", txHash.Hex())
+		}
+
+		// 检查余额
+		if state.AccountBalances[from].Cmp(tx.Value()) < 0 {
+			return nil, fmt.Errorf("insufficient balance for transaction %s", txHash.Hex())
+		}
+
+		// 更新状态
+		state.TransactionHashes[txHash] = true
+		state.AccountNonces[from] = tx.Nonce()
+		state.AccountBalances[from] = new(big.Int).Sub(state.AccountBalances[from], tx.Value())
+
+		validTxs = append(validTxs, tx)
 	}
+
 	p.PooledTransactionsResponse = validTxs
 	return p, nil
 }
@@ -420,8 +581,38 @@ func checkTransaction(tx *types.Transaction, state *OracleState) (*types.Transac
 			return tx, nil
 		} else {
 			// 修正nonce
-			newTx := tx.WithNonce(nonce + 1)
-			state.AccountNonces[from] = nonce + 1
+			newNonce := nonce + 1
+			var newTx *types.Transaction
+			switch tx.Type() {
+			case types.LegacyTxType:
+				newTx = types.NewTransaction(newNonce, *tx.To(), tx.Value(), tx.Gas(), tx.GasPrice(), tx.Data())
+			case types.AccessListTxType:
+				newTx = types.NewTx(&types.AccessListTx{
+					ChainID:    tx.ChainId(),
+					Nonce:      newNonce,
+					To:         tx.To(),
+					Value:      tx.Value(),
+					Gas:        tx.Gas(),
+					GasPrice:   tx.GasPrice(),
+					AccessList: tx.AccessList(),
+					Data:       tx.Data(),
+				})
+			case types.DynamicFeeTxType:
+				newTx = types.NewTx(&types.DynamicFeeTx{
+					ChainID:    tx.ChainId(),
+					Nonce:      newNonce,
+					To:         tx.To(),
+					Value:      tx.Value(),
+					Gas:        tx.Gas(),
+					GasFeeCap:  tx.GasFeeCap(),
+					GasTipCap:  tx.GasTipCap(),
+					AccessList: tx.AccessList(),
+					Data:       tx.Data(),
+				})
+			default:
+				return nil, fmt.Errorf("unsupported transaction type: %d", tx.Type())
+			}
+			state.AccountNonces[from] = newNonce
 			return newTx, nil
 		}
 	}

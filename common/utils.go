@@ -617,8 +617,19 @@ func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node, gen
 
 	state := eth.NewOracleState() // 创建Oracle状态
 
+	// 初始化 PacketSpecification
+	spec := &eth.PacketSpecification{
+		BlockNumbers: []int{10, 20, 30},
+		BlockHashes:  make([]common.Hash, 3),
+	}
+	// 生成一些随机的区块哈希
+	for i := 0; i < 3; i++ {
+		hash := crypto.Keccak256([]byte(fmt.Sprintf("hash%d", i)))
+		spec.BlockHashes[i] = common.BytesToHash(hash[:])
+	}
+
 	for i := 0; i < count; i++ {
-		packet, err := client.GenPacket(packetType)
+		packet, err := client.GenPacket(packetType, spec)
 		if err != nil {
 			return errors.New("GenPacket fail")
 		}
@@ -626,7 +637,7 @@ func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node, gen
 		// 使用Oracle检查并修正数据包
 		checkedPacket, err := eth.OracleCheck(packet, state)
 		if err != nil {
-			return errors.New("Oracle check fail")
+			return errors.New("oracle check fail")
 		}
 
 		state.PacketHistory = append(state.PacketHistory, checkedPacket)
@@ -635,7 +646,7 @@ func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node, gen
 	// 在生成所有包后进行多包逻辑检验
 	err = eth.MultiPacketCheck(state)
 	if err != nil {
-		return errors.New("Multi-packet check fail")
+		return errors.New("multi-packet check fail")
 	}
 	// 输出修正后的包
 	for _, packet := range state.PacketHistory {
