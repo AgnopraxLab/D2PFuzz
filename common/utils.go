@@ -8,13 +8,16 @@ import (
 	"D2PFuzz/utils"
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+	"io"
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"sync"
@@ -408,6 +411,7 @@ type discv5Meta struct {
 func (meta *discv4Meta) fuzzingLoop(skipTrace bool, clientCount int) {
 	var (
 		ready        []int
+		testIndex    = 0
 		taskChannels []chan *task
 		resultCh     = make(chan *task)
 		cleanCh      = make(chan *cleanTask)
@@ -422,7 +426,69 @@ func (meta *discv4Meta) fuzzingLoop(skipTrace bool, clientCount int) {
 		go meta.cliLoop(cli, taskCh, resultCh)
 		ready = append(ready, i)
 	}
-	return
+
+	meta.wg.Add(1)
+	go meta.cleanupLoop(cleanCh)
+
+	type execResult struct {
+		hash    []byte // hash of the output
+		waiting int    // the number of clients we're waiting the results from
+	}
+	var executing = make(map[string]*execResult)
+	readResults := func(count int) {
+		for i := 0; i < count; i++ {
+			t := <-resultCh                 // result delivery
+			ready = append(ready, t.cliIdx) // add client to ready-set
+			if t.err != nil {
+				log.Error("Error", "err", t.err)
+				meta.abort.Store(true)
+				continue
+			}
+			execRs := executing[t.file]
+			execRs.waiting--
+			if execRs.waiting > 0 {
+				continue
+			}
+			traceLengthSA.Add(t.nLines)
+			// No more results in the pipeline
+			delete(executing, t.file)
+			meta.numTests.Add(1)
+		}
+	}
+
+	for testfile := range meta.testCh {
+		testIndex++
+		// ?
+		if clientsNeeded := clientCount - len(ready); clientsNeeded > 0 {
+			readResults(clientsNeeded)
+		}
+		if meta.abort.Load() {
+			log.Info("Shortcutting through abort")
+			continue
+		}
+		// Dispatch the testfile to the ready clients
+		log.Trace("Dispatching test to clients", "count", clientCount)
+		executing[testfile] = &execResult{waiting: clientCount}
+		for i := 0; i < clientCount; i++ {
+			id := ready[0]
+			taskChannels[id] <- &task{
+				file:      testfile,
+				testIdx:   testIndex,
+				cliIdx:    id,
+				skipTrace: skipTrace,
+			}
+			ready = ready[1:]
+		}
+	}
+	// Close all task channels
+	for _, taskCh := range taskChannels {
+		close(taskCh)
+	}
+	// ?
+	for len(ready) < len(meta.clis) {
+		readResults(len(meta.clis) - len(ready))
+	}
+	log.Debug("Fuzzing loop exiting")
 }
 
 func (meta *discv5Meta) fuzzingLoop(skipTrace bool, clientCount int) {
@@ -446,33 +512,101 @@ func (meta *discv5Meta) fuzzingLoop(skipTrace bool, clientCount int) {
 }
 
 func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, taskCh, resultCh chan *task) {
-
-	return
+	defer meta.wg.Done()
+	for t := range taskCh {
+		res, err := cli.RunPacketTest(t.file, t.skipTrace)
+		if err != nil {
+			log.Error("Error starting client", "err", err, "client")
+			t.err = fmt.Errorf("error starting client: %w", err)
+			// Send back
+			resultCh <- t
+			continue
+		}
+		t.result = res.ReplyState
+		t.execSpeed = res.ExecTime
+		// Send back
+		resultCh <- t
+	}
+	log.Debug("vmloop exiting")
 }
 
 func (meta *discv5Meta) cliLoop(cli *discv5.UDPv5, taskCh, resultCh chan *task) {
 	return
 }
 
+//type task struct {
+//	// pre-execution fields:
+//	file      string // file is the input statetest
+//	testIdx   int    // testIdx is a global index of the test
+//	vmIdx     int    // vmIdx is a global index of the vm
+//	skipTrace bool   // skipTrace: if true, ignore output and just exec as fast as possible
+//
+//	// post-execution fields:
+//	execSpeed time.Duration
+//	slow      bool   // set by the executor if the test is deemed slow.
+//	result    []byte // result is the md5 hash of the execution output
+//	nLines    int    // number of lines of output
+//	command   string // command used to execute the test
+//	err       error  // if error occurred
+//}
+
 type task struct {
 	// pre-execution fields:
-	file      string // file is the input statetest
+	file      string // file is packet transfer json save
 	testIdx   int    // testIdx is a global index of the test
-	vmIdx     int    // vmIdx is a global index of the vm
+	cliIdx    int    // cliIdx is a global index of the client
 	skipTrace bool   // skipTrace: if true, ignore output and just exec as fast as possible
 
 	// post-execution fields:
 	execSpeed time.Duration
-	slow      bool   // set by the executor if the test is deemed slow.
-	result    []byte // result is the md5 hash of the execution output
-	nLines    int    // number of lines of output
-	command   string // command used to execute the test
-	err       error  // if error occurred
+	result    []int // result need consider
+	nLines    int   // number of lines of output
+	err       error // if error occurred
 }
 
 type cleanTask struct {
 	slow   string // path to a file considered 'slow'
 	remove string // path to a file to be removed
+}
+
+func (meta *discv4Meta) cleanupLoop(cleanCh chan *cleanTask) {
+	defer meta.wg.Done()
+	for task := range cleanCh {
+		if path := task.slow; path != "" {
+			newPath := filepath.Join(filepath.Dir(path), fmt.Sprintf("slowtest-%v", filepath.Base(path)))
+			if err := Copy(path, newPath); err != nil {
+				log.Error("Error copying file", "file", path, "err", err)
+			}
+		}
+		if path := task.remove; path != "" && meta.deleteFilesWhenDone {
+			if err := os.Remove(path); err != nil {
+				log.Error("Error deleting file", "file", path, "err", err)
+			}
+		}
+	}
+	log.Debug("CleanupLoop exiting")
+}
+
+// Copy the src file to dst. Any existing file will be overwritten and will not
+// copy file attributes.
+func Copy(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return err
+	}
+	return out.Close()
 }
 
 func GetList(fName string) ([]*enode.Node, error) {
@@ -556,9 +690,12 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node, genTe
 
 	for i := 0; i < count; i++ {
 		req := client.GenPacket(packetType, node)
-		println(req.String()) // 有问题
+		//println(req.String()) // 有问题
+		data, _ := json.MarshalIndent(req, "", "")
+		fmt.Printf(string(data))
+
 		reqQueue = append(reqQueue, req)
-		//todo: need Fuzzer send generator just return array of raw packet
+		// todo: need Fuzzer send generator just return array of raw packet
 		if genTest {
 			client.Send(node, req)
 		}
