@@ -217,7 +217,7 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 	}
 }
 
-func (t *UDPv4) RunPacketTest(path string, skipTrace bool) (*tracingResult, error) {
+func (t *UDPv4) RunPacketTest() (*tracingResult, error) {
 
 	return &tracingResult{}, nil
 }
