@@ -216,3 +216,14 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 		return nil
 	}
 }
+
+func (t *UDPv4) RunPacketTest(path string, skipTrace bool) (*tracingResult, error) {
+
+	return &tracingResult{}, nil
+}
+
+type tracingResult struct {
+	ExecTime   time.Duration
+	Hash       []byte
+	ReplyState []int
+}
