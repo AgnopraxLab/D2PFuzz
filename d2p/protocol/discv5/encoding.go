@@ -230,7 +230,7 @@ func (c *Codec) writeHeaders(head *Header) {
 }
 
 // makeHeader creates a packet header.
-func (c *Codec) makeHeader(toID enode.ID, flag byte, authsizeExtra int) Header {
+func (c *Codec) makeHeader(fromID enode.ID, flag byte, authsizeExtra int) Header {
 	var authsize int
 	switch flag {
 	case flagMessage:

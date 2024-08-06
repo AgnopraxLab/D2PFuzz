@@ -34,7 +34,12 @@ func NewSuite(dest []*enode.Node, chainDir string, pri *ecdsa.PrivateKey) (*Suit
 	}, nil
 }
 
-func (s *Suite) GenPacket(packetType int) (Packet, error) {
+type PacketSpecification struct {
+	BlockNumbers []int
+	BlockHashes  []common.Hash
+}
+
+func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, error) {
 	switch packetType {
 	case StatusMsg:
 		return &StatusPacket{
@@ -45,6 +50,7 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 			Genesis:         s.chain.GetBlock(0).Hash(),
 			ForkID:          s.chain.ForkID(),
 		}, nil
+
 	case NewBlockHashesMsg:
 		return &NewBlockHashesPacket{
 			{
@@ -52,9 +58,11 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 				Number: 1,
 			},
 		}, nil
+
 	case TransactionsMsg:
 		txMsg := s.makeTxs()
 		return &txMsg, nil
+
 	case GetBlockHeadersMsg:
 		return &GetBlockHeadersPacket{
 			RequestId: 33,
@@ -68,19 +76,20 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 
 	///////////////////////////////////
 	case BlockHeadersMsg:
-		// 假设我们想要返回链中的前3个区块头
-		headers := make([]*types.Header, 0, 3)
-		for i := 0; i < 3; i++ {
-			block := s.chain.GetBlock(i)
-			if block != nil {
-				headers = append(headers, block.Header())
+		headers := make([]*types.Header, 0, len(spec.BlockNumbers))
+		for _, blockNum := range spec.BlockNumbers {
+			if blockNum < len(s.chain.blocks) {
+				block := s.chain.GetBlock(blockNum)
+				if block != nil {
+					headers = append(headers, block.Header())
+				}
 			}
 		}
-
 		return &BlockHeadersPacket{
-			RequestId:           44, // 随机的请求ID
+			RequestId:           44,
 			BlockHeadersRequest: BlockHeadersRequest(headers),
 		}, nil
+
 	//////////////////////////////////
 
 	case GetBlockBodiesMsg:
@@ -94,29 +103,33 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 
 	/////////////////////////////////
 	case BlockBodiesMsg:
-		// 假设我们要返回前两个区块的内容
-		bodies := make([]*BlockBody, 0, 2)
-		for i := 0; i < 2; i++ {
-			block := s.chain.GetBlock(i)
-			if block != nil {
-				body := &BlockBody{
-					Transactions: block.Transactions(),
-					Uncles:       block.Uncles(),
-					Withdrawals:  block.Withdrawals(),
+		bodies := make([]*BlockBody, 0, len(spec.BlockNumbers))
+		for _, blockNum := range spec.BlockNumbers {
+			if blockNum < len(s.chain.blocks) {
+				// 检查 blockNum 是否在 int 范围内
+				block := s.chain.GetBlock(blockNum)
+				if block != nil {
+					body := &BlockBody{
+						Transactions: block.Transactions(),
+						Uncles:       block.Uncles(),
+						Withdrawals:  block.Withdrawals(),
+					}
+					bodies = append(bodies, body)
 				}
-				bodies = append(bodies, body)
 			}
 		}
 		return &BlockBodiesPacket{
-			RequestId:           66, // 随机的请求ID
+			RequestId:           66,
 			BlockBodiesResponse: bodies,
 		}, nil
+
 	//这个用区块头可以吗？
 	case NewBlockMsg:
 		return &NewBlockPacket{
 			Block: s.chain.Head(),
 			TD:    new(big.Int).SetBytes(fuzzing.RandBuff(2024)),
 		}, nil
+
 	case NewPooledTransactionHashesMsg:
 		txs := s.makeTxs()
 		packet := &NewPooledTransactionHashesPacket{
@@ -130,6 +143,7 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 			packet.Hashes[i] = tx.Hash()
 		}
 		return packet, nil
+
 	case GetPooledTransactionsMsg:
 		return &GetPooledTransactionsPacket{
 			RequestId: 99,
@@ -138,21 +152,23 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 				s.chain.blocks[75].Transactions()[0].Hash(), // 假设我们要请求第75个区块的第一个交易
 			},
 		}, nil
-	//不能这样，之后按照hash写
+
 	case PooledTransactionsMsg:
 		txs := s.makeTxs()
-
-		// makeTxs() 返回的是 TransactionsPacket 类型，需要转换它
-		pooledTxs := make([]*types.Transaction, len(txs))
-		for i, tx := range txs {
-			pooledTxs[i] = tx
+		pooledTxs := make([]*types.Transaction, 0, len(spec.BlockHashes))
+		for _, hash := range spec.BlockHashes {
+			for _, tx := range txs {
+				if tx.Hash() == hash {
+					pooledTxs = append(pooledTxs, tx)
+					break
+				}
+			}
 		}
-
-		packet := &PooledTransactionsPacket{
+		return &PooledTransactionsPacket{
 			RequestId:                  100,
 			PooledTransactionsResponse: pooledTxs,
-		}
-		return packet, nil
+		}, nil
+
 	case GetReceiptsMsg:
 		packet := &GetReceiptsPacket{
 			RequestId: 110,
@@ -162,34 +178,34 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 			},
 		}
 		return packet, nil
+
 	case ReceiptsMsg:
-		receipts := make([][]*types.Receipt, 0, 2)
-		for i := 0; i < 2 && i < len(s.chain.blocks); i++ {
-			block := s.chain.blocks[i]
-			if block != nil {
-				//Receipt调用的以太坊的type
-				blockReceipts := make([]*types.Receipt, len(block.Transactions()))
-				for j, tx := range block.Transactions() {
-					// 这里模拟创建收据
-					receipt := &types.Receipt{
-						Type:             tx.Type(),
-						TxHash:           tx.Hash(),
-						ContractAddress:  crypto.CreateAddress(block.Header().Coinbase, tx.Nonce()),
-						GasUsed:          21000, // 简化假设
-						BlockHash:        block.Hash(),
-						BlockNumber:      block.Number(),
-						TransactionIndex: uint(j),
+		receipts := make([][]*types.Receipt, 0, len(spec.BlockNumbers))
+		for _, blockNum := range spec.BlockNumbers {
+			if blockNum < len(s.chain.blocks) {
+				block := s.chain.blocks[blockNum]
+				if block != nil {
+					blockReceipts := make([]*types.Receipt, len(block.Transactions()))
+					for j, tx := range block.Transactions() {
+						receipt := &types.Receipt{
+							Type:             tx.Type(),
+							TxHash:           tx.Hash(),
+							ContractAddress:  crypto.CreateAddress(block.Header().Coinbase, tx.Nonce()),
+							GasUsed:          21000,
+							BlockHash:        block.Hash(),
+							BlockNumber:      block.Number(),
+							TransactionIndex: uint(j),
+						}
+						blockReceipts[j] = receipt
 					}
-					blockReceipts[j] = receipt
+					receipts = append(receipts, blockReceipts)
 				}
-				receipts = append(receipts, blockReceipts)
 			}
 		}
-		packet := &ReceiptsPacket{
-			RequestId:        110, // 在实际应用中，这应该匹配接收到的请求ID
+		return &ReceiptsPacket{
+			RequestId:        110,
 			ReceiptsResponse: receipts,
-		}
-		return packet, nil
+		}, nil
 	/////////////////////////////////
 	default:
 		return nil, errors.New("unknown packet type")
