@@ -1,6 +1,7 @@
 package discv4
 
 import (
+	"D2PFuzz/common"
 	"D2PFuzz/d2p"
 	"D2PFuzz/fuzzing"
 	"context"
@@ -150,7 +151,7 @@ func (t *UDPv4) Send(n *enode.Node, req Packet) []byte {
 	return hash
 }
 
-func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
+func (t *UDPv4) GenPacket(packetType string, n *enode.Node) Packet {
 	var (
 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
 		packetTypes = []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
@@ -217,13 +218,87 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 	}
 }
 
-func (t *UDPv4) RunPacketTest() (*tracingResult, error) {
+func (t *UDPv4) CreateSeed(node *enode.Node) (*common.V4Seed, error) {
+	var packets []Packet
 
-	return &tracingResult{}, nil
+	// 生成各种类型的Packet并添加到packets切片中
+	packetTypes := []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
+
+	for _, pType := range packetTypes {
+		packet := t.GenPacket(pType, node)
+		if packet != nil {
+			packets = append(packets, packet)
+		}
+	}
+	seedID := fmt.Sprintf("%d", time.Now().Unix())
+	seed := &common.V4Seed{
+		ID:        seedID,
+		Packets:   packets,
+		Priority:  1,
+		Mutations: 0,
+		Series:    make([]*common.StateSeries, 0),
+	}
+
+	return seed, nil
 }
 
-type tracingResult struct {
-	ExecTime   time.Duration
-	Hash       []byte
-	ReplyState []int
+func (t *UDPv4) SelectSeed(seedQueue []*common.V4Seed) *common.V4Seed {
+	var selectedSeed *common.V4Seed
+	maxPriority := 0
+
+	// 遍历种子队列，找到优先级最低的种子
+	for _, seed := range seedQueue {
+		if seed.Priority > maxPriority {
+			maxPriority = seed.Priority
+			selectedSeed = seed
+		}
+	}
+	selectedSeed.Priority -= 1
+	for _, seed := range seedQueue {
+		if seed != selectedSeed {
+			seed.Priority++
+		}
+	}
+
+	return selectedSeed
+}
+
+func (t *UDPv4) RunPacketTest(seed *common.V4Seed, node *enode.Node) (*common.V4Seed, error) {
+	for {
+		// 初始化一个 series
+		var series []*common.StateSeries
+		for _, req := range seed.Packets {
+			res := t.Send(node, req)
+			// 将结果 req.Name():res 保存到 series
+			series = append(series, &common.StateSeries{
+				Type: req.Name(),
+				Hash: res,
+			})
+		}
+		// 比较 seed.Series 与 series 中的每一项，如果有任何地方不同 则将 seed.Series 更新为 series 并返回 seed
+		if !compareSeries(seed.Series, series) {
+			seed.Series = series // 如果不同，则更新 seed.Series
+			seed.ID = fmt.Sprintf("%d", time.Now().Unix())
+			return seed, nil
+		}
+		// 对 seed 的 packet 进行变异操作
+		t.packetMutate(seed)
+	}
+}
+
+func compareSeries(s1, s2 []*common.StateSeries) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+	for i, item1 := range s1 {
+		item2 := s2[i]
+		if item1.Type != item2.Type {
+			return false
+		}
+	}
+	return true
+}
+
+func (t *UDPv4) packetMutate(seed *common.V4Seed) {
+	seed.Mutations++
 }

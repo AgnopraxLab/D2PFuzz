@@ -12,13 +12,13 @@ import (
 )
 
 type Suite struct {
-	DestList []*enode.Node
+	DestList *enode.Node
 	chain    *Chain
 	conn     *Conn
 	pri      *ecdsa.PrivateKey
 }
 
-func NewSuite(dest []*enode.Node, chainDir string, pri *ecdsa.PrivateKey) (*Suite, error) {
+func NewSuite(dest *enode.Node, chainDir string, pri *ecdsa.PrivateKey) (*Suite, error) {
 	chain, err := NewChain(chainDir)
 	if err != nil {
 		return nil, err

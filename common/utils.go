@@ -11,8 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/p2p/enr"
 	"io/ioutil"
 	"net"
 	"os"
@@ -24,12 +22,13 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-	"math/rand"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/urfave/cli/v2"
 )
 
@@ -169,7 +168,7 @@ func initDiscv5(thread int) []*discv5.UDPv5 {
 	return clients
 }
 
-func initeth(thread int, dest []*enode.Node, dir string) ([]*eth.Suite, error) {
+func initeth(thread int, dest *enode.Node, dir string) ([]*eth.Suite, error) {
 	var (
 		clients []*eth.Suite
 	)
@@ -188,14 +187,14 @@ func initeth(thread int, dest []*enode.Node, dir string) ([]*eth.Suite, error) {
 
 func GenerateAndExecute(c *cli.Context) error {
 	var (
-		protocol    = c.String(ProtocolFlag.Name)
-		nodeList, _ = GetList(c.String(FileFlag.Name))
+		protocol = c.String(ProtocolFlag.Name)
+		node, _  = GetList(c.String(FileFlag.Name))
 	)
 	switch protocol {
 	case "discv4":
-		return discv4Fuzzer(c, nodeList)
+		return discv4Fuzzer(c, node)
 	case "discv5":
-		return discv5Fuzzer(c, nodeList, false)
+		return discv5Fuzzer(c, node, false)
 	case "eth":
 		return nil
 	default:
@@ -203,7 +202,7 @@ func GenerateAndExecute(c *cli.Context) error {
 	}
 }
 
-func discv4Fuzzer(c *cli.Context, nodeList []*enode.Node) error {
+func discv4Fuzzer(c *cli.Context, node *enode.Node) error {
 	var (
 		clients   = initDiscv4(c.Int(ThreadFlag.Name))
 		skipTrace = c.Bool(SkipTraceFlag.Name)
@@ -215,7 +214,7 @@ func discv4Fuzzer(c *cli.Context, nodeList []*enode.Node) error {
 	meta := &discv4Meta{
 		testCh:  make(chan string, 4), // channel where we'll deliver tests
 		clis:    clients,
-		targets: nodeList,
+		targets: node,
 		outdir:  c.String(LocationFlag.Name),
 	}
 	meta.wg.Add(1)
@@ -240,7 +239,7 @@ func discv4Fuzzer(c *cli.Context, nodeList []*enode.Node) error {
 	return nil
 }
 
-func discv5Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) error {
+func discv5Fuzzer(c *cli.Context, node *enode.Node, cleanupFiles bool) error {
 	var (
 		clients   = initDiscv5(c.Int(ThreadFlag.Name))
 		skipTrace = c.Bool(SkipTraceFlag.Name)
@@ -253,7 +252,7 @@ func discv5Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) err
 	meta := &discv5Meta{
 		testCh:  make(chan string, 4), // channel where we'll deliver tests
 		clis:    clients,
-		targets: nodeList,
+		targets: node,
 		outdir:  c.String(LocationFlag.Name),
 	}
 	meta.wg.Add(1)
@@ -335,7 +334,7 @@ type discv4Meta struct {
 	testCh      chan string
 	wg          sync.WaitGroup
 	clis        []*discv4.UDPv4
-	targets     []*enode.Node
+	targets     *enode.Node
 	numTests    atomic.Uint64
 	outdir      string
 	notifyTopic string
@@ -348,7 +347,7 @@ type discv5Meta struct {
 	testCh      chan string
 	wg          sync.WaitGroup
 	clis        []*discv5.UDPv5
-	targets     []*enode.Node
+	targets     *enode.Node
 	numTests    atomic.Uint64
 	outdir      string
 	notifyTopic string
@@ -359,61 +358,18 @@ type discv5Meta struct {
 func (meta *discv4Meta) fuzzingLoop(skipTrace bool) {
 	defer meta.wg.Done()
 
-	// 创建一个新的保存 seed 的路径
-	seedDir := filepath.Join(meta.outdir, "discv4", "seed")
-	if err := os.MkdirAll(seedDir, 0755); err != nil {
-		fmt.Printf("Error creating seed directory: %v\n", err)
-		return
-	}
-
-	//// 初始化一个 seed 并将其以文件名为当前时间戳的前提下保存在 seedDir 目录下
-	//...
-	//
-	//// 实现一个大循环来不断让 cli 执行不同的 seed
-	//for{
-	//	// 从 seedDir 路径下的文件中随机选择一个 seed 文件
-	//	seed :=
-	//	for i, cli := range meta.clis {
-	//		meta.wg.Add(1)
-	//		go meta.cliLoop(cli, seed)
-	//	}
-	//}
-	// 初始化一个 seed 并将其以文件名为当前时间戳的前提下保存在 seedDir 目录下
-	seed := []byte("initial seed data") // 初始化种子数据
-	seedFile := filepath.Join(seedDir, fmt.Sprintf("%d.seed", time.Now().Unix()))
-	if err := ioutil.WriteFile(seedFile, seed, 0644); err != nil {
-		fmt.Printf("Error writing seed file: %v\n", err)
-		return
-	}
-
-	// 实现一个大循环来不断让 cli 执行不同的 seed
-	for {
-		// 获取 seedDir 路径下的所有文件
-		files, err := ioutil.ReadDir(seedDir)
-		if err != nil {
-			fmt.Printf("Error reading seed directory: %v\n", err)
+	// 启动多个并发任务，分别为每个 cli 执行 cliLoop 函数
+	for i, cli := range meta.clis {
+		meta.wg.Add(1)
+		// 创建一个新的保存 seed 的路径
+		seedDir := filepath.Join(meta.outdir, "discv4", fmt.Sprintf("cli-%d", i), "seed")
+		if err := os.MkdirAll(seedDir, 0755); err != nil {
+			fmt.Printf("Error creating seed directory: %v\n", err)
 			return
 		}
 
-		// 从 seedDir 路径下的文件中随机选择一个 seed 文件
-		rand.Seed(time.Now().UnixNano())
-		randomFile := files[rand.Intn(len(files))]
-		seedPath := filepath.Join(seedDir, randomFile.Name())
-
-		// 读取选中的种子文件
-		seed, err := ioutil.ReadFile(seedPath)
-		if err != nil {
-			fmt.Printf("Error reading seed file: %v\n", err)
-			return
-		}
-
-		// 启动多个并发任务，分别为每个 cli 执行 cliLoop 函数
-		for _, cli := range meta.clis {
-			meta.wg.Add(1)
-			go meta.cliLoop(cli, seed)
-		}
+		go meta.cliLoop(cli, seedDir)
 	}
-}
 }
 
 func (meta *discv5Meta) fuzzingLoop(skipTrace bool, clientCount int) {
@@ -430,44 +386,101 @@ func (meta *discv5Meta) fuzzingLoop(skipTrace bool, clientCount int) {
 	return
 }
 
-func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, seed string) {
+func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, seedDir string) {
 	defer meta.wg.Done()
-	_, err := cli.RunPacketTest(seed)
+
+	// 定义一个 种子队列
+	var seedQueue []*V4Seed
+	initSeed, err := cli.CreateSeed(meta.targets)
 	if err != nil {
-		log.Error("Error starting client", "err", err, "client")
+		fmt.Printf("Error initSeed: %v\n", err)
 	}
-	log.Debug("vmloop exiting")
+
+	initSeed, err = cli.RunPacketTest(initSeed, meta.targets)
+	if err != nil {
+		fmt.Printf("Error starting client packet test: %v\n", err)
+	}
+
+	seedQueue = append(seedQueue, initSeed)
+	err = meta.saveSeed(seedDir, initSeed)
+	if err != nil {
+		fmt.Printf("Error starting client packet test: %v\n", err)
+	}
+
+	for {
+		seed := cli.SelectSeed(seedQueue)
+		newSeed, err := cli.RunPacketTest(seed, meta.targets)
+		if err != nil {
+			fmt.Printf("Error starting client packet test: %v\n", err)
+		}
+		seedQueue = append(seedQueue, newSeed)
+		err = meta.saveSeed(seedDir, newSeed)
+		if err != nil {
+			fmt.Printf("Error starting client packet test: %v\n", err)
+		}
+	}
+}
+
+func (meta *discv4Meta) saveSeed(seedDir string, seed *V4Seed) error {
+	// 将V4Seed对象转换为JSON字符串
+	jsonData, err := json.MarshalIndent(seed, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	filename := fmt.Sprintf("%d.json", seed.ID)
+
+	// 构建完整的文件路径
+	filePath := filepath.Join(seedDir, filename)
+
+	// 将JSON字符串写入文件
+	err = ioutil.WriteFile(filePath, jsonData, 0644)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Seed saved to %s\n", filePath)
+	return nil
 }
 
 func (meta *discv5Meta) cliLoop(cli *discv5.UDPv5) {
 	return
 }
 
-func GetList(fName string) ([]*enode.Node, error) {
+type V4Seed struct {
+	ID        string          `json:"id"`        // 种子的唯一标识符
+	Packets   []discv4.Packet `json:"packets"`   // 用于变异的Packet切片
+	Priority  int             `json:"priority"`  // 种子的优先级
+	Mutations int             `json:"mutations"` // 该种子已经经过的变异次数
+	Series    []*StateSeries  `json:"series"`
+}
+
+type StateSeries struct {
+	Type  string
+	Hash  []byte
+	State int
+}
+
+func GetList(fName string) (*enode.Node, error) {
 	file, err := os.Open(fName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %v", err)
 	}
 	defer file.Close()
 
-	var nodeList []*enode.Node
-
 	scanner := bufio.NewScanner(file)
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		node := enode.MustParse(line)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse enode: %v", err)
-		}
-		nodeList = append(nodeList, node)
+	line := scanner.Text()
+	node := enode.MustParse(line)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse enode: %v", err)
 	}
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading file: %v", err)
 	}
 
-	return nodeList, nil
+	return node, nil
 }
 
 func getLocalIP() net.IP {
@@ -512,14 +525,12 @@ func ExecuteGenerator(c *cli.Context) error {
 	}
 }
 
-func discv4Generator(packetType string, count int, nodeList []*enode.Node, genTest bool) ([]discv4.Packet, error) {
+func discv4Generator(packetType string, count int, node *enode.Node, genTest bool) ([]discv4.Packet, error) {
 	var (
 		client *discv4.UDPv4
-		node   *enode.Node
 	)
 	clients := initDiscv4(1)
 	client = clients[0]
-	node = nodeList[0]
 	reqQueue := make([]discv4.Packet, 0, count)
 
 	for i := 0; i < count; i++ {
@@ -538,14 +549,12 @@ func discv4Generator(packetType string, count int, nodeList []*enode.Node, genTe
 	return reqQueue, nil
 }
 
-func discv5Generator(packetType string, count int, nodeList []*enode.Node, genTest bool) ([]discv5.Packet, error) {
+func discv5Generator(packetType string, count int, node *enode.Node, genTest bool) ([]discv5.Packet, error) {
 	var (
 		client *discv5.UDPv5
-		node   *enode.Node
 	)
 	clients := initDiscv5(1)
 	client = clients[0]
-	node = nodeList[0]
 
 	reqQueues := make([]discv5.Packet, 0, count)
 	nonceQueue := make([]discv5.Nonce, 0, count)
@@ -579,9 +588,9 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node, genTe
 	return reqQueues, nil
 }
 
-func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node, genTest bool) error {
+func ethGenerator(dir string, packetType, count int, node *enode.Node, genTest bool) error {
 
-	clients, err := initeth(1, nodeList, dir)
+	clients, err := initeth(1, node, dir)
 	if err != nil {
 		return errors.New("clients init error")
 	}

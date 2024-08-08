@@ -25,8 +25,6 @@ type Packet interface {
 	Name() string
 	// Kind is the packet type, for logging purposes.
 	Kind() byte
-	// String is the print of packet
-	String() string
 }
 
 type (
