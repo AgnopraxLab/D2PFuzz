@@ -673,7 +673,12 @@ func ExecuteGenerator(c *cli.Context) error {
 		}
 		return nil
 	case "eth":
-		return ethGenerator(chainDir, 0, count, nodeList, genTestFlag)
+		packetTypeInt, err := strconv.Atoi(packetType)
+		if err != nil {
+			// 处理错误，例如 packetType 不是一个有效的整数字符串
+			fmt.Println("转换错误:", err)
+		}
+		return ethGenerator(chainDir, packetTypeInt, count, nodeList, genTestFlag)
 	default:
 		return errors.New("unsupported protocol")
 	}

@@ -3,6 +3,8 @@ package common
 import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/stretchr/testify/assert"
+	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -46,10 +48,16 @@ func TestDiscv5Generator(t *testing.T) {
 }
 
 func TestEthGenerator(t *testing.T) {
-	// 准备测试数据
-	dir := "/tmp/ethtest" //这个如何设置
-	packetType := 1
-	count := 3 // 生成 3 个包
+	// 获取当前文件的路径
+	_, currentFile, _, _ := runtime.Caller(0)
+
+	// 获取项目根目录
+	projectRoot := filepath.Dir(filepath.Dir(currentFile))
+
+	// 构造 test/ethdata 的绝对路径
+	dir := filepath.Join(projectRoot, "test", "ethdata")
+	packetType := 2
+	count := 1 // 生成 3 个包
 	nodeList := []*enode.Node{
 		// 替换为模拟节点或从测试文件加载
 		enode.MustParse("enode://ba85011c70bcc5c04d8607d3a0ed29aa6179c092cbdda10d5d32684fb33ed01bd94f588ca8f91ac48318087dcb02eaf36773a7a453f0eedd6742af668097b29c@10.0.1.16:30303"),
