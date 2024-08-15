@@ -390,7 +390,7 @@ func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, seedDir string) {
 	defer meta.wg.Done()
 
 	// 定义一个 种子队列
-	var seedQueue []*V4Seed
+	var seedQueue []*discv4.V4Seed
 	initSeed, err := cli.CreateSeed(meta.targets)
 	if err != nil {
 		fmt.Printf("Error initSeed: %v\n", err)
@@ -421,7 +421,7 @@ func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, seedDir string) {
 	}
 }
 
-func (meta *discv4Meta) saveSeed(seedDir string, seed *V4Seed) error {
+func (meta *discv4Meta) saveSeed(seedDir string, seed *discv4.V4Seed) error {
 	// 将V4Seed对象转换为JSON字符串
 	jsonData, err := json.MarshalIndent(seed, "", "  ")
 	if err != nil {
@@ -445,20 +445,6 @@ func (meta *discv4Meta) saveSeed(seedDir string, seed *V4Seed) error {
 
 func (meta *discv5Meta) cliLoop(cli *discv5.UDPv5) {
 	return
-}
-
-type V4Seed struct {
-	ID        string          `json:"id"`        // 种子的唯一标识符
-	Packets   []discv4.Packet `json:"packets"`   // 用于变异的Packet切片
-	Priority  int             `json:"priority"`  // 种子的优先级
-	Mutations int             `json:"mutations"` // 该种子已经经过的变异次数
-	Series    []*StateSeries  `json:"series"`
-}
-
-type StateSeries struct {
-	Type  string
-	Hash  []byte
-	State int
 }
 
 func GetList(fName string) (*enode.Node, error) {

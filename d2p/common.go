@@ -22,6 +22,7 @@ type ConnClient interface {
 }
 
 type Packet interface {
+	Name()
 	Kind()
 }
 

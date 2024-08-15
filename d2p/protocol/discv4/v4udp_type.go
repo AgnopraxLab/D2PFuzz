@@ -1,7 +1,6 @@
 package discv4
 
 import (
-	"D2PFuzz/common"
 	"D2PFuzz/d2p"
 	"D2PFuzz/fuzzing"
 	"context"
@@ -218,7 +217,7 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) Packet {
 	}
 }
 
-func (t *UDPv4) CreateSeed(node *enode.Node) (*common.V4Seed, error) {
+func (t *UDPv4) CreateSeed(node *enode.Node) (*V4Seed, error) {
 	var packets []Packet
 
 	// 生成各种类型的Packet并添加到packets切片中
@@ -231,19 +230,19 @@ func (t *UDPv4) CreateSeed(node *enode.Node) (*common.V4Seed, error) {
 		}
 	}
 	seedID := fmt.Sprintf("%d", time.Now().Unix())
-	seed := &common.V4Seed{
+	seed := &V4Seed{
 		ID:        seedID,
 		Packets:   packets,
 		Priority:  1,
 		Mutations: 0,
-		Series:    make([]*common.StateSeries, 0),
+		Series:    make([]*StateSeries, 0),
 	}
 
 	return seed, nil
 }
 
-func (t *UDPv4) SelectSeed(seedQueue []*common.V4Seed) *common.V4Seed {
-	var selectedSeed *common.V4Seed
+func (t *UDPv4) SelectSeed(seedQueue []*V4Seed) *V4Seed {
+	var selectedSeed *V4Seed
 	maxPriority := 0
 
 	// 遍历种子队列，找到优先级最低的种子
@@ -263,14 +262,14 @@ func (t *UDPv4) SelectSeed(seedQueue []*common.V4Seed) *common.V4Seed {
 	return selectedSeed
 }
 
-func (t *UDPv4) RunPacketTest(seed *common.V4Seed, node *enode.Node) (*common.V4Seed, error) {
+func (t *UDPv4) RunPacketTest(seed *V4Seed, node *enode.Node) (*V4Seed, error) {
 	for {
 		// 初始化一个 series
-		var series []*common.StateSeries
+		var series []*StateSeries
 		for _, req := range seed.Packets {
 			res := t.Send(node, req)
 			// 将结果 req.Name():res 保存到 series
-			series = append(series, &common.StateSeries{
+			series = append(series, &StateSeries{
 				Type: req.Name(),
 				Hash: res,
 			})
@@ -282,11 +281,11 @@ func (t *UDPv4) RunPacketTest(seed *common.V4Seed, node *enode.Node) (*common.V4
 			return seed, nil
 		}
 		// 对 seed 的 packet 进行变异操作
-		t.packetMutate(seed)
+		t.seedMutate(seed)
 	}
 }
 
-func compareSeries(s1, s2 []*common.StateSeries) bool {
+func compareSeries(s1, s2 []*StateSeries) bool {
 	if len(s1) != len(s2) {
 		return false
 	}
@@ -299,6 +298,28 @@ func compareSeries(s1, s2 []*common.StateSeries) bool {
 	return true
 }
 
-func (t *UDPv4) packetMutate(seed *common.V4Seed) {
+func (t *UDPv4) seedMutate(seed *V4Seed) {
 	seed.Mutations++
+	//需要补充
+	if seed.Mutations < 100 {
+		seed.packetMutate(seed.Packets)
+	} else if seed.Mutations < 200 {
+		seed.seriesMutate(seed.Packets)
+	} else {
+		seed.havocMutate(seed.Packets)
+	}
+}
+
+type V4Seed struct {
+	ID        string         `json:"id"`        // 种子的唯一标识符
+	Packets   []Packet       `json:"packets"`   // 用于变异的Packet切片
+	Priority  int            `json:"priority"`  // 种子的优先级
+	Mutations int            `json:"mutations"` // 该种子已经经过的变异次数
+	Series    []*StateSeries `json:"series"`
+}
+
+type StateSeries struct {
+	Type  string
+	Hash  []byte
+	State int
 }
