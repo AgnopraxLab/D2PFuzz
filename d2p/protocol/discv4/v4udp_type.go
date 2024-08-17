@@ -175,30 +175,25 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) Packet {
 			ENRSeq:     t.localNode.Node().Seq(),
 		}
 	case "findnode":
-		req := Findnode{Expiration: uint64(time.Now().Add(expiration).Unix())}
+		req := &Findnode{Expiration: uint64(time.Now().Add(expiration).Unix())}
 		rand.Read(req.Target[:])
-		return &req
+		return req
 	case "neighbors":
 		// 创建一个自定义的节点记录
 		key, _ := crypto.GenerateKey()
-
 		// 创建一个新的 enode.Node
 		ip := net.IP{127, 0, 0, 1}
 		customNode := enode.NewV4(&key.PublicKey, ip, 30303, 30303)
-
 		// 将自定义节点作为最接近的节点
 		closest := []*node{wrapNode(customNode)}
-
 		// 创建 Neighbors 结构
 		neighbors := &Neighbors{
 			Expiration: uint64(time.Now().Add(expiration).Unix()),
 		}
-
 		// 将 closest 中的节点转换为 Neighbors 结构中的格式
 		for _, n := range closest {
 			neighbors.Nodes = append(neighbors.Nodes, nodeToRPC(n))
 		}
-
 		return neighbors
 	case "ENRRequest":
 		return &ENRRequest{
@@ -258,7 +253,6 @@ func (t *UDPv4) SelectSeed(seedQueue []*V4Seed) *V4Seed {
 			seed.Priority++
 		}
 	}
-
 	return selectedSeed
 }
 
@@ -302,11 +296,11 @@ func (t *UDPv4) seedMutate(seed *V4Seed) {
 	seed.Mutations++
 	//需要补充
 	if seed.Mutations < 100 {
-		seed.packetMutate(seed.Packets)
+		seed.PacketMutate(seed.Packets)
 	} else if seed.Mutations < 200 {
-		seed.seriesMutate(seed.Packets)
+		seed.SeriesMutate(seed.Packets)
 	} else {
-		seed.havocMutate(seed.Packets)
+		seed.HavocMutate(seed.Packets)
 	}
 }
 

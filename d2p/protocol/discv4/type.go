@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
+	"math/rand"
 	"net"
 )
 
@@ -25,6 +26,8 @@ type Packet interface {
 	Name() string
 	// Kind is the packet type, for logging purposes.
 	Kind() byte
+
+	mutate()
 }
 
 type (
@@ -154,4 +157,36 @@ func (req *ENRResponse) Name() string { return "ENRRESPONSE/v4" }
 func (req *ENRResponse) Kind() byte   { return ENRResponsePacket }
 func (req *ENRResponse) String() string {
 	return fmt.Sprintf("ReplyTok: %s", hex.EncodeToString(req.ReplyTok))
+}
+
+func (p *Ping) mutate() {
+	mutateExp(&p.Expiration)
+	mutateRest(&p.Rest)
+}
+
+func (p *Pong) mutate() {
+	rand.Read(p.ReplyTok[:])
+	mutateExp(&p.Expiration)
+	mutateRest(&p.Rest)
+}
+
+func (p *Findnode) mutate() {
+	rand.Read(p.Target[:])
+	mutateExp(&p.Expiration)
+	mutateRest(&p.Rest)
+}
+
+func (p *Neighbors) mutate() {
+	mutateExp(&p.Expiration)
+	mutateRest(&p.Rest)
+}
+
+func (p *ENRRequest) mutate() {
+	mutateExp(&p.Expiration)
+	mutateRest(&p.Rest)
+}
+
+func (p *ENRResponse) mutate() {
+	rand.Read(p.ReplyTok[:])
+	mutateRest(&p.Rest)
 }
