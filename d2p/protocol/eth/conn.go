@@ -3,9 +3,10 @@ package eth
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/ethereum/go-ethereum/rlp"
 	"net"
 	"time"
+
+	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/rlpx"
@@ -20,11 +21,11 @@ func (s *Suite) dial(num int) (*Conn, error) {
 }
 
 func (s *Suite) dialAs(key *ecdsa.PrivateKey, num int) (*Conn, error) {
-	fd, err := net.Dial("tcp", fmt.Sprintf("%v:%d", s.DestList[num].IP(), s.DestList[num].TCP()))
+	fd, err := net.Dial("tcp", fmt.Sprintf("%v:%d", s.DestList.IP(), s.DestList.TCP()))
 	if err != nil {
 		return nil, err
 	}
-	conn := Conn{Conn: rlpx.NewConn(fd, s.DestList[num].Pubkey())}
+	conn := Conn{Conn: rlpx.NewConn(fd, s.DestList.Pubkey())}
 	conn.ourKey = key
 	_, err = conn.Handshake(conn.ourKey)
 	if err != nil {

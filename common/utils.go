@@ -12,23 +12,22 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
-	"github.com/ethereum/go-ethereum/p2p/enr"
-	"io"
 	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/urfave/cli/v2"
@@ -584,7 +583,7 @@ func discv5Generator(packetType string, count int, node *enode.Node, genTest boo
 	return reqQueues, nil
 }
 
-func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node, genTestFlag bool) error {
+func ethGenerator(dir string, packetType, count int, nodeList *enode.Node, genTestFlag bool) error {
 	clients, err := initeth(1, nodeList, dir)
 	if err != nil {
 		return errors.New("clients init error")

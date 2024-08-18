@@ -7,15 +7,16 @@ import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"net"
+	"sync"
+	"time"
+
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"net"
-	"sync"
-	"time"
 )
 
 const (
@@ -267,7 +268,6 @@ func cryptoRandIntn(n int) int {
 	return int(binary.BigEndian.Uint32(b) % uint32(n))
 }
 
-
 func (t *UDPv5) CreateSeed(node *enode.Node) (*V5Seed, error) {
 	var packets []Packet
 
@@ -372,6 +372,7 @@ type StateSeries struct {
 	Type  string
 	Nonce Nonce
 	State int
+}
 
 func (t *UDPv5) EncodePacket(id enode.ID, addr string, packet Packet, challenge *Whoareyou) ([]byte, Nonce, error) {
 	return t.codec.Encode(id, addr, packet, challenge)

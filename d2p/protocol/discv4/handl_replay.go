@@ -1,12 +1,12 @@
 package discv4
 
 import (
-	"fmt"
+	"net"
+
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"net"
 )
 
 // handleReply dispatches a reply packet, invoking reply matchers. It returns
@@ -15,7 +15,7 @@ func (t *UDPv4) handleReply(from enode.ID, fromIP net.IP, req Packet) bool {
 	matched := make(chan bool, 1)
 
 	//print testing
-	fmt.Println(req.String())
+	//fmt.Println(req.String())
 
 	select {
 	case t.gotreply <- reply{from, fromIP, req, matched}:
