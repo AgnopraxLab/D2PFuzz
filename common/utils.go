@@ -197,7 +197,7 @@ func GenerateAndExecute(c *cli.Context) error {
 	case "discv5":
 		return discv5Fuzzer(c, node, false)
 	case "eth":
-		return nil
+		return ethFuzzer(c, node)
 	default:
 		return errors.New("unsupported protocol")
 	}
@@ -277,6 +277,46 @@ func discv5Fuzzer(c *cli.Context, node *enode.Node, cleanupFiles bool) error {
 	return nil
 }
 
+func ethFuzzer(c *cli.Context, node *enode.Node) error {
+	var (
+		clients, err = initeth(c.Int(ThreadFlag.Name), node, c.String(LocationFlag.Name))
+		skipTrace    = c.Bool(SkipTraceFlag.Name)
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize eth clients: %v", err)
+	}
+	if len(clients) == 0 {
+		return fmt.Errorf("need at least one vm to participate")
+	}
+	log.Info("Fuzzing started...")
+	meta := &ethMeta{
+		testCh:  make(chan string, 4), // channel where we'll deliver tests
+		clis:    clients,
+		targets: node,
+		outdir:  c.String(LocationFlag.Name),
+	}
+	meta.wg.Add(1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		meta.fuzzingLoop(skipTrace)
+		cancel()
+	}()
+
+	// Cancel ability
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	select {
+	case <-sigs:
+	case <-ctx.Done():
+	}
+	log.Info("Waiting for processes to exit")
+	meta.abort.Store(true)
+	cancel()
+	meta.wg.Wait()
+	return nil
+}
+
 type discv4Meta struct {
 	abort       atomic.Bool
 	testCh      chan string
@@ -295,6 +335,19 @@ type discv5Meta struct {
 	testCh      chan string
 	wg          sync.WaitGroup
 	clis        []*discv5.UDPv5
+	targets     *enode.Node
+	numTests    atomic.Uint64
+	outdir      string
+	notifyTopic string
+
+	deleteFilesWhenDone bool
+}
+
+type ethMeta struct {
+	abort       atomic.Bool
+	testCh      chan string
+	wg          sync.WaitGroup
+	clis        []*eth.Suite
 	targets     *enode.Node
 	numTests    atomic.Uint64
 	outdir      string
@@ -328,6 +381,21 @@ func (meta *discv5Meta) fuzzingLoop(skipTrace bool) {
 		meta.wg.Add(1)
 		// 创建一个新的保存 seed 的路径
 		seedDir := filepath.Join(meta.outdir, "discv5", fmt.Sprintf("cli-%d", i), "seed")
+		if err := os.MkdirAll(seedDir, 0755); err != nil {
+			fmt.Printf("Error creating seed directory: %v\n", err)
+			return
+		}
+
+		go meta.cliLoop(cli, seedDir)
+	}
+}
+
+func (meta *ethMeta) fuzzingLoop(skipTrace bool) {
+	defer meta.wg.Done()
+
+	for i, cli := range meta.clis {
+		meta.wg.Add(1)
+		seedDir := filepath.Join(meta.outdir, "eth", fmt.Sprintf("cli-%d", i), "seed")
 		if err := os.MkdirAll(seedDir, 0755); err != nil {
 			fmt.Printf("Error creating seed directory: %v\n", err)
 			return
@@ -407,6 +475,16 @@ func (meta *discv5Meta) cliLoop(cli *discv5.UDPv5, seedDir string) {
 	}
 }
 
+// 没有完成！！！
+func (meta *ethMeta) cliLoop(cli *eth.Suite, seedDir string) {
+	defer meta.wg.Done()
+}
+
+func (meta *ethMeta) saveSeed(seedDir string) error {
+	// Implement seed saving logic here
+	return nil
+}
+
 func (meta *discv4Meta) saveSeed(seedDir string, seed *discv4.V4Seed) error {
 	// 将V4Seed对象转换为JSON字符串
 	jsonData, err := json.MarshalIndent(seed.Series, "", "  ")
@@ -414,7 +492,7 @@ func (meta *discv4Meta) saveSeed(seedDir string, seed *discv4.V4Seed) error {
 		return err
 	}
 
-	filename := fmt.Sprintf("%d.json", seed.ID)
+	filename := fmt.Sprintf("%s.json", seed.ID)
 
 	// 构建完整的文件路径
 	filePath := filepath.Join(seedDir, filename)
@@ -436,7 +514,7 @@ func (meta *discv5Meta) saveSeed(seedDir string, seed *discv5.V5Seed) error {
 		return err
 	}
 
-	filename := fmt.Sprintf("%d.json", seed.ID)
+	filename := fmt.Sprintf("%s.json", seed.ID)
 
 	// 构建完整的文件路径
 	filePath := filepath.Join(seedDir, filename)
