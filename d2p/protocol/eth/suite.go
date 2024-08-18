@@ -50,7 +50,6 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 			Genesis:         s.chain.GetBlock(0).Hash(),
 			ForkID:          s.chain.ForkID(),
 		}, nil
-
 	case NewBlockHashesMsg:
 		return &NewBlockHashesPacket{
 			{
@@ -58,11 +57,9 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 				Number: 1,
 			},
 		}, nil
-
 	case TransactionsMsg:
 		txMsg := s.makeTxs()
 		return &txMsg, nil
-
 	case GetBlockHeadersMsg:
 		return &GetBlockHeadersPacket{
 			RequestId: 33,
@@ -73,8 +70,6 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 				Reverse: false,
 			},
 		}, nil
-
-	///////////////////////////////////
 	case BlockHeadersMsg:
 		headers := make([]*types.Header, 0, len(spec.BlockNumbers))
 		for _, blockNum := range spec.BlockNumbers {
@@ -89,9 +84,6 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 			RequestId:           44,
 			BlockHeadersRequest: BlockHeadersRequest(headers),
 		}, nil
-
-	//////////////////////////////////
-
 	case GetBlockBodiesMsg:
 		return &GetBlockBodiesPacket{
 			RequestId: 55,
@@ -100,8 +92,6 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 				s.chain.blocks[75].Hash(),
 			},
 		}, nil
-
-	/////////////////////////////////
 	case BlockBodiesMsg:
 		bodies := make([]*BlockBody, 0, len(spec.BlockNumbers))
 		for _, blockNum := range spec.BlockNumbers {
@@ -122,14 +112,11 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 			RequestId:           66,
 			BlockBodiesResponse: bodies,
 		}, nil
-
-	//这个用区块头可以吗？
 	case NewBlockMsg:
 		return &NewBlockPacket{
 			Block: s.chain.Head(),
 			TD:    new(big.Int).SetBytes(fuzzing.RandBuff(2024)),
 		}, nil
-
 	case NewPooledTransactionHashesMsg:
 		txs := s.makeTxs()
 		packet := &NewPooledTransactionHashesPacket{
@@ -143,7 +130,6 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 			packet.Hashes[i] = tx.Hash()
 		}
 		return packet, nil
-
 	case GetPooledTransactionsMsg:
 		return &GetPooledTransactionsPacket{
 			RequestId: 99,
@@ -152,7 +138,6 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 				s.chain.blocks[75].Transactions()[0].Hash(), // 假设我们要请求第75个区块的第一个交易
 			},
 		}, nil
-
 	case PooledTransactionsMsg:
 		txs := s.makeTxs()
 		pooledTxs := make([]*types.Transaction, 0, len(spec.BlockHashes))
@@ -168,7 +153,6 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 			RequestId:                  100,
 			PooledTransactionsResponse: pooledTxs,
 		}, nil
-
 	case GetReceiptsMsg:
 		packet := &GetReceiptsPacket{
 			RequestId: 110,
@@ -178,7 +162,6 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 			},
 		}
 		return packet, nil
-
 	case ReceiptsMsg:
 		receipts := make([][]*types.Receipt, 0, len(spec.BlockNumbers))
 		for _, blockNum := range spec.BlockNumbers {
@@ -206,11 +189,9 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 			RequestId:        110,
 			ReceiptsResponse: receipts,
 		}, nil
-	/////////////////////////////////
 	default:
 		return nil, errors.New("unknown packet type")
 	}
-
 }
 
 func (s *Suite) makeTxs() TransactionsPacket {

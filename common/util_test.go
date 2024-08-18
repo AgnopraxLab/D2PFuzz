@@ -34,7 +34,7 @@ func TestDiscv4Generator(t *testing.T) {
 
 func TestDiscv5Generator(t *testing.T) {
 	// Replace with your test data and assertions
-	packetType := "ping"
+	packetType := "talkrequest"
 	count := 1
 	nodeList := []*enode.Node{
 		// Replace with mock nodes or load from test file
@@ -56,7 +56,7 @@ func TestEthGenerator(t *testing.T) {
 
 	// 构造 test/ethdata 的绝对路径
 	dir := filepath.Join(projectRoot, "test", "ethdata")
-	packetType := 2
+	packetType := 1
 	count := 1 // 生成 3 个包
 	nodeList := []*enode.Node{
 		// 替换为模拟节点或从测试文件加载

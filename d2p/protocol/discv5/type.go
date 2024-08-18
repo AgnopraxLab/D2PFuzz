@@ -201,7 +201,7 @@ func (req *Findnode) Kind() byte             { return FindnodeMsg }
 func (req *Findnode) RequestID() []byte      { return req.ReqID }
 func (req *Findnode) SetRequestID(id []byte) { req.ReqID = id }
 func (req *Findnode) String() string {
-	return fmt.Sprintf("ReqID: %s\nDistances: %d\n",
+	return fmt.Sprintf("ReqID: %x\nDistances: %d\n",
 		req.ReqID, req.Distances)
 }
 
@@ -218,7 +218,7 @@ func (req *Nodes) Kind() byte             { return NodesMsg }
 func (req *Nodes) RequestID() []byte      { return req.ReqID }
 func (req *Nodes) SetRequestID(id []byte) { req.ReqID = id }
 func (req *Nodes) String() string {
-	return fmt.Sprintf("ReqID: %s\nDistances: %d\n",
+	return fmt.Sprintf("ReqID: %x\nDistances: %d\n",
 		req.ReqID, req.RespCount)
 }
 
@@ -235,7 +235,7 @@ func (*TalkRequest) Kind() byte                 { return TalkRequestMsg }
 func (req *TalkRequest) RequestID() []byte      { return req.ReqID }
 func (req *TalkRequest) SetRequestID(id []byte) { req.ReqID = id }
 func (req *TalkRequest) String() string {
-	return fmt.Sprintf("ReqID: %s\nProtocol: %s\nMessage: %s\n",
+	return fmt.Sprintf("ReqID: %x\nProtocol: %s\nMessage: %s\n",
 		req.ReqID, req.Protocol, req.Message)
 }
 
@@ -248,7 +248,7 @@ func (req *TalkResponse) Kind() byte             { return TalkResponseMsg }
 func (req *TalkResponse) RequestID() []byte      { return req.ReqID }
 func (req *TalkResponse) SetRequestID(id []byte) { req.ReqID = id }
 func (req *TalkResponse) String() string {
-	return fmt.Sprintf("ReqID: %s\nMessage: %s\n",
+	return fmt.Sprintf("ReqID: %x\nMessage: %s\n",
 		req.ReqID, req.Message)
 }
 
