@@ -22,12 +22,8 @@ type ConnClient interface {
 }
 
 type Packet interface {
-	// Name is the name of the package, for logging purposes.
-	Name() string
-	// Kind is the packet type, for logging purposes.
-	Kind() byte
-	// String is the print of packet
-	String() string
+	Name()
+	Kind()
 }
 
 type Config struct {

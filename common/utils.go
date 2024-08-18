@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -20,16 +21,16 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/urfave/cli/v2"
 )
 
@@ -169,7 +170,7 @@ func initDiscv5(thread int) []*discv5.UDPv5 {
 	return clients
 }
 
-func initeth(thread int, dest []*enode.Node, dir string) ([]*eth.Suite, error) {
+func initeth(thread int, dest *enode.Node, dir string) ([]*eth.Suite, error) {
 	var (
 		clients []*eth.Suite
 	)
@@ -188,14 +189,14 @@ func initeth(thread int, dest []*enode.Node, dir string) ([]*eth.Suite, error) {
 
 func GenerateAndExecute(c *cli.Context) error {
 	var (
-		protocol    = c.String(ProtocolFlag.Name)
-		nodeList, _ = GetList(c.String(FileFlag.Name))
+		protocol = c.String(ProtocolFlag.Name)
+		node, _  = GetList(c.String(FileFlag.Name))
 	)
 	switch protocol {
 	case "discv4":
-		return discv4Fuzzer(c, nodeList, false)
+		return discv4Fuzzer(c, node)
 	case "discv5":
-		return discv5Fuzzer(c, nodeList, false)
+		return discv5Fuzzer(c, node, false)
 	case "eth":
 		return nil
 	default:
@@ -203,7 +204,7 @@ func GenerateAndExecute(c *cli.Context) error {
 	}
 }
 
-func discv4Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) error {
+func discv4Fuzzer(c *cli.Context, node *enode.Node) error {
 	var (
 		clients   = initDiscv4(c.Int(ThreadFlag.Name))
 		skipTrace = c.Bool(SkipTraceFlag.Name)
@@ -211,74 +212,21 @@ func discv4Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) err
 	if len(clients) == 0 {
 		return fmt.Errorf("need at least one vm to participate")
 	}
-	numClients := len(clients)
 	log.Info("Fuzzing started...")
 	meta := &discv4Meta{
 		testCh:  make(chan string, 4), // channel where we'll deliver tests
 		clis:    clients,
-		targets: nodeList,
+		targets: node,
 		outdir:  c.String(LocationFlag.Name),
 	}
 	meta.wg.Add(1)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		meta.fuzzingLoop(skipTrace, numClients)
+		meta.fuzzingLoop(skipTrace)
 		cancel()
 	}()
-	meta.wg.Add(1)
-	go func() {
-		defer meta.wg.Done()
-		var (
-			tStart    = time.Now()
-			ticker    = time.NewTicker(8 * time.Second)
-			testCount = uint64(0)
-			ticks     = 0
-		)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				ticks++
-				n := meta.numTests.Load()
-				testsSinceLastUpdate := n - testCount
-				testCount = n
-				timeSpent := time.Since(tStart)
-				// Update global counter
-				globalCount := uint64(0)
-				if content, err := os.ReadFile(".fuzzcounter"); err == nil {
-					if count, err := strconv.Atoi((string(content))); err == nil {
-						globalCount = uint64(count)
-					}
-				}
-				globalCount += testsSinceLastUpdate
-				if err := os.WriteFile(".fuzzcounter", []byte(fmt.Sprintf("%d", globalCount)), 0755); err != nil {
-					log.Error("Error saving progress", "err", err)
-				}
-				log.Info("Executing",
-					"tests", n,
-					"time", common.PrettyDuration(timeSpent),
-					"test/s", fmt.Sprintf("%.01f", float64(uint64(time.Second)*n)/float64(timeSpent)),
-					"avg steps", fmt.Sprintf("%.01f", traceLengthSA.Avg()),
-					"global", globalCount,
-				)
-				//TODO: Save Client Stats
-				//for _, cli := range clients {
-				//	log.Info(fmt.Sprintf("Stats %v", cli.Name()), cli.Stats()...)
-				//}
-				switch ticks {
-				case 5:
-					// Decrease stats-reporting after 40s
-					ticker.Reset(time.Minute)
-				case 65:
-					// Decrease stats-reporting after one hour
-					ticker.Reset(time.Hour)
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+
 	// Cancel ability
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -293,7 +241,7 @@ func discv4Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) err
 	return nil
 }
 
-func discv5Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) error {
+func discv5Fuzzer(c *cli.Context, node *enode.Node, cleanupFiles bool) error {
 	var (
 		clients   = initDiscv5(c.Int(ThreadFlag.Name))
 		skipTrace = c.Bool(SkipTraceFlag.Name)
@@ -301,74 +249,21 @@ func discv5Fuzzer(c *cli.Context, nodeList []*enode.Node, cleanupFiles bool) err
 	if len(clients) == 0 {
 		return fmt.Errorf("need at least one vm to participate")
 	}
-	numClients := len(clients)
 	log.Info("Fuzzing started...")
 	meta := &discv5Meta{
 		testCh:  make(chan string, 4), // channel where we'll deliver tests
 		clis:    clients,
-		targets: nodeList,
+		targets: node,
 		outdir:  c.String(LocationFlag.Name),
 	}
 	meta.wg.Add(1)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		meta.fuzzingLoop(skipTrace, numClients)
+		meta.fuzzingLoop(skipTrace)
 		cancel()
 	}()
-	meta.wg.Add(1)
-	go func() {
-		defer meta.wg.Done()
-		var (
-			tStart    = time.Now()
-			ticker    = time.NewTicker(8 * time.Second)
-			testCount = uint64(0)
-			ticks     = 0
-		)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				ticks++
-				n := meta.numTests.Load()
-				testsSinceLastUpdate := n - testCount
-				testCount = n
-				timeSpent := time.Since(tStart)
-				// Update global counter
-				globalCount := uint64(0)
-				if content, err := os.ReadFile(".fuzzcounter"); err == nil {
-					if count, err := strconv.Atoi((string(content))); err == nil {
-						globalCount = uint64(count)
-					}
-				}
-				globalCount += testsSinceLastUpdate
-				if err := os.WriteFile(".fuzzcounter", []byte(fmt.Sprintf("%d", globalCount)), 0755); err != nil {
-					log.Error("Error saving progress", "err", err)
-				}
-				log.Info("Executing",
-					"tests", n,
-					"time", common.PrettyDuration(timeSpent),
-					"test/s", fmt.Sprintf("%.01f", float64(uint64(time.Second)*n)/float64(timeSpent)),
-					"avg steps", fmt.Sprintf("%.01f", traceLengthSA.Avg()),
-					"global", globalCount,
-				)
-				//TODO: Save Client Stats
-				//for _, cli := range clients {
-				// log.Info(fmt.Sprintf("Stats %v", cli.Name()), cli.Stats()...)
-				//}
-				switch ticks {
-				case 5:
-					// Decrease stats-reporting after 40s
-					ticker.Reset(time.Minute)
-				case 65:
-					// Decrease stats-reporting after one hour
-					ticker.Reset(time.Hour)
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+
 	// Cancel ability
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -388,7 +283,7 @@ type discv4Meta struct {
 	testCh      chan string
 	wg          sync.WaitGroup
 	clis        []*discv4.UDPv4
-	targets     []*enode.Node
+	targets     *enode.Node
 	numTests    atomic.Uint64
 	outdir      string
 	notifyTopic string
@@ -401,7 +296,7 @@ type discv5Meta struct {
 	testCh      chan string
 	wg          sync.WaitGroup
 	clis        []*discv5.UDPv5
-	targets     []*enode.Node
+	targets     *enode.Node
 	numTests    atomic.Uint64
 	outdir      string
 	notifyTopic string
@@ -409,232 +304,174 @@ type discv5Meta struct {
 	deleteFilesWhenDone bool
 }
 
-func (meta *discv4Meta) fuzzingLoop(skipTrace bool, clientCount int) {
-	var (
-		ready        []int
-		testIndex    = 0
-		taskChannels []chan *task
-		resultCh     = make(chan *task)
-		cleanCh      = make(chan *cleanTask)
-	)
+func (meta *discv4Meta) fuzzingLoop(skipTrace bool) {
 	defer meta.wg.Done()
-	defer close(cleanCh)
-	// Start n Loops.
+
+	// 启动多个并发任务，分别为每个 cli 执行 cliLoop 函数
 	for i, cli := range meta.clis {
-		var taskCh = make(chan *task)
-		taskChannels = append(taskChannels, taskCh)
 		meta.wg.Add(1)
-		go meta.cliLoop(cli, taskCh, resultCh)
-		ready = append(ready, i)
-	}
+		// 创建一个新的保存 seed 的路径
+		seedDir := filepath.Join(meta.outdir, "discv4", fmt.Sprintf("cli-%d", i), "seed")
+		if err := os.MkdirAll(seedDir, 0755); err != nil {
+			fmt.Printf("Error creating seed directory: %v\n", err)
+			return
+		}
 
-	meta.wg.Add(1)
-	go meta.cleanupLoop(cleanCh)
-
-	type execResult struct {
-		hash    []byte // hash of the output
-		waiting int    // the number of clients we're waiting the results from
+		go meta.cliLoop(cli, seedDir)
 	}
-	var executing = make(map[string]*execResult)
-	readResults := func(count int) {
-		for i := 0; i < count; i++ {
-			t := <-resultCh                 // result delivery
-			ready = append(ready, t.cliIdx) // add client to ready-set
-			if t.err != nil {
-				log.Error("Error", "err", t.err)
-				meta.abort.Store(true)
-				continue
-			}
-			execRs := executing[t.file]
-			execRs.waiting--
-			if execRs.waiting > 0 {
-				continue
-			}
-			traceLengthSA.Add(t.nLines)
-			// No more results in the pipeline
-			delete(executing, t.file)
-			meta.numTests.Add(1)
-		}
-	}
-
-	for testfile := range meta.testCh {
-		testIndex++
-		// ?
-		if clientsNeeded := clientCount - len(ready); clientsNeeded > 0 {
-			readResults(clientsNeeded)
-		}
-		if meta.abort.Load() {
-			log.Info("Shortcutting through abort")
-			continue
-		}
-		// Dispatch the testfile to the ready clients
-		log.Trace("Dispatching test to clients", "count", clientCount)
-		executing[testfile] = &execResult{waiting: clientCount}
-		for i := 0; i < clientCount; i++ {
-			id := ready[0]
-			taskChannels[id] <- &task{
-				file:      testfile,
-				testIdx:   testIndex,
-				cliIdx:    id,
-				skipTrace: skipTrace,
-			}
-			ready = ready[1:]
-		}
-	}
-	// Close all task channels
-	for _, taskCh := range taskChannels {
-		close(taskCh)
-	}
-	// ?
-	for len(ready) < len(meta.clis) {
-		readResults(len(meta.clis) - len(ready))
-	}
-	log.Debug("Fuzzing loop exiting")
 }
 
-func (meta *discv5Meta) fuzzingLoop(skipTrace bool, clientCount int) {
-	var (
-		ready        []int
-		taskChannels []chan *task
-		resultCh     = make(chan *task)
-		cleanCh      = make(chan *cleanTask)
-	)
+func (meta *discv5Meta) fuzzingLoop(skipTrace bool) {
 	defer meta.wg.Done()
-	defer close(cleanCh)
-	// Start n Loops.
+
+	// 启动多个并发任务，分别为每个 cli 执行 cliLoop 函数
 	for i, cli := range meta.clis {
-		var taskCh = make(chan *task)
-		taskChannels = append(taskChannels, taskCh)
 		meta.wg.Add(1)
-		go meta.cliLoop(cli, taskCh, resultCh)
-		ready = append(ready, i)
+		// 创建一个新的保存 seed 的路径
+		seedDir := filepath.Join(meta.outdir, "discv5", fmt.Sprintf("cli-%d", i), "seed")
+		if err := os.MkdirAll(seedDir, 0755); err != nil {
+			fmt.Printf("Error creating seed directory: %v\n", err)
+			return
+		}
+
+		go meta.cliLoop(cli, seedDir)
 	}
-	return
 }
 
-func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, taskCh, resultCh chan *task) {
+func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, seedDir string) {
 	defer meta.wg.Done()
-	for t := range taskCh {
-		res, err := cli.RunPacketTest(t.file, t.skipTrace)
+
+	// 定义一个 种子队列
+	var seedQueue []*discv4.V4Seed
+	initSeed, err := cli.CreateSeed(meta.targets)
+	if err != nil {
+		fmt.Printf("Error initSeed: %v\n", err)
+	}
+
+	initSeed, err = cli.RunPacketTest(initSeed, meta.targets)
+	if err != nil {
+		fmt.Printf("Error starting client packet test: %v\n", err)
+	}
+
+	seedQueue = append(seedQueue, initSeed)
+	err = meta.saveSeed(seedDir, initSeed)
+	if err != nil {
+		fmt.Printf("Error starting client packet test: %v\n", err)
+	}
+
+	for {
+		seed := cli.SelectSeed(seedQueue)
+		newSeed, err := cli.RunPacketTest(seed, meta.targets)
 		if err != nil {
-			log.Error("Error starting client", "err", err, "client")
-			t.err = fmt.Errorf("error starting client: %w", err)
-			// Send back
-			resultCh <- t
-			continue
+			fmt.Printf("Error starting client packet test: %v\n", err)
 		}
-		t.result = res.ReplyState
-		t.execSpeed = res.ExecTime
-		// Send back
-		resultCh <- t
+		seedQueue = append(seedQueue, newSeed)
+		err = meta.saveSeed(seedDir, newSeed)
+		if err != nil {
+			fmt.Printf("Error starting client packet test: %v\n", err)
+		}
 	}
-	log.Debug("vmloop exiting")
 }
 
-func (meta *discv5Meta) cliLoop(cli *discv5.UDPv5, taskCh, resultCh chan *task) {
-	return
-}
-
-//type task struct {
-//	// pre-execution fields:
-//	file      string // file is the input statetest
-//	testIdx   int    // testIdx is a global index of the test
-//	vmIdx     int    // vmIdx is a global index of the vm
-//	skipTrace bool   // skipTrace: if true, ignore output and just exec as fast as possible
-//
-//	// post-execution fields:
-//	execSpeed time.Duration
-//	slow      bool   // set by the executor if the test is deemed slow.
-//	result    []byte // result is the md5 hash of the execution output
-//	nLines    int    // number of lines of output
-//	command   string // command used to execute the test
-//	err       error  // if error occurred
-//}
-
-type task struct {
-	// pre-execution fields:
-	file      string // file is packet transfer json save
-	testIdx   int    // testIdx is a global index of the test
-	cliIdx    int    // cliIdx is a global index of the client
-	skipTrace bool   // skipTrace: if true, ignore output and just exec as fast as possible
-
-	// post-execution fields:
-	execSpeed time.Duration
-	result    []int // result need consider
-	nLines    int   // number of lines of output
-	err       error // if error occurred
-}
-
-type cleanTask struct {
-	slow   string // path to a file considered 'slow'
-	remove string // path to a file to be removed
-}
-
-func (meta *discv4Meta) cleanupLoop(cleanCh chan *cleanTask) {
+func (meta *discv5Meta) cliLoop(cli *discv5.UDPv5, seedDir string) {
 	defer meta.wg.Done()
-	for task := range cleanCh {
-		if path := task.slow; path != "" {
-			newPath := filepath.Join(filepath.Dir(path), fmt.Sprintf("slowtest-%v", filepath.Base(path)))
-			if err := Copy(path, newPath); err != nil {
-				log.Error("Error copying file", "file", path, "err", err)
-			}
+
+	// 定义一个 种子队列
+	var seedQueue []*discv5.V5Seed
+	initSeed, err := cli.CreateSeed(meta.targets)
+	if err != nil {
+		fmt.Printf("Error initSeed: %v\n", err)
+	}
+
+	initSeed, err = cli.RunPacketTest(initSeed, meta.targets)
+	if err != nil {
+		fmt.Printf("Error starting client packet test: %v\n", err)
+	}
+
+	seedQueue = append(seedQueue, initSeed)
+	err = meta.saveSeed(seedDir, initSeed)
+	if err != nil {
+		fmt.Printf("Error starting client packet test: %v\n", err)
+	}
+
+	for {
+		seed := cli.SelectSeed(seedQueue)
+		newSeed, err := cli.RunPacketTest(seed, meta.targets)
+		if err != nil {
+			fmt.Printf("Error starting client packet test: %v\n", err)
 		}
-		if path := task.remove; path != "" && meta.deleteFilesWhenDone {
-			if err := os.Remove(path); err != nil {
-				log.Error("Error deleting file", "file", path, "err", err)
-			}
+		seedQueue = append(seedQueue, newSeed)
+		err = meta.saveSeed(seedDir, newSeed)
+		if err != nil {
+			fmt.Printf("Error starting client packet test: %v\n", err)
 		}
 	}
-	log.Debug("CleanupLoop exiting")
 }
 
-// Copy the src file to dst. Any existing file will be overwritten and will not
-// copy file attributes.
-func Copy(src, dst string) error {
-	in, err := os.Open(src)
+func (meta *discv4Meta) saveSeed(seedDir string, seed *discv4.V4Seed) error {
+	// 将V4Seed对象转换为JSON字符串
+	jsonData, err := json.MarshalIndent(seed.Series, "", "  ")
 	if err != nil {
 		return err
 	}
-	defer in.Close()
 
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
+	filename := fmt.Sprintf("%d.json", seed.ID)
 
-	_, err = io.Copy(out, in)
+	// 构建完整的文件路径
+	filePath := filepath.Join(seedDir, filename)
+
+	// 将JSON字符串写入文件
+	err = ioutil.WriteFile(filePath, jsonData, 0644)
 	if err != nil {
 		return err
 	}
-	return out.Close()
+
+	fmt.Printf("Seed saved to %s\n", filePath)
+	return nil
 }
 
-func GetList(fName string) ([]*enode.Node, error) {
+func (meta *discv5Meta) saveSeed(seedDir string, seed *discv5.V5Seed) error {
+	// 将V4Seed对象转换为JSON字符串
+	jsonData, err := json.MarshalIndent(seed.Series, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	filename := fmt.Sprintf("%d.json", seed.ID)
+
+	// 构建完整的文件路径
+	filePath := filepath.Join(seedDir, filename)
+
+	// 将JSON字符串写入文件
+	err = ioutil.WriteFile(filePath, jsonData, 0644)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Seed saved to %s\n", filePath)
+	return nil
+}
+
+func GetList(fName string) (*enode.Node, error) {
 	file, err := os.Open(fName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %v", err)
 	}
 	defer file.Close()
 
-	var nodeList []*enode.Node
-
 	scanner := bufio.NewScanner(file)
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		node := enode.MustParse(line)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse enode: %v", err)
-		}
-		nodeList = append(nodeList, node)
+	line := scanner.Text()
+	node := enode.MustParse(line)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse enode: %v", err)
 	}
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("error reading file: %v", err)
 	}
 
-	return nodeList, nil
+	return node, nil
 }
 
 func getLocalIP() net.IP {
@@ -684,41 +521,36 @@ func ExecuteGenerator(c *cli.Context) error {
 	}
 }
 
-func discv4Generator(packetType string, count int, nodeList []*enode.Node, genTest bool) ([]discv4.Packet, error) {
+func discv4Generator(packetType string, count int, node *enode.Node, genTest bool) ([]discv4.Packet, error) {
 	var (
 		client *discv4.UDPv4
-		node   *enode.Node
 	)
 	clients := initDiscv4(1)
 	client = clients[0]
-	node = nodeList[0]
 	reqQueue := make([]discv4.Packet, 0, count)
 
 	for i := 0; i < count; i++ {
 		req := client.GenPacket(packetType, node)
 		//println(req.String()) // 有问题
-		data, _ := json.MarshalIndent(req, "", "")
-		fmt.Printf(string(data))
-
 		reqQueue = append(reqQueue, req)
 		// todo: need Fuzzer send generator just return array of raw packet
 		if genTest {
+			data, _ := json.MarshalIndent(req, "", "")
+			fmt.Printf(string(data))
 			client.Send(node, req)
 		}
-
 		time.Sleep(time.Second)
 	}
+
 	return reqQueue, nil
 }
 
-func discv5Generator(packetType string, count int, nodeList []*enode.Node, genTest bool) ([]discv5.Packet, error) {
+func discv5Generator(packetType string, count int, node *enode.Node, genTest bool) ([]discv5.Packet, error) {
 	var (
 		client *discv5.UDPv5
-		node   *enode.Node
 	)
 	clients := initDiscv5(1)
 	client = clients[0]
-	node = nodeList[0]
 
 	reqQueues := make([]discv5.Packet, 0, count)
 	nonceQueue := make([]discv5.Nonce, 0, count)
@@ -737,6 +569,8 @@ func discv5Generator(packetType string, count int, nodeList []*enode.Node, genTe
 		// 调用 EncodePacket
 		//en_packet, nonce, err := client.EncodePacket(node.ID(), addr, packet, nil)
 		if genTest {
+			data, _ := json.MarshalIndent(req, "", "")
+			fmt.Printf(string(data))
 			nonce, err := client.Send(node, req, nil)
 			if err != nil {
 				panic(fmt.Errorf("can't send %v: %v", packetType, err))

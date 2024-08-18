@@ -36,6 +36,8 @@ type Packet interface {
 	// AppendLogInfo returns its argument 'ctx' with additional fields
 	// appended for logging purposes.
 	AppendLogInfo(ctx []interface{}) []interface{}
+
+	mutate()
 }
 
 // Message types.
@@ -254,4 +256,37 @@ func (req *TalkResponse) String() string {
 
 func (req *TalkResponse) AppendLogInfo(ctx []interface{}) []interface{} {
 	return append(ctx, "req", hexutil.Bytes(req.ReqID), "len", len(req.Message))
+}
+
+// mutate
+func (req *Whoareyou) mutate() {
+
+}
+
+func (req *Unknown) mutate() {
+
+}
+
+func (req *Ping) mutate() {
+
+}
+
+func (req *Pong) mutate() {
+
+}
+
+func (req *Findnode) mutate() {
+
+}
+
+func (req *Nodes) mutate() {
+
+}
+
+func (req *TalkRequest) mutate() {
+
+}
+
+func (req *TalkResponse) mutate() {
+
 }

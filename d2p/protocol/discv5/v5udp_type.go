@@ -267,10 +267,117 @@ func cryptoRandIntn(n int) int {
 	return int(binary.BigEndian.Uint32(b) % uint32(n))
 }
 
+
+func (t *UDPv5) CreateSeed(node *enode.Node) (*V5Seed, error) {
+	var packets []Packet
+
+	// 生成各种类型的Packet并添加到packets切片中
+	packetTypes := []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"}
+
+	for _, pType := range packetTypes {
+		packet := t.GenPacket(pType, node)
+		if packet != nil {
+			packets = append(packets, packet)
+		}
+	}
+	seedID := fmt.Sprintf("%d", time.Now().Unix())
+	seed := &V5Seed{
+		ID:        seedID,
+		Packets:   packets,
+		Priority:  1,
+		Mutations: 0,
+		Series:    make([]*StateSeries, 0),
+	}
+
+	return seed, nil
+}
+
+func (t *UDPv5) RunPacketTest(seed *V5Seed, node *enode.Node) (*V5Seed, error) {
+	for {
+		// 初始化一个 series
+		var series []*StateSeries
+		for _, req := range seed.Packets {
+			nonce, _ := t.Send(node, req, nil)
+			// 将结果 req.Name():res 保存到 series
+			series = append(series, &StateSeries{
+				Type:  req.Name(),
+				Nonce: nonce,
+			})
+		}
+		// 比较 seed.Series 与 series 中的每一项，如果有任何地方不同 则将 seed.Series 更新为 series 并返回 seed
+		if !compareSeries(seed.Series, series) {
+			seed.Series = series // 如果不同，则更新 seed.Series
+			seed.ID = fmt.Sprintf("%d", time.Now().Unix())
+			return seed, nil
+		}
+		// 对 seed 的 packet 进行变异操作
+		t.seedMutate(seed)
+	}
+}
+
+func (t *UDPv5) SelectSeed(seedQueue []*V5Seed) *V5Seed {
+	var selectedSeed *V5Seed
+	maxPriority := 0
+
+	// 遍历种子队列，找到优先级最低的种子
+	for _, seed := range seedQueue {
+		if seed.Priority > maxPriority {
+			maxPriority = seed.Priority
+			selectedSeed = seed
+		}
+	}
+	selectedSeed.Priority -= 1
+	for _, seed := range seedQueue {
+		if seed != selectedSeed {
+			seed.Priority++
+		}
+	}
+	return selectedSeed
+}
+
+func (t *UDPv5) seedMutate(seed *V5Seed) {
+	seed.Mutations++
+	//需要补充
+	if seed.Mutations < 100 {
+		seed.PacketMutate(seed.Packets)
+	} else if seed.Mutations < 200 {
+		seed.SeriesMutate(seed.Packets)
+	} else {
+		seed.HavocMutate(seed.Packets)
+	}
+}
+
+func compareSeries(s1, s2 []*StateSeries) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+	for i, item1 := range s1 {
+		item2 := s2[i]
+		if item1.Type != item2.Type {
+			return false
+		}
+	}
+	return true
+}
+
+type V5Seed struct {
+	ID        string         `json:"id"`        // 种子的唯一标识符
+	Packets   []Packet       `json:"packets"`   // 用于变异的Packet切片
+	Priority  int            `json:"priority"`  // 种子的优先级
+	Mutations int            `json:"mutations"` // 该种子已经经过的变异次数
+	Series    []*StateSeries `json:"series"`
+}
+
+type StateSeries struct {
+	Type  string
+	Nonce Nonce
+	State int
+
 func (t *UDPv5) EncodePacket(id enode.ID, addr string, packet Packet, challenge *Whoareyou) ([]byte, Nonce, error) {
 	return t.codec.Encode(id, addr, packet, challenge)
 }
 
 func (t *UDPv5) DecodePacket(input []byte, fromAddr string) (enode.ID, *enode.Node, v5wire.Packet, error) {
 	return t.codec.Decode(input, fromAddr)
+
 }
