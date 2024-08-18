@@ -12,6 +12,10 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
+	"github.com/ethereum/go-ethereum/p2p/enr"
+	"io"
 	"net"
 	"os"
 	"os/signal"
@@ -506,7 +510,12 @@ func ExecuteGenerator(c *cli.Context) error {
 		}
 		return nil
 	case "eth":
-		return ethGenerator(chainDir, 0, count, nodeList, genTestFlag)
+		packetTypeInt, err := strconv.Atoi(packetType)
+		if err != nil {
+			// 处理错误，例如 packetType 不是一个有效的整数字符串
+			fmt.Println("转换错误:", err)
+		}
+		return ethGenerator(chainDir, packetTypeInt, count, nodeList, genTestFlag)
 	default:
 		return errors.New("unsupported protocol")
 	}
@@ -575,22 +584,63 @@ func discv5Generator(packetType string, count int, node *enode.Node, genTest boo
 	return reqQueues, nil
 }
 
-func ethGenerator(dir string, packetType, count int, node *enode.Node, genTest bool) error {
-
-	clients, err := initeth(1, node, dir)
+func ethGenerator(dir string, packetType, count int, nodeList []*enode.Node, genTestFlag bool) error {
+	clients, err := initeth(1, nodeList, dir)
 	if err != nil {
 		return errors.New("clients init error")
 	}
 	client := clients[0]
 
-	for i := 0; i < count; i++ {
+	state := eth.NewOracleState() // 创建Oracle状态
 
-		packet, err := client.GenPacket(packetType)
+	// 初始化 PacketSpecification
+	spec := &eth.PacketSpecification{
+		BlockNumbers: []int{10, 20, 30},
+		BlockHashes:  make([]common.Hash, 3),
+	}
+	// 生成一些随机的区块哈希
+	for i := 0; i < 3; i++ {
+		hash := crypto.Keccak256([]byte(fmt.Sprintf("hash%d", i)))
+		spec.BlockHashes[i] = common.BytesToHash(hash[:])
+	}
+
+	for i := 0; i < count; i++ {
+		packet, err := client.GenPacket(packetType, spec)
 		if err != nil {
 			return errors.New("GenPacket fail")
 		}
+
+		// 使用Oracle检查并修正数据包
+		checkedPacket, err := eth.OracleCheck(packet, state)
+		if err != nil {
+			return errors.New("oracle check fail")
+		}
+
+		state.PacketHistory = append(state.PacketHistory, checkedPacket)
+	}
+
+	// 在生成所有包后进行多包逻辑检验
+	err = eth.MultiPacketCheck(state)
+	if err != nil {
+		return errors.New("multi-packet check fail")
+	}
+	// 输出修正后的包
+	for _, packet := range state.PacketHistory {
 		println(packet)
 	}
 
 	return nil
+}
+
+func decodeDiscv5Packet(encodedPacket []byte, fromAddr *net.UDPAddr) (enode.ID, *enode.Node, v5wire.Packet, error) {
+	var (
+		client *discv5.UDPv5
+	)
+	// 创建一个新的 UDPv5 实例用于解码
+	clients := initDiscv5(1)
+	client = clients[0]
+	defer client.Close()
+
+	// 使用 client 的 DecodePacket 方法来解码数据包
+	return client.DecodePacket(encodedPacket, fromAddr.String())
 }
