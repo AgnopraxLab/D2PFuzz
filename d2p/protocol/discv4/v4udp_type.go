@@ -150,7 +150,7 @@ func (t *UDPv4) Send(n *enode.Node, req Packet) []byte {
 	return hash
 }
 
-func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
+func (t *UDPv4) GenPacket(packetType string, n *enode.Node) Packet {
 	var (
 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
 		packetTypes = []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
@@ -175,30 +175,25 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 			ENRSeq:     t.localNode.Node().Seq(),
 		}
 	case "findnode":
-		req := Findnode{Expiration: uint64(time.Now().Add(expiration).Unix())}
+		req := &Findnode{Expiration: uint64(time.Now().Add(expiration).Unix())}
 		rand.Read(req.Target[:])
-		return &req
+		return req
 	case "neighbors":
 		// 创建一个自定义的节点记录
 		key, _ := crypto.GenerateKey()
-
 		// 创建一个新的 enode.Node
 		ip := net.IP{127, 0, 0, 1}
 		customNode := enode.NewV4(&key.PublicKey, ip, 30303, 30303)
-
 		// 将自定义节点作为最接近的节点
 		closest := []*node{wrapNode(customNode)}
-
 		// 创建 Neighbors 结构
 		neighbors := &Neighbors{
 			Expiration: uint64(time.Now().Add(expiration).Unix()),
 		}
-
 		// 将 closest 中的节点转换为 Neighbors 结构中的格式
 		for _, n := range closest {
 			neighbors.Nodes = append(neighbors.Nodes, nodeToRPC(n))
 		}
-
 		return neighbors
 	case "ENRRequest":
 		return &ENRRequest{
@@ -217,13 +212,108 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) d2p.Packet {
 	}
 }
 
-func (t *UDPv4) RunPacketTest(path string, skipTrace bool) (*tracingResult, error) {
+func (t *UDPv4) CreateSeed(node *enode.Node) (*V4Seed, error) {
+	var packets []Packet
 
-	return &tracingResult{}, nil
+	// 生成各种类型的Packet并添加到packets切片中
+	packetTypes := []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
+
+	for _, pType := range packetTypes {
+		packet := t.GenPacket(pType, node)
+		if packet != nil {
+			packets = append(packets, packet)
+		}
+	}
+	seedID := fmt.Sprintf("%d", time.Now().Unix())
+	seed := &V4Seed{
+		ID:        seedID,
+		Packets:   packets,
+		Priority:  1,
+		Mutations: 0,
+		Series:    make([]*StateSeries, 0),
+	}
+
+	return seed, nil
 }
 
-type tracingResult struct {
-	ExecTime   time.Duration
-	Hash       []byte
-	ReplyState []int
+func (t *UDPv4) SelectSeed(seedQueue []*V4Seed) *V4Seed {
+	var selectedSeed *V4Seed
+	maxPriority := 0
+
+	// 遍历种子队列，找到优先级最低的种子
+	for _, seed := range seedQueue {
+		if seed.Priority > maxPriority {
+			maxPriority = seed.Priority
+			selectedSeed = seed
+		}
+	}
+	selectedSeed.Priority -= 1
+	for _, seed := range seedQueue {
+		if seed != selectedSeed {
+			seed.Priority++
+		}
+	}
+	return selectedSeed
+}
+
+func (t *UDPv4) RunPacketTest(seed *V4Seed, node *enode.Node) (*V4Seed, error) {
+	for {
+		// 初始化一个 series
+		var series []*StateSeries
+		for _, req := range seed.Packets {
+			res := t.Send(node, req)
+			// 将结果 req.Name():res 保存到 series
+			series = append(series, &StateSeries{
+				Type: req.Name(),
+				Hash: res,
+			})
+		}
+		// 比较 seed.Series 与 series 中的每一项，如果有任何地方不同 则将 seed.Series 更新为 series 并返回 seed
+		if !compareSeries(seed.Series, series) {
+			seed.Series = series // 如果不同，则更新 seed.Series
+			seed.ID = fmt.Sprintf("%d", time.Now().Unix())
+			return seed, nil
+		}
+		// 对 seed 的 packet 进行变异操作
+		t.seedMutate(seed)
+	}
+}
+
+func compareSeries(s1, s2 []*StateSeries) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+	for i, item1 := range s1 {
+		item2 := s2[i]
+		if item1.Type != item2.Type {
+			return false
+		}
+	}
+	return true
+}
+
+func (t *UDPv4) seedMutate(seed *V4Seed) {
+	seed.Mutations++
+	//需要补充
+	if seed.Mutations < 100 {
+		seed.PacketMutate(seed.Packets)
+	} else if seed.Mutations < 200 {
+		seed.SeriesMutate(seed.Packets)
+	} else {
+		seed.HavocMutate(seed.Packets)
+	}
+}
+
+type V4Seed struct {
+	ID        string         `json:"id"`        // 种子的唯一标识符
+	Packets   []Packet       `json:"packets"`   // 用于变异的Packet切片
+	Priority  int            `json:"priority"`  // 种子的优先级
+	Mutations int            `json:"mutations"` // 该种子已经经过的变异次数
+	Series    []*StateSeries `json:"series"`
+}
+
+type StateSeries struct {
+	Type  string
+	Hash  []byte
+	State int
 }
