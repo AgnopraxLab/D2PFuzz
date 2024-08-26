@@ -6,7 +6,6 @@ import (
 	"D2PFuzz/d2p/protocol/discv5"
 	"D2PFuzz/d2p/protocol/eth"
 	"D2PFuzz/utils"
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -530,22 +530,22 @@ func (meta *discv5Meta) saveSeed(seedDir string, seed *discv5.V5Seed) error {
 }
 
 func GetList(fName string) (*enode.Node, error) {
-	file, err := os.Open(fName)
+	content, err := ioutil.ReadFile(fName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %v", err)
+		return nil, fmt.Errorf("failed to read file: %v", err)
 	}
-	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
+	// 去除可能的 BOM 和空白字符
+	cleanContent := strings.TrimSpace(string(content))
+	cleanContent = strings.TrimPrefix(cleanContent, "\uFEFF") // 移除 UTF-8 BOM
 
-	line := scanner.Text()
-	node := enode.MustParse(line)
+	if !strings.HasPrefix(cleanContent, "enr:") {
+		return nil, fmt.Errorf("invalid ENR: missing 'enr:' prefix")
+	}
+
+	node, err := enode.Parse(enode.ValidSchemes, cleanContent)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse enode: %v", err)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading file: %v", err)
 	}
 
 	return node, nil
@@ -572,7 +572,7 @@ func ExecuteGenerator(c *cli.Context) error {
 		packetType  = c.String(TypeFlag.Name)
 		count       = c.Int(CountFlag.Name)
 		nodeList, _ = GetList(c.String(FileFlag.Name))
-		chainDir    = c.String(ChainDirFlag.Name)
+		//chainDir    = c.String(ChainDirFlag.Name)
 		genTestFlag = c.Bool(GenTestFlag.Name)
 	)
 	switch protocol {
@@ -587,12 +587,21 @@ func ExecuteGenerator(c *cli.Context) error {
 		}
 		return nil
 	case "eth":
+		// 获取当前文件的路径
+		_, currentFile, _, _ := runtime.Caller(0)
+
+		// 获取项目根目录
+		projectRoot := filepath.Dir(filepath.Dir(currentFile))
+
+		// 构造 test/ethdata 的绝对路径
+		dir := filepath.Join(projectRoot, "test", "ethdata")
+		genTestFlag := true
 		packetTypeInt, err := strconv.Atoi(packetType)
 		if err != nil {
 			// 处理错误，例如 packetType 不是一个有效的整数字符串
 			fmt.Println("转换错误:", err)
 		}
-		return ethGenerator(chainDir, packetTypeInt, count, nodeList, genTestFlag)
+		return ethGenerator(dir, packetTypeInt, count, nodeList, genTestFlag)
 	default:
 		return errors.New("unsupported protocol")
 	}
