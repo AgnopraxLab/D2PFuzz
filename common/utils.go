@@ -597,15 +597,7 @@ func ExecuteGenerator(c *cli.Context) error {
 		dir := filepath.Join(projectRoot, "test", "ethdata")
 		genTestFlag := true
 		packetTypeInt, err := strconv.Atoi(packetType)
-		// 获取当前文件的路径
-		_, currentFile, _, _ := runtime.Caller(0)
 
-		// 获取项目根目录
-		projectRoot := filepath.Dir(filepath.Dir(currentFile))
-
-		// 构造 test/ethdata 的绝对路径
-		dir := filepath.Join(projectRoot, "test", "ethdata")
-		genTestFlag := true
 		if err != nil {
 			// 处理错误，例如 packetType 不是一个有效的整数字符串
 			fmt.Println("转换错误:", err)
@@ -626,13 +618,47 @@ func discv4Generator(packetType string, count int, node *enode.Node, genTest boo
 
 	for i := 0; i < count; i++ {
 		req := client.GenPacket(packetType, node)
-		//println(req.String()) // 有问题
 		reqQueue = append(reqQueue, req)
 		// todo: need Fuzzer send generator just return array of raw packet
 		if genTest {
 			data, _ := json.MarshalIndent(req, "", "")
 			fmt.Printf(string(data))
-			client.Send(node, req)
+
+			// 根据数据包类型设置预期的响应类型
+			var expectedResponseType byte
+			switch packetType {
+			case "ping":
+				expectedResponseType = discv4.PongPacket
+			case "findnode":
+				expectedResponseType = discv4.NeighborsPacket
+			case "ENRRequest":
+				expectedResponseType = discv4.ENRResponsePacket
+			// 添加其他数据包类型的处理...
+			default:
+				fmt.Printf("Unknown packet type: %s\n", packetType)
+				continue
+			}
+
+			// 设置回复匹配器
+			rm := client.Pending(node.ID(), node.IP(), expectedResponseType, func(p discv4.Packet) (matched bool, requestDone bool) {
+				// 这里可以添加更详细的匹配逻辑
+				fmt.Printf("Received response: %+v\n", p)
+				return true, true
+			})
+
+			// 发送数据包
+			hash := client.Send(node, req)
+			fmt.Printf("Sent packet with hash: %x\n", hash)
+
+			// 使用新的 WaitForResponse 方法等待响应
+			err := rm.WaitForResponse(5 * time.Second)
+			if err != nil {
+				if err.Error() == "timeout waiting for response" {
+					fmt.Println("Timeout waiting for response")
+				} else {
+					fmt.Printf("Error waiting for response: %v\n", err)
+				}
+			}
 		}
 		time.Sleep(time.Second)
 	}
