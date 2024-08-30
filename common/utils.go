@@ -572,7 +572,7 @@ func ExecuteGenerator(c *cli.Context) error {
 		packetType  = c.String(TypeFlag.Name)
 		count       = c.Int(CountFlag.Name)
 		nodeList, _ = GetList(c.String(FileFlag.Name))
-		chainDir    = c.String(ChainDirFlag.Name)
+		//chainDir    = c.String(ChainDirFlag.Name)
 		genTestFlag = c.Bool(GenTestFlag.Name)
 	)
 	switch protocol {
@@ -588,11 +588,20 @@ func ExecuteGenerator(c *cli.Context) error {
 		return nil
 	case "eth":
 		packetTypeInt, err := strconv.Atoi(packetType)
+		// 获取当前文件的路径
+		_, currentFile, _, _ := runtime.Caller(0)
+
+		// 获取项目根目录
+		projectRoot := filepath.Dir(filepath.Dir(currentFile))
+
+		// 构造 test/ethdata 的绝对路径
+		dir := filepath.Join(projectRoot, "test", "ethdata")
+		genTestFlag := true
 		if err != nil {
 			// 处理错误，例如 packetType 不是一个有效的整数字符串
 			fmt.Println("转换错误:", err)
 		}
-		return ethGenerator(chainDir, packetTypeInt, count, nodeList, genTestFlag)
+		return ethGenerator(dir, packetTypeInt, count, nodeList, genTestFlag)
 	default:
 		return errors.New("unsupported protocol")
 	}
@@ -640,8 +649,8 @@ func discv5Generator(packetType string, count int, node *enode.Node, genTest boo
 
 		// 在调用 EncodePacket 之前打印输入
 		fmt.Printf("EncodePacket Input:\n")
-		fmt.Printf("  packet: %+v\n", req)
-		fmt.Printf("  challenge: nil\n")
+		fmt.Printf("packet: %+v\n", req)
+		fmt.Printf("challenge: nil\n")
 
 		// 调用 EncodePacket
 		//en_packet, nonce, err := client.EncodePacket(node.ID(), addr, packet, nil)

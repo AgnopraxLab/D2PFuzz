@@ -32,7 +32,7 @@ func TestDiscv4Generator(t *testing.T) {
 
 func TestDiscv5Generator(t *testing.T) {
 	// Replace with your test data and assertions
-	packetType := "findnode"
+	packetType := "nodes"
 	count := 1
 	nodeList := enode.MustParse("enode://ba85011c70bcc5c04d8607d3a0ed29aa6179c092cbdda10d5d32684fb33ed01bd94f588ca8f91ac48318087dcb02eaf36773a7a453f0eedd6742af668097b29c@10.0.1.16:30303?discport=30304")
 
@@ -51,7 +51,7 @@ func TestEthGenerator(t *testing.T) {
 
 	// 构造 test/ethdata 的绝对路径
 	dir := filepath.Join(projectRoot, "test", "ethdata")
-	packetType := 1
+	packetType := 0
 	count := 1 // 生成 3 个包
 	nodeList := enode.MustParse("enode://ba85011c70bcc5c04d8607d3a0ed29aa6179c092cbdda10d5d32684fb33ed01bd94f588ca8f91ac48318087dcb02eaf36773a7a453f0eedd6742af668097b29c@10.0.1.16:30303?discport=30304")
 	genTestFlag := true

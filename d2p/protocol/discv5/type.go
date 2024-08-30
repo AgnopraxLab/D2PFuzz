@@ -1,6 +1,8 @@
 package discv5
 
 import (
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -9,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
 	"net"
+	"strings"
 )
 
 const (
@@ -220,8 +223,13 @@ func (req *Nodes) Kind() byte             { return NodesMsg }
 func (req *Nodes) RequestID() []byte      { return req.ReqID }
 func (req *Nodes) SetRequestID(id []byte) { req.ReqID = id }
 func (req *Nodes) String() string {
-	return fmt.Sprintf("ReqID: %x\nDistances: %d\n",
-		req.ReqID, req.RespCount)
+	var nodeStrings []string
+	for i, node := range req.Nodes {
+		nodeStrings = append(nodeStrings, fmt.Sprintf("Node %d: %v", i+1, node))
+	}
+
+	return fmt.Sprintf("ReqID: %x\nRespCount: %d\nNodes:\n%s",
+		req.ReqID, req.RespCount, strings.Join(nodeStrings, "\n"))
 }
 
 func (req *Nodes) AppendLogInfo(ctx []interface{}) []interface{} {
@@ -230,6 +238,37 @@ func (req *Nodes) AppendLogInfo(ctx []interface{}) []interface{} {
 		"tot", req.RespCount,
 		"n", len(req.Nodes),
 	)
+}
+
+// 为 Nodes 实现 json.Marshaler 接口
+func (req *Nodes) MarshalJSON() ([]byte, error) {
+	type NodeInfo struct {
+		Seq       uint64 `json:"seq"`
+		Signature string `json:"signature"`
+		Size      uint64 `json:"size"`
+	}
+
+	type NodesInfo struct {
+		ReqID     string     `json:"reqID"`
+		RespCount uint8      `json:"respCount"`
+		Nodes     []NodeInfo `json:"nodes"`
+	}
+
+	nodesInfo := NodesInfo{
+		ReqID:     hex.EncodeToString(req.ReqID),
+		RespCount: req.RespCount,
+		Nodes:     make([]NodeInfo, len(req.Nodes)),
+	}
+
+	for i, record := range req.Nodes {
+		nodesInfo.Nodes[i] = NodeInfo{
+			Seq:       record.Seq(),
+			Signature: hex.EncodeToString(record.Signature()),
+			Size:      record.Size(),
+		}
+	}
+
+	return json.Marshal(nodesInfo)
 }
 
 func (req *TalkRequest) Name() string           { return "TALKREQ/v5" }
