@@ -597,15 +597,7 @@ func ExecuteGenerator(c *cli.Context) error {
 		dir := filepath.Join(projectRoot, "test", "ethdata")
 		genTestFlag := true
 		packetTypeInt, err := strconv.Atoi(packetType)
-		// 获取当前文件的路径
-		_, currentFile, _, _ := runtime.Caller(0)
 
-		// 获取项目根目录
-		projectRoot := filepath.Dir(filepath.Dir(currentFile))
-
-		// 构造 test/ethdata 的绝对路径
-		dir := filepath.Join(projectRoot, "test", "ethdata")
-		genTestFlag := true
 		if err != nil {
 			// 处理错误，例如 packetType 不是一个有效的整数字符串
 			fmt.Println("转换错误:", err)
