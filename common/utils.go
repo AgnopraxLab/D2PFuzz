@@ -661,7 +661,6 @@ func discv5Generator(packetType string, count int, node *enode.Node, genTest boo
 		//println(req.String())
 
 		fmt.Printf("lnIP: %v\n", client.LocalNode().Node().IP().String())
-
 		// 在调用 EncodePacket 之前打印输入
 		fmt.Printf("EncodePacket Input:\n")
 		fmt.Printf("packet: %+v\n", req)
@@ -672,7 +671,7 @@ func discv5Generator(packetType string, count int, node *enode.Node, genTest boo
 		if genTest {
 			data, _ := json.MarshalIndent(req, "", "")
 			fmt.Printf(string(data))
-			nonce, err := client.Send(node, req, nil)
+			nonce, err := sendAndReceive(client, node, req)
 			if err != nil {
 				panic(fmt.Errorf("can't send %v: %v", packetType, err))
 			}
@@ -683,6 +682,68 @@ func discv5Generator(packetType string, count int, node *enode.Node, genTest boo
 		time.Sleep(time.Second)
 	}
 	return reqQueues, nil
+}
+
+const waitTime = 5 * time.Second
+
+func sendAndReceive(client *discv5.UDPv5, node *enode.Node, req discv5.Packet) (discv5.Nonce, error) {
+	nonce, err := client.Send(node, req, nil)
+	if err != nil {
+		return nonce, fmt.Errorf("failed to send packet: %v", err)
+	}
+
+	// 设置读取超时
+	client.SetReadDeadline(time.Now().Add(waitTime))
+
+	buf := make([]byte, 1280)
+	n, fromAddr, err := client.ReadFromUDP(buf)
+	if err != nil {
+		return nonce, fmt.Errorf("failed to read response: %v", err)
+	}
+
+	packet, _, err := client.Decode(buf[:n], fromAddr.String())
+	if err != nil {
+		return nonce, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	switch resp := packet.(type) {
+	case *discv5.Whoareyou:
+		if resp.Nonce != nonce {
+			return nonce, fmt.Errorf("wrong nonce in WHOAREYOU")
+		}
+		// 处理握手
+		challenge := &discv5.Whoareyou{
+			Nonce:     resp.Nonce,
+			IDNonce:   resp.IDNonce,
+			RecordSeq: resp.RecordSeq,
+		}
+		nonce, err = client.Send(node, req, challenge)
+		if err != nil {
+			return nonce, fmt.Errorf("failed to send handshake: %v", err)
+		}
+		// 再次读取响应
+		return sendAndReceive(client, node, req)
+	case *discv5.Unknown:
+		fmt.Printf("Got Unknown: Nonce=%x\n", resp.Nonce)
+	case *discv5.Ping:
+		fmt.Printf("Got Ping包: ReqID=%x, ENRSeq=%d\n", resp.ReqID, resp.ENRSeq)
+	case *discv5.Pong:
+		fmt.Printf("Got Pong包: ReqID=%x, ENRSeq=%d, ToIP=%v, ToPort=%d\n", resp.ReqID, resp.ENRSeq, resp.ToIP, resp.ToPort)
+	case *discv5.Findnode:
+		fmt.Printf("Got Findnode包: ReqID=%x, Distances=%v, OpID=%d\n", resp.ReqID, resp.Distances, resp.OpID)
+	case *discv5.Nodes:
+		fmt.Printf("Got Nodes包: ReqID=%x, RespCount=%d, Nodes数量=%d\n", resp.ReqID, resp.RespCount, len(resp.Nodes))
+		for i, node := range resp.Nodes {
+			fmt.Printf("  Node %d: %v\n", i, node)
+		}
+	case *discv5.TalkRequest:
+		fmt.Printf("Got TalkRequest包: ReqID=%x, Protocol=%s, Message=%x\n", resp.ReqID, resp.Protocol, resp.Message)
+	case *discv5.TalkResponse:
+		fmt.Printf("Got TalkResponse包: ReqID=%x, Message=%x\n", resp.ReqID, resp.Message)
+	default:
+		return nonce, fmt.Errorf("unexpected response type: %T", resp)
+	}
+	return nonce, nil
 }
 
 func ethGenerator(dir string, packetType, count int, nodeList *enode.Node, genTestFlag bool) error {

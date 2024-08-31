@@ -74,6 +74,8 @@ type UDPv5 struct {
 	closeCtx       context.Context
 	cancelCloseCtx context.CancelFunc
 	wg             sync.WaitGroup
+
+	readDeadline time.Time
 }
 
 type sendRequest struct {
@@ -137,6 +139,47 @@ func (t *UDPv5) Send(n *enode.Node, p Packet, challenge *Whoareyou) (Nonce, erro
 	_, err = t.conn.WriteToUDP(enc, addr)
 	t.log.Trace(">> "+p.Name(), t.logcontext...)
 	return nonce, err
+}
+
+func (t *UDPv5) SetReadDeadline(deadline time.Time) {
+	t.readDeadline = deadline
+}
+
+// ReadFromUDP 修改 ReadFromUDP 方法以使用我们的自定义超时
+func (t *UDPv5) ReadFromUDP(b []byte) (int, *net.UDPAddr, error) {
+	if !t.readDeadline.IsZero() && time.Now().After(t.readDeadline) {
+		return 0, nil, fmt.Errorf("read deadline exceeded")
+	}
+
+	// 创建一个带有超时的通道
+	type readResult struct {
+		n    int
+		addr *net.UDPAddr
+		err  error
+	}
+	ch := make(chan readResult, 1)
+
+	go func() {
+		n, addr, err := t.conn.ReadFromUDP(b)
+		ch <- readResult{n, addr, err}
+	}()
+
+	var timeout <-chan time.Time
+	if !t.readDeadline.IsZero() {
+		timeout = time.After(time.Until(t.readDeadline))
+	}
+
+	select {
+	case result := <-ch:
+		return result.n, result.addr, result.err
+	case <-timeout:
+		return 0, nil, fmt.Errorf("read deadline exceeded")
+	}
+}
+
+func (t *UDPv5) Decode(input []byte, fromAddr string) (Packet, Nonce, error) {
+	_, _, p, err := t.codec.Decode(input, fromAddr)
+	return p, Nonce{}, err // 注意：这里nonce可能需要进一步处理
 }
 
 func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
