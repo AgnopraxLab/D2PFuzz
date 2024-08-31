@@ -2,6 +2,7 @@ package main
 
 import (
 	"D2PFuzz/common"
+	"D2PFuzz/flags"
 	"fmt"
 	"log/slog"
 	"os"
@@ -28,12 +29,13 @@ func initApp() *cli.App {
 	app.Usage = "A simple fuzzer with various options"
 	app.Flags = append(app.Flags,
 		engineFlag,
-		common.VerbosityFlag,
-		common.SkipTraceFlag,
-		common.ThreadFlag,
-		common.LocationFlag,
-		common.FileFlag,
-		common.ProtocolFlag,
+		flags.VerbosityFlag,
+		flags.SkipTraceFlag,
+		flags.ThreadFlag,
+		flags.LocationFlag,
+		flags.FileFlag,
+		flags.ProtocolFlag,
+		flags.SeedFlag,
 	)
 	app.Action = startFuzzer
 	return app
@@ -47,7 +49,7 @@ func main() {
 }
 
 func startFuzzer(ctx *cli.Context) (err error) {
-	loglevel := slog.Level(ctx.Int(common.VerbosityFlag.Name))
+	loglevel := slog.Level(ctx.Int(flags.VerbosityFlag.Name))
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, loglevel, true)))
 	log.Root().Write(loglevel, "Set loglevel", "level", loglevel)
 

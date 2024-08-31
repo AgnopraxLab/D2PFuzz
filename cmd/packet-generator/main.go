@@ -2,6 +2,7 @@ package main
 
 import (
 	"D2PFuzz/common"
+	"D2PFuzz/flags"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,11 +22,11 @@ func initApp() *cli.App {
 	app.Authors = []*cli.Author{{Name: "Kimmich Wu"}}
 	app.Usage = "A simple fuzzer with various options"
 	app.Flags = append(app.Flags,
-		common.ProtocolFlag,
-		common.TypeFlag,
-		common.CountFlag,
-		common.FileFlag,
-		common.GenTestFlag,
+		flags.ProtocolFlag,
+		flags.TypeFlag,
+		flags.CountFlag,
+		flags.FileFlag,
+		flags.GenTestFlag,
 	)
 	app.Action = generate
 	return app

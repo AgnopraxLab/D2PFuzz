@@ -21,11 +21,6 @@ type ConnClient interface {
 	Self() *enode.Node
 }
 
-type Packet interface {
-	Name()
-	Kind()
-}
-
 type Config struct {
 	// These settings are required and configure the UDP listener:
 	PrivateKey *ecdsa.PrivateKey

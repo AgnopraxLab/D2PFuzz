@@ -5,12 +5,16 @@ import (
 	"D2PFuzz/d2p/protocol/discv4"
 	"D2PFuzz/d2p/protocol/discv5"
 	"D2PFuzz/d2p/protocol/eth"
-	"D2PFuzz/utils"
+	"D2PFuzz/flags"
+	"D2PFuzz/fuzzing"
 	"context"
+	crand "crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"os"
 	"os/signal"
@@ -33,62 +37,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-var (
-	GenTestFlag = &cli.BoolFlag{
-		Name:    "genTest",
-		Aliases: []string{"gt"},
-		Usage:   "Specify the protocol to test",
-		Value:   true,
-	}
-	ProtocolFlag = &cli.StringFlag{
-		Name:    "protocol",
-		Aliases: []string{"p"},
-		Usage:   "Specify the protocol to test",
-		Value:   "discv4",
-	}
-	FileFlag = &cli.StringFlag{
-		Name:    "file",
-		Aliases: []string{"f"},
-		Usage:   "Specify the file containing test data",
-	}
-	LocationFlag = &cli.StringFlag{
-		Name:  "outdir",
-		Usage: "Location to place artefacts",
-		Value: "/tmp",
-	}
-	ThreadFlag = &cli.IntFlag{
-		Name:  "parallel",
-		Usage: "Number of parallel executions to use.",
-		Value: runtime.NumCPU(),
-	}
-	VerbosityFlag = &cli.IntFlag{
-		Name:  "verbosity",
-		Usage: "sets the verbosity level (-4: DEBUG, 0: INFO, 4: WARN, 8: ERROR)",
-		Value: 0,
-	}
-	SkipTraceFlag = &cli.BoolFlag{
-		Name: "skiptrace",
-		Usage: "If 'skiptrace' is set to true, then the evms will execute _without_ tracing, and only the final stateroot will be compared after execution.\n" +
-			"This mode is faster, and can be used even if the clients-under-test has known errors in the trace-output, \n" +
-			"but has a very high chance of missing cases which could be exploitable.",
-	}
-	TypeFlag = &cli.StringFlag{
-		Name:    "type",
-		Aliases: []string{"t"},
-		Usage:   "Type of packet to generate (e.g., 'ping')",
-	}
-	CountFlag = &cli.IntFlag{
-		Name:    "count",
-		Aliases: []string{"c"},
-		Usage:   "Number of packets to generate",
-		Value:   1,
-	}
-	ChainDirFlag = &cli.StringFlag{
-		Name:  "chain",
-		Usage: "Test chain directory (required)",
-	}
-	traceLengthSA = utils.NewSlidingAverage()
-)
+var ()
 
 func initDiscv4(thread int) []*discv4.UDPv4 {
 	var (
@@ -188,8 +137,8 @@ func initeth(thread int, dest *enode.Node, dir string) ([]*eth.Suite, error) {
 
 func GenerateAndExecute(c *cli.Context) error {
 	var (
-		protocol = c.String(ProtocolFlag.Name)
-		node, _  = GetList(c.String(FileFlag.Name))
+		protocol = c.String(flags.ProtocolFlag.Name)
+		node, _  = GetList(c.String(flags.FileFlag.Name))
 	)
 	switch protocol {
 	case "discv4":
@@ -205,18 +154,32 @@ func GenerateAndExecute(c *cli.Context) error {
 
 func discv4Fuzzer(c *cli.Context, node *enode.Node) error {
 	var (
-		clients   = initDiscv4(c.Int(ThreadFlag.Name))
-		skipTrace = c.Bool(SkipTraceFlag.Name)
+		clients   = initDiscv4(c.Int(flags.ThreadFlag.Name))
+		skipTrace = c.Bool(flags.SkipTraceFlag.Name)
 	)
 	if len(clients) == 0 {
 		return fmt.Errorf("need at least one vm to participate")
 	}
 	log.Info("Fuzzing started...")
+
+	// Setup seed
+	seed := c.Int64(flags.SeedFlag.Name)
+	if seed == 0 {
+		fmt.Println("No seed provided, creating one")
+		rnd := make([]byte, 8)
+		crand.Read(rnd)
+		seed = int64(binary.BigEndian.Uint64(rnd))
+	}
+
+	// Setup Mutator
+	mut := fuzzing.NewMutator(rand.New(rand.NewSource(seed)))
+
 	meta := &discv4Meta{
 		testCh:  make(chan string, 4), // channel where we'll deliver tests
 		clis:    clients,
+		mut:     mut,
 		targets: node,
-		outdir:  c.String(LocationFlag.Name),
+		outdir:  c.String(flags.LocationFlag.Name),
 	}
 	meta.wg.Add(1)
 
@@ -242,18 +205,32 @@ func discv4Fuzzer(c *cli.Context, node *enode.Node) error {
 
 func discv5Fuzzer(c *cli.Context, node *enode.Node, cleanupFiles bool) error {
 	var (
-		clients   = initDiscv5(c.Int(ThreadFlag.Name))
-		skipTrace = c.Bool(SkipTraceFlag.Name)
+		clients   = initDiscv5(c.Int(flags.ThreadFlag.Name))
+		skipTrace = c.Bool(flags.SkipTraceFlag.Name)
 	)
 	if len(clients) == 0 {
 		return fmt.Errorf("need at least one vm to participate")
 	}
 	log.Info("Fuzzing started...")
+
+	// Setup seed
+	seed := c.Int64(flags.SeedFlag.Name)
+	if seed == 0 {
+		fmt.Println("No seed provided, creating one")
+		rnd := make([]byte, 8)
+		crand.Read(rnd)
+		seed = int64(binary.BigEndian.Uint64(rnd))
+	}
+
+	// Setup Mutator
+	mut := fuzzing.NewMutator(rand.New(rand.NewSource(seed)))
+
 	meta := &discv5Meta{
 		testCh:  make(chan string, 4), // channel where we'll deliver tests
 		clis:    clients,
+		mut:     mut,
 		targets: node,
-		outdir:  c.String(LocationFlag.Name),
+		outdir:  c.String(flags.LocationFlag.Name),
 	}
 	meta.wg.Add(1)
 
@@ -279,8 +256,8 @@ func discv5Fuzzer(c *cli.Context, node *enode.Node, cleanupFiles bool) error {
 
 func ethFuzzer(c *cli.Context, node *enode.Node) error {
 	var (
-		clients, err = initeth(c.Int(ThreadFlag.Name), node, c.String(LocationFlag.Name))
-		skipTrace    = c.Bool(SkipTraceFlag.Name)
+		clients, err = initeth(c.Int(flags.ThreadFlag.Name), node, c.String(flags.LocationFlag.Name))
+		skipTrace    = c.Bool(flags.SkipTraceFlag.Name)
 	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize eth clients: %v", err)
@@ -293,7 +270,7 @@ func ethFuzzer(c *cli.Context, node *enode.Node) error {
 		testCh:  make(chan string, 4), // channel where we'll deliver tests
 		clis:    clients,
 		targets: node,
-		outdir:  c.String(LocationFlag.Name),
+		outdir:  c.String(flags.LocationFlag.Name),
 	}
 	meta.wg.Add(1)
 
@@ -322,6 +299,7 @@ type discv4Meta struct {
 	testCh      chan string
 	wg          sync.WaitGroup
 	clis        []*discv4.UDPv4
+	mut         *fuzzing.Mutator
 	targets     *enode.Node
 	numTests    atomic.Uint64
 	outdir      string
@@ -335,6 +313,7 @@ type discv5Meta struct {
 	testCh      chan string
 	wg          sync.WaitGroup
 	clis        []*discv5.UDPv5
+	mut         *fuzzing.Mutator
 	targets     *enode.Node
 	numTests    atomic.Uint64
 	outdir      string
@@ -348,6 +327,7 @@ type ethMeta struct {
 	testCh      chan string
 	wg          sync.WaitGroup
 	clis        []*eth.Suite
+	mut         *fuzzing.Mutator
 	targets     *enode.Node
 	numTests    atomic.Uint64
 	outdir      string
@@ -415,7 +395,7 @@ func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, seedDir string) {
 		fmt.Printf("Error initSeed: %v\n", err)
 	}
 
-	initSeed, err = cli.RunPacketTest(initSeed, meta.targets)
+	initSeed, err = cli.RunPacketTest(initSeed, meta.targets, meta.mut)
 	if err != nil {
 		fmt.Printf("Error starting client packet test: %v\n", err)
 	}
@@ -428,7 +408,7 @@ func (meta *discv4Meta) cliLoop(cli *discv4.UDPv4, seedDir string) {
 
 	for {
 		seed := cli.SelectSeed(seedQueue)
-		newSeed, err := cli.RunPacketTest(seed, meta.targets)
+		newSeed, err := cli.RunPacketTest(seed, meta.targets, meta.mut)
 		if err != nil {
 			fmt.Printf("Error starting client packet test: %v\n", err)
 		}
@@ -450,7 +430,7 @@ func (meta *discv5Meta) cliLoop(cli *discv5.UDPv5, seedDir string) {
 		fmt.Printf("Error initSeed: %v\n", err)
 	}
 
-	initSeed, err = cli.RunPacketTest(initSeed, meta.targets)
+	initSeed, err = cli.RunPacketTest(initSeed, meta.targets, meta.mut)
 	if err != nil {
 		fmt.Printf("Error starting client packet test: %v\n", err)
 	}
@@ -463,7 +443,7 @@ func (meta *discv5Meta) cliLoop(cli *discv5.UDPv5, seedDir string) {
 
 	for {
 		seed := cli.SelectSeed(seedQueue)
-		newSeed, err := cli.RunPacketTest(seed, meta.targets)
+		newSeed, err := cli.RunPacketTest(seed, meta.targets, meta.mut)
 		if err != nil {
 			fmt.Printf("Error starting client packet test: %v\n", err)
 		}
@@ -568,12 +548,12 @@ func getLocalIP() net.IP {
 
 func ExecuteGenerator(c *cli.Context) error {
 	var (
-		protocol    = c.String(ProtocolFlag.Name)
-		packetType  = c.String(TypeFlag.Name)
-		count       = c.Int(CountFlag.Name)
-		nodeList, _ = GetList(c.String(FileFlag.Name))
+		protocol    = c.String(flags.ProtocolFlag.Name)
+		packetType  = c.String(flags.TypeFlag.Name)
+		count       = c.Int(flags.CountFlag.Name)
+		nodeList, _ = GetList(c.String(flags.FileFlag.Name))
 		//chainDir    = c.String(ChainDirFlag.Name)
-		genTestFlag = c.Bool(GenTestFlag.Name)
+		genTestFlag = c.Bool(flags.GenTestFlag.Name)
 	)
 	switch protocol {
 	case "discv4":

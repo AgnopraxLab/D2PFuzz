@@ -2,6 +2,7 @@ package discv5
 
 import (
 	"D2PFuzz/d2p"
+	"D2PFuzz/fuzzing"
 	"context"
 	"crypto/ecdsa"
 	crand "crypto/rand"
@@ -292,7 +293,7 @@ func (t *UDPv5) CreateSeed(node *enode.Node) (*V5Seed, error) {
 	return seed, nil
 }
 
-func (t *UDPv5) RunPacketTest(seed *V5Seed, node *enode.Node) (*V5Seed, error) {
+func (t *UDPv5) RunPacketTest(seed *V5Seed, node *enode.Node, mut *fuzzing.Mutator) (*V5Seed, error) {
 	for {
 		// 初始化一个 series
 		var series []*StateSeries
@@ -311,7 +312,7 @@ func (t *UDPv5) RunPacketTest(seed *V5Seed, node *enode.Node) (*V5Seed, error) {
 			return seed, nil
 		}
 		// 对 seed 的 packet 进行变异操作
-		t.seedMutate(seed)
+		t.seedMutate(seed, mut)
 	}
 }
 
@@ -335,15 +336,15 @@ func (t *UDPv5) SelectSeed(seedQueue []*V5Seed) *V5Seed {
 	return selectedSeed
 }
 
-func (t *UDPv5) seedMutate(seed *V5Seed) {
+func (t *UDPv5) seedMutate(seed *V5Seed, mut *fuzzing.Mutator) {
 	seed.Mutations++
 	//需要补充
 	if seed.Mutations < 100 {
-		seed.PacketMutate(seed.Packets)
+		seed.PacketMutate(seed.Packets, mut)
 	} else if seed.Mutations < 200 {
-		seed.SeriesMutate(seed.Packets)
+		seed.SeriesMutate(seed.Packets, mut)
 	} else {
-		seed.HavocMutate(seed.Packets)
+		seed.HavocMutate(seed.Packets, mut)
 	}
 }
 

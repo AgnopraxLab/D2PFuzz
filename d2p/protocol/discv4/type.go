@@ -1,6 +1,7 @@
 package discv4
 
 import (
+	"D2PFuzz/fuzzing"
 	"encoding/hex"
 	"fmt"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -27,7 +28,7 @@ type Packet interface {
 	// Kind is the packet type, for logging purposes.
 	Kind() byte
 
-	mutate()
+	mutate(*fuzzing.Mutator)
 }
 
 type (
@@ -159,34 +160,34 @@ func (req *ENRResponse) String() string {
 	return fmt.Sprintf("ReplyTok: %s", hex.EncodeToString(req.ReplyTok))
 }
 
-func (p *Ping) mutate() {
-	mutateExp(&p.Expiration)
-	mutateRest(&p.Rest)
+func (req *Ping) mutate(mut *fuzzing.Mutator) {
+	mut.MutateExp(&req.Expiration)
+	mut.MutateRest(&req.Rest)
 }
 
-func (p *Pong) mutate() {
-	rand.Read(p.ReplyTok[:])
-	mutateExp(&p.Expiration)
-	mutateRest(&p.Rest)
+func (req *Pong) mutate(mut *fuzzing.Mutator) {
+	rand.Read(req.ReplyTok[:])
+	mut.MutateExp(&req.Expiration)
+	mut.MutateRest(&req.Rest)
 }
 
-func (p *Findnode) mutate() {
-	rand.Read(p.Target[:])
-	mutateExp(&p.Expiration)
-	mutateRest(&p.Rest)
+func (req *Findnode) mutate(mut *fuzzing.Mutator) {
+	rand.Read(req.Target[:])
+	mut.MutateExp(&req.Expiration)
+	mut.MutateRest(&req.Rest)
 }
 
-func (p *Neighbors) mutate() {
-	mutateExp(&p.Expiration)
-	mutateRest(&p.Rest)
+func (req *Neighbors) mutate(mut *fuzzing.Mutator) {
+	mut.MutateExp(&req.Expiration)
+	mut.MutateRest(&req.Rest)
 }
 
-func (p *ENRRequest) mutate() {
-	mutateExp(&p.Expiration)
-	mutateRest(&p.Rest)
+func (req *ENRRequest) mutate(mut *fuzzing.Mutator) {
+	mut.MutateExp(&req.Expiration)
+	mut.MutateRest(&req.Rest)
 }
 
-func (p *ENRResponse) mutate() {
-	rand.Read(p.ReplyTok[:])
-	mutateRest(&p.Rest)
+func (req *ENRResponse) mutate(mut *fuzzing.Mutator) {
+	rand.Read(req.ReplyTok[:])
+	mut.MutateRest(&req.Rest)
 }

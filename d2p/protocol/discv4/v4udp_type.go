@@ -256,7 +256,7 @@ func (t *UDPv4) SelectSeed(seedQueue []*V4Seed) *V4Seed {
 	return selectedSeed
 }
 
-func (t *UDPv4) RunPacketTest(seed *V4Seed, node *enode.Node) (*V4Seed, error) {
+func (t *UDPv4) RunPacketTest(seed *V4Seed, node *enode.Node, mut *fuzzing.Mutator) (*V4Seed, error) {
 	for {
 		// 初始化一个 series
 		var series []*StateSeries
@@ -275,7 +275,7 @@ func (t *UDPv4) RunPacketTest(seed *V4Seed, node *enode.Node) (*V4Seed, error) {
 			return seed, nil
 		}
 		// 对 seed 的 packet 进行变异操作
-		t.seedMutate(seed)
+		t.seedMutate(seed, mut)
 	}
 }
 
@@ -292,15 +292,15 @@ func compareSeries(s1, s2 []*StateSeries) bool {
 	return true
 }
 
-func (t *UDPv4) seedMutate(seed *V4Seed) {
+func (t *UDPv4) seedMutate(seed *V4Seed, mut *fuzzing.Mutator) {
 	seed.Mutations++
 	//需要补充
 	if seed.Mutations < 100 {
-		seed.PacketMutate(seed.Packets)
+		seed.PacketMutate(seed.Packets, mut)
 	} else if seed.Mutations < 200 {
-		seed.SeriesMutate(seed.Packets)
+		seed.SeriesMutate(seed.Packets, mut)
 	} else {
-		seed.HavocMutate(seed.Packets)
+		seed.HavocMutate(seed.Packets, mut)
 	}
 }
 
