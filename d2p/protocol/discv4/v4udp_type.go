@@ -79,6 +79,18 @@ func (t *UDPv4) ourEndpoint() Endpoint {
 	return Endpoint{IP: a.IP, UDP: uint16(a.Port), TCP: uint16(n.TCP())}
 }
 
+func (t *UDPv4) pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchFunc) *replyMatcher {
+	ch := make(chan error, 1)
+	p := &replyMatcher{from: id, ip: ip, ptype: ptype, callback: callback, errc: ch}
+	select {
+	case t.addReplyMatcher <- p:
+		// loop will handle it
+	case <-t.closeCtx.Done():
+		ch <- errClosed
+	}
+	return p
+}
+
 func (t *UDPv4) Pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchFunc) *replyMatcher {
 	ch := make(chan error, 1)
 	p := &replyMatcher{from: id, ip: ip, ptype: ptype, callback: callback, errc: ch}
