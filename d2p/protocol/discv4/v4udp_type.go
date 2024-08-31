@@ -5,6 +5,7 @@ import (
 	"D2PFuzz/fuzzing"
 	"context"
 	"crypto/ecdsa"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -78,7 +79,7 @@ func (t *UDPv4) ourEndpoint() Endpoint {
 	return Endpoint{IP: a.IP, UDP: uint16(a.Port), TCP: uint16(n.TCP())}
 }
 
-func (t *UDPv4) pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchFunc) *replyMatcher {
+func (t *UDPv4) Pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchFunc) *replyMatcher {
 	ch := make(chan error, 1)
 	p := &replyMatcher{from: id, ip: ip, ptype: ptype, callback: callback, errc: ch}
 	select {
@@ -88,6 +89,15 @@ func (t *UDPv4) pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchF
 		ch <- errClosed
 	}
 	return p
+}
+
+func (rm *replyMatcher) WaitForResponse(timeout time.Duration) error {
+	select {
+	case err := <-rm.errc:
+		return err
+	case <-time.After(timeout):
+		return errors.New("timeout waiting for response")
+	}
 }
 
 type node struct {
