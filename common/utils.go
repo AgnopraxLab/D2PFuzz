@@ -602,7 +602,7 @@ func discv4Generator(packetType string, count int, node *enode.Node, genTest boo
 		// todo: need Fuzzer send generator just return array of raw packet
 		if genTest {
 			data, _ := json.MarshalIndent(req, "", "")
-			fmt.Printf(string(data))
+			fmt.Printf("Sending packet: %s\n", string(data))
 
 			// 根据数据包类型设置预期的响应类型
 			var expectedResponseType byte
@@ -613,6 +613,15 @@ func discv4Generator(packetType string, count int, node *enode.Node, genTest boo
 				expectedResponseType = discv4.NeighborsPacket
 			case "ENRRequest":
 				expectedResponseType = discv4.ENRResponsePacket
+			case "pong":
+				fmt.Printf("Received pong packet, no further action needed\n")
+				continue
+			case "neighbors":
+				fmt.Printf("Received neighbors packet, processing not implemented\n")
+				continue
+			case "ENRResponse":
+				fmt.Printf("Received ENR response, no further action needed\n")
+				continue
 			// 添加其他数据包类型的处理...
 			default:
 				fmt.Printf("Unknown packet type: %s\n", packetType)
@@ -621,9 +630,14 @@ func discv4Generator(packetType string, count int, node *enode.Node, genTest boo
 
 			// 设置回复匹配器
 			rm := client.Pending(node.ID(), node.IP(), expectedResponseType, func(p discv4.Packet) (matched bool, requestDone bool) {
-				// 这里可以添加更详细的匹配逻辑
-				fmt.Printf("Received response: %+v\n", p)
-				return true, true
+				fmt.Printf("Received packet of type: %T\n", p)
+				if pong, ok := p.(*discv4.Pong); ok {
+					fmt.Printf("Received Pong response: %+v\n", pong)
+					return true, true
+				}
+				// 记录其他类型的包，但不将它们视为匹配
+				fmt.Printf("Received non-Pong packet: %+v\n", p)
+				return false, false
 			})
 
 			// 发送数据包
