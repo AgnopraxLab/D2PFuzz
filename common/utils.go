@@ -658,7 +658,7 @@ func discv5Generator(packetType string, count int, node *enode.Node, genTest boo
 
 	for i := 0; i < count; i++ {
 		req := client.GenPacket(packetType, node)
-		println(req.String())
+		//println(req.String())
 
 		fmt.Printf("lnIP: %v\n", client.LocalNode().Node().IP().String())
 
