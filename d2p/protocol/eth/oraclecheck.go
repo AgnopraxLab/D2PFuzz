@@ -71,6 +71,8 @@ func OracleCheck(packet interface{}, state *OracleState) (interface{}, error) {
 		return checkGetBlockHeadersPacket(p, state)
 	case *GetBlockBodiesPacket:
 		return checkGetBlockBodiesPacket(p, state)
+	case *GetPooledTransactionsPacket:
+		return checkGetPooledTransactionsPacket(p, state)
 	default:
 		return packet, nil // 对于不需要检查的包，直接返回
 	}
@@ -254,10 +256,10 @@ func MultiPacketCheck(state *OracleState) error {
 				return err
 			}
 			state.PacketHistory[i] = checkedPacket
-		case *GetPooledTransactionsPacket:
-			for _, hash := range p.GetPooledTransactionsRequest {
-				state.RequestedTxHashes[hash] = true
-			}
+		/*case *GetPooledTransactionsPacket:
+		for _, hash := range p.GetPooledTransactionsRequest {
+			state.RequestedTxHashes[hash] = true
+		}*/
 		case *PooledTransactionsPacket:
 			checkedPacket, err := checkPooledTransactionsPacket(p, state)
 			if err != nil {
@@ -395,42 +397,41 @@ func checkNewBlockPacket(p *NewBlockPacket, state *OracleState) (*NewBlockPacket
 }
 
 func checkBlockBodiesPacket(p *BlockBodiesPacket, state *OracleState) (*BlockBodiesPacket, error) {
-	// 确保我们有足够的区块头来匹配区块体
-	if len(p.BlockBodiesResponse) > len(state.BlockHeaders) {
-		return nil, fmt.Errorf("more block bodies than known headers")
-	}
+	nonceMap := make(map[common.Address]uint64)
+	currentBlockNumber := uint64(0) // 假设我们知道起始区块号
 
 	for i, body := range p.BlockBodiesResponse {
-		// 获取对应的区块头
-		header := state.BlockHeaders[uint64(i)]
-		if header == nil {
-			return nil, fmt.Errorf("no matching block header for body at index %d", i)
+		// 检查叔块数量
+		if len(body.Uncles) > 2 {
+			return nil, fmt.Errorf("too many uncles (%d) for body at index %d", len(body.Uncles), i)
 		}
 
-		// 检查交易根是否匹配
-		txHash := calcTxsHash(body.Transactions)
-		if txHash != header.TxHash {
-			return nil, fmt.Errorf("transaction root mismatch for body at index %d", i)
-		}
-
-		// 检查叔块根是否匹配
-		uncleHash := types.CalcUncleHash(body.Uncles)
-		if uncleHash != header.UncleHash {
-			return nil, fmt.Errorf("uncle root mismatch for body at index %d", i)
-		}
-
-		// 如果有提款字段，检查提款根是否匹配
-		if header.WithdrawalsHash != nil {
-			withdrawalHash := calcWithdrawalsHash(body.Withdrawals)
-			if *header.WithdrawalsHash != withdrawalHash {
-				return nil, fmt.Errorf("withdrawal root mismatch for body at index %d", i)
+		// 检查叔块深度
+		for _, uncle := range body.Uncles {
+			if currentBlockNumber-uncle.Number.Uint64() > 7 {
+				return nil, fmt.Errorf("uncle too old for body at index %d", i)
 			}
 		}
-		// 更新交易哈希状态
+
+		// 检查交易nonce
 		for _, tx := range body.Transactions {
-			state.TransactionHashes[tx.Hash()] = true
+			from, err := types.Sender(types.NewEIP155Signer(tx.ChainId()), tx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get sender for transaction in body at index %d: %v", i, err)
+			}
+
+			// 检查nonce
+			if nonce, exists := nonceMap[from]; exists {
+				if tx.Nonce() <= nonce {
+					return nil, fmt.Errorf("invalid nonce for transaction from %s in body at index %d", from.Hex(), i)
+				}
+			}
+			nonceMap[from] = tx.Nonce()
 		}
+
+		currentBlockNumber++
 	}
+
 	return p, nil
 }
 
@@ -566,6 +567,29 @@ func checkGetBlockBodiesPacket(p *GetBlockBodiesPacket, state *OracleState) (*Ge
 		}
 	}
 	p.GetBlockBodiesRequest = validHashes
+	return p, nil
+}
+
+func checkGetPooledTransactionsPacket(p *GetPooledTransactionsPacket, state *OracleState) (*GetPooledTransactionsPacket, error) {
+	// 创建一个新的切片来存储有效的交易哈希
+	validHashes := make([]common.Hash, 0)
+
+	// 遍历请求的所有交易哈希
+	for _, hash := range p.GetPooledTransactionsRequest {
+		// 检查哈希是否为空
+		if hash != (common.Hash{}) {
+			validHashes = append(validHashes, hash)
+		}
+	}
+
+	// 用非空的哈希更新请求
+	p.GetPooledTransactionsRequest = validHashes
+
+	// 如果没有有效的哈希，返回一个错误
+	if len(validHashes) == 0 {
+		return nil, fmt.Errorf("no valid transaction hashes in the request")
+	}
+
 	return p, nil
 }
 

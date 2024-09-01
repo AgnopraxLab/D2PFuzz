@@ -145,7 +145,6 @@ func (t *UDPv5) SetReadDeadline(deadline time.Time) {
 	t.readDeadline = deadline
 }
 
-// ReadFromUDP 修改 ReadFromUDP 方法以使用我们的自定义超时
 func (t *UDPv5) ReadFromUDP(b []byte) (int, *net.UDPAddr, error) {
 	if !t.readDeadline.IsZero() && time.Now().After(t.readDeadline) {
 		return 0, nil, fmt.Errorf("read deadline exceeded")

@@ -37,8 +37,6 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-var ()
-
 func initDiscv4(thread int) []*discv4.UDPv4 {
 	var (
 		clients  []*discv4.UDPv4
@@ -614,13 +612,13 @@ func discv4Generator(packetType string, count int, node *enode.Node, genTest boo
 			case "ENRRequest":
 				expectedResponseType = discv4.ENRResponsePacket
 			case "pong":
-				fmt.Printf("Received pong packet, no further action needed\n")
+				fmt.Printf("Send pong packet, no further action needed\n")
 				continue
 			case "neighbors":
-				fmt.Printf("Received neighbors packet, processing not implemented\n")
+				fmt.Printf("Send neighbors packet, processing not implemented\n")
 				continue
 			case "ENRResponse":
-				fmt.Printf("Received ENR response, no further action needed\n")
+				fmt.Printf("Send ENR response, no further action needed\n")
 				continue
 			// 添加其他数据包类型的处理...
 			default:
@@ -672,13 +670,6 @@ func discv5Generator(packetType string, count int, node *enode.Node, genTest boo
 
 	for i := 0; i < count; i++ {
 		req := client.GenPacket(packetType, node)
-		//println(req.String())
-
-		fmt.Printf("lnIP: %v\n", client.LocalNode().Node().IP().String())
-		// 在调用 EncodePacket 之前打印输入
-		fmt.Printf("EncodePacket Input:\n")
-		fmt.Printf("packet: %+v\n", req)
-		fmt.Printf("challenge: nil\n")
 
 		// 调用 EncodePacket
 		//en_packet, nonce, err := client.EncodePacket(node.ID(), addr, packet, nil)

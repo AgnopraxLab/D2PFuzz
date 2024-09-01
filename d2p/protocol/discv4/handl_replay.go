@@ -216,6 +216,16 @@ func (t *UDPv4) handleFindnode(h *packetHandlerV4, from *net.UDPAddr, fromID eno
 func (t *UDPv4) verifyNeighbors(h *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, fromKey Pubkey) error {
 	req := h.Packet.(*Neighbors)
 
+	// 打印 Neighbors 包的内容
+	fmt.Printf("Received Neighbors packet:\n")
+	fmt.Printf("  From: %s\n", from.String())
+	fmt.Printf("  Expiration: %d\n", req.Expiration)
+	fmt.Printf("  Nodes:\n")
+	for i, node := range req.Nodes {
+		fmt.Printf("    Node %d: %v\n", i, node) // 假设 Node 实现了 String() 方法，适当调整根据实际情况
+	}
+	fmt.Printf("  Rest: %v\n", req.Rest)
+
 	if Expired(req.Expiration) {
 		return errExpired
 	}
@@ -260,6 +270,13 @@ func (t *UDPv4) handleENRRequest(h *packetHandlerV4, from *net.UDPAddr, fromID e
 // ENRRESPONSE/v4
 
 func (t *UDPv4) verifyENRResponse(h *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, fromKey Pubkey) error {
+	req := h.Packet.(*ENRResponse)
+	// 打印 ENRResponse 包的内容
+	fmt.Printf("Received ENRResponse packet:\n")
+	fmt.Printf("  From: %s\n", from.String())
+	fmt.Printf("  ReplyTok: %x\n", req.ReplyTok)
+	fmt.Printf("  Record: %v\n", req.Record)
+
 	if !t.handleReply(fromID, from.IP, h.Packet) {
 		return errUnsolicitedReply
 	}
