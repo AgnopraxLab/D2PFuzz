@@ -4,11 +4,13 @@ import (
 	"D2PFuzz/fuzzing"
 	"crypto/ecdsa"
 	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"math/big"
+	"reflect"
 )
 
 type Suite struct {
@@ -32,6 +34,18 @@ func NewSuite(dest *enode.Node, chainDir string, pri *ecdsa.PrivateKey) (*Suite,
 		chain:    chain,
 		pri:      pri,
 	}, nil
+}
+
+// InitializeAndConnect 封装了初始化、连接和对等过程
+func (s *Suite) InitializeAndConnect() error {
+	conn, err := s.dial()
+	if err != nil {
+		return fmt.Errorf("dial failed: %v", err)
+	}
+	if err := conn.peer(s.chain, nil); err != nil {
+		return fmt.Errorf("Peer failed: %v", err)
+	}
+	return nil
 }
 
 type PacketSpecification struct {
@@ -219,4 +233,16 @@ func (s *Suite) makeTxs() TransactionsPacket {
 	}
 
 	return txs
+}
+
+func (s *Suite) GetHeaders(req *GetBlockHeadersPacket) ([]*types.Header, error) {
+	if s.chain == nil {
+		return nil, errors.New("chain is not initialized")
+	}
+	return s.chain.GetHeaders(req)
+}
+
+// HeadersMatch headersMatch returns whether the received headers match the given request
+func HeadersMatch(expected []*types.Header, headers []*types.Header) bool {
+	return reflect.DeepEqual(expected, headers)
 }

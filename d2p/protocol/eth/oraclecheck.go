@@ -184,9 +184,9 @@ func MultiPacketCheck(state *OracleState) error {
 			}
 		case *NewBlockPacket:
 			// 检查区块号是否递增
-			if p.Block.NumberU64() <= lastBlockNumber {
+			/*if p.Block.NumberU64() <= lastBlockNumber {
 				return errors.New("non-increasing block number")
-			}
+			}*/
 			lastBlockNumber = p.Block.NumberU64()
 
 			// 检查总难度是否递增

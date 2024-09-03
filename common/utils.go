@@ -122,14 +122,19 @@ func initeth(thread int, dest *enode.Node, dir string) ([]*eth.Suite, error) {
 	)
 
 	for i := 0; i < thread; i++ {
-		pri, _ := crypto.GenerateKey()
+		pri, err := crypto.GenerateKey()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate key for client %d: %v", i+1, err)
+		}
 		client, err := eth.NewSuite(dest, dir, pri)
 		if err != nil {
-			return nil, errors.New("New Suite fail")
+			return nil, fmt.Errorf("failed to create new Suite for client %d: %v", i+1, err)
+		}
+		if err := client.InitializeAndConnect(); err != nil {
+			return nil, fmt.Errorf("initialization and connection failed for client %d: %v", i+1, err)
 		}
 		clients = append(clients, client)
 	}
-
 	return clients, nil
 }
 
@@ -754,7 +759,7 @@ func sendAndReceive(client *discv5.UDPv5, node *enode.Node, req discv5.Packet) (
 func ethGenerator(dir string, packetType, count int, nodeList *enode.Node, genTestFlag bool) error {
 	clients, err := initeth(1, nodeList, dir)
 	if err != nil {
-		return errors.New("clients init error")
+		return fmt.Errorf("ethGenerator failed: %v", err)
 	}
 	client := clients[0]
 
@@ -791,9 +796,40 @@ func ethGenerator(dir string, packetType, count int, nodeList *enode.Node, genTe
 	if err != nil {
 		return errors.New("multi-packet check fail")
 	}
-	// 输出修正后的包
+
+	// 发送包并处理响应
 	for _, packet := range state.PacketHistory {
-		println(packet)
+		switch p := packet.(type) {
+		case *eth.GetBlockHeadersPacket:
+			// 使用 Suite 的方法发送消息
+			if err := client.SendMsg(eth.ETH68, eth.GetBlockHeadersMsg, p); err != nil {
+				return fmt.Errorf("could not send message: %v", err)
+			}
+
+			headers := new(eth.BlockHeadersPacket)
+			if err := client.ReadMsg(eth.ETH68, eth.BlockHeadersMsg, headers); err != nil {
+				return fmt.Errorf("error reading msg: %v", err)
+			}
+
+			if headers.RequestId != p.RequestId {
+				return errors.New("unexpected request id")
+			}
+
+			expected, err := client.GetHeaders(p)
+			if err != nil {
+				return fmt.Errorf("failed to get headers for given request: %v", err)
+			}
+
+			if !eth.HeadersMatch(expected, headers.BlockHeadersRequest) {
+				return errors.New("header mismatch")
+			}
+
+			fmt.Printf("Received headers for request %d\n", headers.RequestId)
+
+		// 添加其他数据包类型的处理...
+		default:
+			fmt.Printf("Unsupported packet type: %T\n", packet)
+		}
 	}
 
 	return nil
