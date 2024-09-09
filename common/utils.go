@@ -763,7 +763,8 @@ func ethGenerator(dir string, packetType, count int, nodeList *enode.Node, genTe
 	}
 	client := clients[0]
 
-	state := eth.NewOracleState() // 创建Oracle状态
+	// 初始化Oracle状态
+	state := eth.InitOracleState(client)
 
 	// 初始化 PacketSpecification
 	spec := &eth.PacketSpecification{
@@ -783,18 +784,12 @@ func ethGenerator(dir string, packetType, count int, nodeList *enode.Node, genTe
 		}
 
 		// 使用Oracle检查并修正数据包
-		checkedPacket, err := eth.OracleCheck(packet, state)
+		checkedPacket, err := eth.OracleCheck(packet, state, client)
 		if err != nil {
 			return errors.New("oracle check fail")
 		}
 
 		state.PacketHistory = append(state.PacketHistory, checkedPacket)
-	}
-
-	// 在生成所有包后进行多包逻辑检验
-	err = eth.MultiPacketCheck(state)
-	if err != nil {
-		return errors.New("multi-packet check fail")
 	}
 
 	// 发送包并处理响应

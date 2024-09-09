@@ -5,80 +5,494 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/params"
+	"log"
 	"math/big"
+	"time"
 )
 
 // OracleState 用于维护Oracle的状态
 type OracleState struct {
-	LatestBlockNumber uint64
-	TotalDifficulty   *big.Int
-	AccountBalances   map[common.Address]*big.Int
-	AccountNonces     map[common.Address]uint64
-	BlockHashes       map[uint64]common.Hash
-	TransactionHashes map[common.Hash]bool
-	TransactionTypes  map[common.Hash]byte
-	TransactionSizes  map[common.Hash]uint32
-	ProtocolVersion   uint32
-	NetworkID         uint64
-	GenesisHash       common.Hash
-	PacketHistory     []interface{}
-	LatestHeader      *types.Header
-	FirstStatusPacket *StatusPacket
-	BlockHeaders      map[uint64]*types.Header
-	RequestedTxHashes map[common.Hash]bool
+	LatestBlockNumber   uint64
+	TotalDifficulty     *big.Int
+	AccountBalances     map[common.Address]string
+	AccountNonces       map[common.Address]uint64
+	BlockHashes         map[uint64]common.Hash
+	NetworkID           uint64
+	ProtocolVersion     uint32
+	GenesisHash         common.Hash
+	PacketHistory       []interface{}
+	GenesisConfig       *params.ChainConfig
+	GenesisBlock        *types.Block
+	GenesisAlloc        types.GenesisAlloc
+	CurrentHeader       *types.Header
+	Senders             map[common.Address]uint64
+	PendingTransactions []*types.Transaction
 }
 
 // NewOracleState 创建一个新的OracleState
 func NewOracleState() *OracleState {
 	return &OracleState{
-		TotalDifficulty:   big.NewInt(0),
-		AccountBalances:   make(map[common.Address]*big.Int),
-		AccountNonces:     make(map[common.Address]uint64),
-		BlockHashes:       make(map[uint64]common.Hash),
-		TransactionHashes: make(map[common.Hash]bool),
-		TransactionTypes:  make(map[common.Hash]byte),
-		TransactionSizes:  make(map[common.Hash]uint32),
-		BlockHeaders:      make(map[uint64]*types.Header),
-		RequestedTxHashes: make(map[common.Hash]bool),
+		TotalDifficulty:     new(big.Int),
+		AccountBalances:     make(map[common.Address]string),
+		AccountNonces:       make(map[common.Address]uint64),
+		BlockHashes:         make(map[uint64]common.Hash),
+		PacketHistory:       make([]interface{}, 0),
+		Senders:             make(map[common.Address]uint64),
+		PendingTransactions: make([]*types.Transaction, 0),
 	}
 }
 
-// OracleCheck 检查并修正生成的数据包
-func OracleCheck(packet interface{}, state *OracleState) (interface{}, error) {
+// InitOracleState 初始化Oracle状态
+func InitOracleState(client *Suite) *OracleState {
+	state := NewOracleState()
+
+	chain := client.chain
+
+	// 设置基本信息
+	state.LatestBlockNumber = uint64(len(chain.blocks) - 1)
+	state.TotalDifficulty.Set(chain.blocks[len(chain.blocks)-1].Difficulty())
+	state.GenesisHash = chain.blocks[0].Hash()
+
+	// 复制账户状态
+	for addr, account := range chain.state {
+		state.AccountBalances[addr] = account.Balance
+		state.AccountNonces[addr] = account.Nonce
+	}
+
+	// 复制区块哈希
+	for i, block := range chain.blocks {
+		state.BlockHashes[uint64(i)] = block.Hash()
+	}
+
+	// 设置网络ID和协议版本
+	state.NetworkID = chain.config.ChainID.Uint64()
+	state.ProtocolVersion = 66 // 假设使用的是ETH66协议版本
+
+	// 复制创世块配置
+	state.GenesisConfig = chain.config
+	state.GenesisAlloc = chain.genesis.Alloc
+	state.GenesisBlock = chain.blocks[0] // check client.chain.blocks[0] 是否为创世区块
+
+	// 设置当前区块头
+	state.CurrentHeader = chain.blocks[len(chain.blocks)-1].Header()
+
+	// 复制发送者信息
+	for addr, info := range chain.senders {
+		state.Senders[addr] = info.Nonce
+	}
+
+	return state
+}
+
+// OracleCheck 检查并修正生成的数据包，然后更新Oracle状态
+func OracleCheck(packet interface{}, state *OracleState, s *Suite) (interface{}, error) {
+	var checkedPacket interface{}
+	var err error
+
 	switch p := packet.(type) {
 	case *StatusPacket:
-		return checkStatusPacket(p, state)
+		checkedPacket, err = checkStatusPacket(p, state)
 	case *NewBlockHashesPacket:
-		return checkNewBlockHashesPacket(p, state)
+		checkedPacket, err = checkNewBlockHashesPacket(p, state)
 	case *TransactionsPacket:
-		return checkTransactionsPacket(p, state)
-	case *BlockHeadersPacket:
-		return checkBlockHeadersPacket(p, state)
-	case *NewBlockPacket:
-		return checkNewBlockPacket(p, state)
-	case *BlockBodiesPacket:
-		return checkBlockBodiesPacket(p, state)
-	case *ReceiptsPacket:
-		return checkReceiptsPacket(p, state)
-	case *NewPooledTransactionHashesPacket:
-		return checkNewPooledTransactionHashesPacket(p, state)
-	case *PooledTransactionsPacket:
-		return checkPooledTransactionsPacket(p, state)
+		checkedPacket, err = checkTransactionsPacket(p, state, s)
 	case *GetBlockHeadersPacket:
-		return checkGetBlockHeadersPacket(p, state)
+		checkedPacket, err = checkGetBlockHeadersPacket(p, state)
+	case *BlockHeadersPacket:
+		checkedPacket, err = checkBlockHeadersPacket(p, state)
 	case *GetBlockBodiesPacket:
-		return checkGetBlockBodiesPacket(p, state)
+		checkedPacket, err = checkGetBlockBodiesPacket(p, state)
+	case *BlockBodiesPacket:
+		checkedPacket, err = checkBlockBodiesPacket(p, state)
+	case *NewBlockPacket:
+		checkedPacket, err = checkNewBlockPacket(p, state)
+	case *NewPooledTransactionHashesPacket:
+		checkedPacket, err = checkNewPooledTransactionHashesPacket(p, state)
 	case *GetPooledTransactionsPacket:
-		return checkGetPooledTransactionsPacket(p, state)
+		checkedPacket, err = checkGetPooledTransactionsPacket(p, state)
+	case *PooledTransactionsPacket:
+		checkedPacket, err = checkPooledTransactionsPacket(p, state)
+	case *GetReceiptsPacket:
+		checkedPacket, err = checkGetReceiptsPacket(p, state)
+	case *ReceiptsPacket:
+		checkedPacket, err = checkReceiptsPacket(p, state)
 	default:
-		return packet, nil // 对于不需要检查的包，直接返回
+		log.Printf("Unknown packet type: %T", packet)
+		return packet, nil
 	}
+
+	if err != nil {
+		return nil, fmt.Errorf("packet check failed: %v", err)
+	}
+
+	// 更新Oracle状态
+	if err := updateOracleState(checkedPacket, state); err != nil {
+		return nil, fmt.Errorf("failed to update oracle state: %v", err)
+	}
+
+	return checkedPacket, nil
 }
 
-func MultiPacketCheck(state *OracleState) error {
+func checkStatusPacket(p *StatusPacket, state *OracleState) (*StatusPacket, error) {
+	// 1. 包自身的逻辑检验
+	if p.ProtocolVersion == 0 {
+		return nil, errors.New("invalid protocol version")
+	}
+	if p.NetworkID == 0 {
+		return nil, errors.New("invalid network ID")
+	}
+	if p.TD == nil || p.TD.Sign() <= 0 {
+		return nil, errors.New("invalid total difficulty")
+	}
+	if p.Head == (common.Hash{}) {
+		return nil, errors.New("invalid head hash")
+	}
+	if p.Genesis == (common.Hash{}) {
+		return nil, errors.New("invalid genesis hash")
+	}
+	currentForkID := forkid.NewID(state.GenesisConfig, state.GenesisBlock, state.LatestBlockNumber, state.CurrentHeader.Time)
+	if p.ForkID != currentForkID {
+		p.ForkID = currentForkID
+	}
+
+	// 2. 对照state检验包的数据是否正确，如果错误，改为state的状态
+	if p.ProtocolVersion != state.ProtocolVersion {
+		p.ProtocolVersion = state.ProtocolVersion
+	}
+	if p.NetworkID != state.NetworkID {
+		p.NetworkID = state.NetworkID
+	}
+	if p.TD.Cmp(state.TotalDifficulty) != 0 {
+		p.TD = new(big.Int).Set(state.TotalDifficulty)
+	}
+	if p.Head != state.BlockHashes[state.LatestBlockNumber] {
+		p.Head = state.BlockHashes[state.LatestBlockNumber]
+	}
+	if p.Genesis != state.GenesisHash {
+		p.Genesis = state.GenesisHash
+	}
+
+	return p, nil
+}
+
+func checkNewBlockHashesPacket(p *NewBlockHashesPacket, state *OracleState) (*NewBlockHashesPacket, error) {
+
+	validBlocks := make([]struct {
+		Hash   common.Hash
+		Number uint64
+	}, 0)
+
+	for _, block := range *p {
+		// 确保区块号大于当前最新
+		if block.Number <= state.LatestBlockNumber {
+			block.Number = state.LatestBlockNumber + 1
+		}
+
+		// 检查哈希是否已存在，如果存在则生成新的哈希
+		for {
+			if _, exists := state.BlockHashes[block.Number]; !exists {
+				break
+			}
+			randomBytes := make([]byte, 32)
+			if _, err := rand.Read(randomBytes); err != nil {
+				return nil, fmt.Errorf("failed to generate random hash: %v", err)
+			}
+			block.Hash = common.BytesToHash(randomBytes)
+		}
+
+		// 添加有效块
+		validBlocks = append(validBlocks, block)
+
+		// 更新为下一个预期的块号
+		state.LatestBlockNumber = block.Number
+	}
+
+	// 确保块号连续
+	for i := 1; i < len(validBlocks); i++ {
+		if validBlocks[i].Number != validBlocks[i-1].Number+1 {
+			validBlocks[i].Number = validBlocks[i-1].Number + 1
+		}
+	}
+
+	*p = validBlocks
+	return p, nil
+}
+
+func checkTransactionsPacket(p *TransactionsPacket, state *OracleState, s *Suite) (*TransactionsPacket, error) {
+	validTxs := make([]*types.Transaction, 0)
+	seenNonces := make(map[common.Address]uint64)
+	invalidCount := 0
+
+	for _, tx := range *p {
+		// 1. 基本有效性检查
+		if tx == nil {
+			invalidCount++
+			continue // 跳过空交易
+		}
+
+		// 2. 检查签名和发送者
+		from, err := types.Sender(types.NewEIP155Signer(tx.ChainId()), tx)
+		if err != nil {
+			invalidCount++
+			continue // 跳过无效签名的交易
+		}
+
+		// 3. 检查 nonce
+		expectedNonce, exists := seenNonces[from]
+		if !exists {
+			expectedNonce = state.AccountNonces[from]
+		}
+		if tx.Nonce() < expectedNonce {
+			invalidCount++
+			continue // 跳过 nonce 过低的交易
+		}
+		if tx.Nonce() > expectedNonce {
+			// 修正 nonce
+			newTx := types.NewTx(&types.DynamicFeeTx{
+				ChainID:   tx.ChainId(),
+				Nonce:     expectedNonce,
+				GasTipCap: tx.GasTipCap(),
+				GasFeeCap: tx.GasFeeCap(),
+				Gas:       tx.Gas(),
+				To:        tx.To(),
+				Value:     tx.Value(),
+				Data:      tx.Data(),
+			})
+			signedTx, err := s.chain.SignTx(from, newTx)
+			if err != nil {
+				invalidCount++
+				continue // 跳过无法签名的交易
+			}
+			tx = signedTx
+		}
+
+		// 4. 检查 gas 相关字段
+		if tx.GasFeeCap().Cmp(tx.GasTipCap()) < 0 {
+			// 修正 GasFeeCap
+			newTx := types.NewTx(&types.DynamicFeeTx{
+				ChainID:   tx.ChainId(),
+				Nonce:     tx.Nonce(),
+				GasTipCap: tx.GasTipCap(),
+				GasFeeCap: new(big.Int).Add(tx.GasTipCap(), big.NewInt(1)), // GasFeeCap = GasTipCap + 1
+				Gas:       tx.Gas(),
+				To:        tx.To(),
+				Value:     tx.Value(),
+				Data:      tx.Data(),
+			})
+			signedTx, err := s.chain.SignTx(from, newTx)
+			if err != nil {
+				invalidCount++
+				continue // 跳过无法签名的交易
+			}
+			tx = signedTx
+		}
+
+		// 5. 检查余额是否足够支付交易
+		balance, ok := new(big.Int).SetString(state.AccountBalances[from], 10)
+		if !ok {
+			invalidCount++
+			// 如果无法解析余额字符串，记录错误并跳过这个交易
+			log.Printf("Error parsing balance for address %s: %s", from.Hex(), state.AccountBalances[from])
+			continue
+		}
+		cost := new(big.Int).Mul(tx.GasFeeCap(), new(big.Int).SetUint64(tx.Gas()))
+		cost.Add(cost, tx.Value())
+		if balance.Cmp(cost) < 0 {
+			// 尝试修改交易金额
+			maxValue := new(big.Int).Sub(balance, new(big.Int).Mul(tx.GasFeeCap(), new(big.Int).SetUint64(tx.Gas())))
+			if maxValue.Sign() > 0 {
+				newTx := types.NewTx(&types.DynamicFeeTx{
+					ChainID:   tx.ChainId(),
+					Nonce:     tx.Nonce(),
+					GasTipCap: tx.GasTipCap(),
+					GasFeeCap: tx.GasFeeCap(),
+					Gas:       tx.Gas(),
+					To:        tx.To(),
+					Value:     maxValue,
+					Data:      tx.Data(),
+				})
+				signedTx, err := s.chain.SignTx(from, newTx)
+				if err != nil {
+					invalidCount++
+					continue // 跳过无法签名的交易
+				}
+				tx = signedTx
+				log.Printf("Modified transaction value for address %s: original %s, new %s", from.Hex(), tx.Value().String(), maxValue.String())
+			} else {
+				invalidCount++
+				log.Printf("Insufficient balance for address %s: balance %s, required %s", from.Hex(), balance.String(), cost.String())
+				continue
+			}
+		}
+		// 将有效交易添加到列表
+		validTxs = append(validTxs, tx)
+		seenNonces[from] = tx.Nonce() + 1
+	}
+
+	*p = validTxs
+	log.Printf("Total invalid transactions: %d", invalidCount)
+	return p, nil
+}
+
+func checkGetBlockHeadersPacket(p *GetBlockHeadersPacket, state *OracleState) (*GetBlockHeadersPacket, error) {
+	// 实现 GetBlockHeadersPacket 的检查逻辑
+	return p, nil
+}
+
+func checkBlockHeadersPacket(p *BlockHeadersPacket, state *OracleState) (*BlockHeadersPacket, error) {
+	// 实现 BlockHeadersPacket 的检查逻辑
+	return p, nil
+}
+
+func checkGetBlockBodiesPacket(p *GetBlockBodiesPacket, state *OracleState) (*GetBlockBodiesPacket, error) {
+	// 实现 GetBlockBodiesPacket 的检查逻辑
+	return p, nil
+}
+
+func checkBlockBodiesPacket(p *BlockBodiesPacket, state *OracleState) (*BlockBodiesPacket, error) {
+	// 实现 BlockBodiesPacket 的检查逻辑
+	return p, nil
+}
+
+func checkNewBlockPacket(p *NewBlockPacket, state *OracleState) (*NewBlockPacket, error) {
+	// 实现 NewBlockPacket 的检查逻辑
+	return p, nil
+}
+
+func checkNewPooledTransactionHashesPacket(p *NewPooledTransactionHashesPacket, state *OracleState) (*NewPooledTransactionHashesPacket, error) {
+	// 实现 NewPooledTransactionHashesPacket 的检查逻辑
+	return p, nil
+}
+
+func checkGetPooledTransactionsPacket(p *GetPooledTransactionsPacket, state *OracleState) (*GetPooledTransactionsPacket, error) {
+	// 实现 GetPooledTransactionsPacket 的检查逻辑
+	return p, nil
+}
+
+func checkPooledTransactionsPacket(p *PooledTransactionsPacket, state *OracleState) (*PooledTransactionsPacket, error) {
+	// 实现 PooledTransactionsPacket 的检查逻辑
+	return p, nil
+}
+
+func checkGetReceiptsPacket(p *GetReceiptsPacket, state *OracleState) (*GetReceiptsPacket, error) {
+	// 实现 GetReceiptsPacket 的检查逻辑
+	return p, nil
+}
+
+func checkReceiptsPacket(p *ReceiptsPacket, state *OracleState) (*ReceiptsPacket, error) {
+	// 实现 ReceiptsPacket 的检查逻辑
+	return p, nil
+}
+
+// updateOracleState 根据检查后的包更新Oracle状态
+func updateOracleState(packet interface{}, state *OracleState) error {
+	switch p := packet.(type) {
+	case *StatusPacket:
+		return nil
+	case *NewBlockHashesPacket:
+		for _, block := range *p {
+			// 更新最新块号
+			if block.Number > state.LatestBlockNumber {
+				state.LatestBlockNumber = block.Number
+			}
+
+			// 更新块哈希映射
+			state.BlockHashes[block.Number] = block.Hash
+
+			// 更新总难度（这里我们假设每个块增加固定难度？）
+			difficulty := big.NewInt(1) // 假设每个块难度为1
+			state.TotalDifficulty.Add(state.TotalDifficulty, difficulty)
+
+			// 更新当前头部信息
+			parentHeader := state.CurrentHeader
+			state.CurrentHeader = &types.Header{
+				ParentHash:  parentHeader.Hash(),
+				UncleHash:   types.EmptyUncleHash,  // 假设没有叔块
+				Coinbase:    parentHeader.Coinbase, // 保持不变
+				Root:        parentHeader.Root,     // 保持不变，因为我们没有状态变化的信息
+				TxHash:      types.EmptyRootHash,   // 假设没有交易
+				ReceiptHash: types.EmptyRootHash,   // 假设没有收据
+				Bloom:       types.Bloom{},         // 空的 Bloom 过滤器
+				Difficulty:  new(big.Int).Add(parentHeader.Difficulty, common.Big1),
+				Number:      new(big.Int).SetUint64(block.Number),
+				GasLimit:    parentHeader.GasLimit, // 保持不变
+				GasUsed:     0,                     // 新块初始 GasUsed 为 0
+				Time:        uint64(time.Now().Unix()),
+				Extra:       parentHeader.Extra,   // 保持不变
+				MixDigest:   common.Hash{},        // 可以保持为空
+				Nonce:       types.BlockNonce{},   // 可以保持为空
+				BaseFee:     parentHeader.BaseFee, // 如果支持 EIP-1559，否则为 nil
+			}
+
+			// 使用包中提供的哈希
+			state.CurrentHeader.Hash()
+
+			// 其他可选字段保持不变
+			if parentHeader.WithdrawalsHash != nil {
+				state.CurrentHeader.WithdrawalsHash = parentHeader.WithdrawalsHash
+			}
+			if parentHeader.BlobGasUsed != nil {
+				state.CurrentHeader.BlobGasUsed = new(uint64)
+			}
+			if parentHeader.ExcessBlobGas != nil {
+				state.CurrentHeader.ExcessBlobGas = new(uint64)
+			}
+			if parentHeader.ParentBeaconRoot != nil {
+				state.CurrentHeader.ParentBeaconRoot = parentHeader.ParentBeaconRoot
+			}
+		}
+	case *TransactionsPacket:
+		for _, tx := range *p {
+			from, err := types.Sender(types.NewEIP155Signer(tx.ChainId()), tx)
+			if err != nil {
+				continue // 跳过无效签名的交易
+			}
+
+			// 更新 nonce
+			if tx.Nonce() >= state.AccountNonces[from] {
+				state.AccountNonces[from] = tx.Nonce() + 1
+			}
+
+			// 更新余额（预估）
+			balance, ok := new(big.Int).SetString(state.AccountBalances[from], 10)
+			if !ok {
+				continue // 跳过无法解析余额的账户
+			}
+			cost := new(big.Int).Mul(tx.GasFeeCap(), new(big.Int).SetUint64(tx.Gas()))
+			cost.Add(cost, tx.Value())
+			newBalance := new(big.Int).Sub(balance, cost)
+			if newBalance.Sign() >= 0 {
+				state.AccountBalances[from] = newBalance.String()
+			}
+
+			// 更新接收方余额（如果有）
+			if tx.To() != nil {
+				toBalance, ok := new(big.Int).SetString(state.AccountBalances[*tx.To()], 10)
+				if ok {
+					newToBalance := new(big.Int).Add(toBalance, tx.Value())
+					state.AccountBalances[*tx.To()] = newToBalance.String()
+				}
+			}
+
+			// 将交易添加到模拟的交易池
+			state.PendingTransactions = append(state.PendingTransactions, tx)
+		}
+	case *BlockHeadersPacket:
+
+	case *NewBlockPacket:
+
+	// 其他包类型的状态更新...
+	default:
+		// 对于不需要更新状态的包类型，不做任何操作
+	}
+
+	return nil
+}
+
+/*func MultiPacketCheck(state *OracleState) error {
 	var firstStatusPacket *StatusPacket
 
 	seenHashes := make(map[common.Hash]bool)
@@ -183,10 +597,7 @@ func MultiPacketCheck(state *OracleState) error {
 				state.BlockHashes[header.Number.Uint64()] = p.BlockHeadersRequest[j].Hash()
 			}
 		case *NewBlockPacket:
-			// 检查区块号是否递增
-			/*if p.Block.NumberU64() <= lastBlockNumber {
-				return errors.New("non-increasing block number")
-			}*/
+
 			lastBlockNumber = p.Block.NumberU64()
 
 			// 检查总难度是否递增
@@ -256,10 +667,10 @@ func MultiPacketCheck(state *OracleState) error {
 				return err
 			}
 			state.PacketHistory[i] = checkedPacket
-		/*case *GetPooledTransactionsPacket:
+		case *GetPooledTransactionsPacket:
 		for _, hash := range p.GetPooledTransactionsRequest {
 			state.RequestedTxHashes[hash] = true
-		}*/
+		}
 		case *PooledTransactionsPacket:
 			checkedPacket, err := checkPooledTransactionsPacket(p, state)
 			if err != nil {
@@ -641,4 +1052,4 @@ func checkTransaction(tx *types.Transaction, state *OracleState) (*types.Transac
 		}
 	}
 	return nil, errors.New("insufficient balance or invalid nonce")
-}
+}*/

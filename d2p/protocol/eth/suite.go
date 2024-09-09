@@ -3,6 +3,7 @@ package eth
 import (
 	"D2PFuzz/fuzzing"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
@@ -43,7 +44,7 @@ func (s *Suite) InitializeAndConnect() error {
 		return fmt.Errorf("dial failed: %v", err)
 	}
 	if err := conn.peer(s.chain, nil); err != nil {
-		return fmt.Errorf("Peer failed: %v", err)
+		return fmt.Errorf("peer failed: %v", err)
 	}
 	return nil
 }
@@ -65,10 +66,16 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 			ForkID:          s.chain.ForkID(),
 		}, nil
 	case NewBlockHashesMsg:
+		// 使用 crypto/rand 包生成随机哈希
+		randomBytes := make([]byte, 32)
+		if _, err := rand.Read(randomBytes); err != nil {
+			return nil, fmt.Errorf("failed to generate random hash: %v", err)
+		}
+		newBlockHash := common.BytesToHash(randomBytes)
 		return &NewBlockHashesPacket{
 			{
-				Hash:   s.chain.GetBlock(0).Hash(),
-				Number: 1,
+				Hash:   newBlockHash,
+				Number: s.chain.Head().NumberU64() + 1,
 			},
 		}, nil
 	case TransactionsMsg:
