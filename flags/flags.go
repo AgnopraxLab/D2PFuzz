@@ -56,10 +56,13 @@ var (
 		Usage:   "Type of packet to generate (e.g., 'ping')",
 	}
 	CountFlag = &cli.IntFlag{
-		Name:    "count",
-		Aliases: []string{"c"},
-		Usage:   "Number of packets to generate",
-		Value:   1,
+		Name:  "count",
+		Usage: "Number of tests that should be benched/executed/generated",
+	}
+	ThreadsFlag = &cli.IntFlag{
+		Name:  "threads",
+		Usage: "Number of generator threads started (default = NUMCPU)",
+		Value: runtime.NumCPU(),
 	}
 	ChainDirFlag = &cli.StringFlag{
 		Name:  "chain",
