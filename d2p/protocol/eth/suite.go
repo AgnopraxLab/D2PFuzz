@@ -10,8 +10,10 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/trie"
 	"math/big"
 	"reflect"
+	"time"
 )
 
 type Suite struct {
@@ -134,9 +136,58 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 			BlockBodiesResponse: bodies,
 		}, nil
 	case NewBlockMsg:
+		// 生成交易
+		txs := s.makeTxs()
+
+		// 获取当前头部区块
+		parentBlock := s.chain.blocks[len(s.chain.blocks)-1]
+		parentHeader := parentBlock.Header()
+
+		// 创建新的区块头
+		newHeader := &types.Header{
+			ParentHash:  parentHeader.Hash(),
+			UncleHash:   types.EmptyUncleHash,
+			Coinbase:    s.chain.genesis.Coinbase, // 使用创世块的 coinbase
+			Root:        parentHeader.Root,        // 使用父区块的状态根
+			TxHash:      types.EmptyRootHash,
+			ReceiptHash: types.EmptyReceiptsHash,
+			Bloom:       types.Bloom{},
+			Difficulty:  new(big.Int).Add(parentHeader.Difficulty, common.Big1), // 简单地增加难度
+			Number:      new(big.Int).Add(parentHeader.Number, common.Big1),
+			GasLimit:    s.chain.genesis.GasLimit, // 使用创世块的 gas limit
+			GasUsed:     0,                        // 将在后面更新
+			Time:        uint64(time.Now().Unix()),
+			Extra:       make([]byte, 32),
+			MixDigest:   common.Hash{},
+			Nonce:       types.BlockNonce{},
+			BaseFee:     s.chain.genesis.BaseFee, // 使用创世块的 base fee，如果有的话
+		}
+
+		if s.chain.genesis.BaseFee != nil {
+			newHeader.BaseFee = new(big.Int).Set(s.chain.genesis.BaseFee)
+		}
+		// 创建区块体
+		body := &types.Body{
+			Transactions: txs,
+			Uncles:       []*types.Header{},
+			Withdrawals:  nil, // 如果不支持提款，保持为 nil
+		}
+
+		// 创建一个空的收据列表
+		var receipts []*types.Receipt
+
+		// 创建 hasher
+		hasher := trie.NewStackTrie(nil)
+
+		// 创建新区块
+		newBlock := types.NewBlock(newHeader, body, receipts, hasher)
+
+		// 计算总难度
+		td := calculateTotalDifficulty(s.chain)
+
 		return &NewBlockPacket{
-			Block: s.chain.Head(),
-			TD:    new(big.Int).SetBytes(fuzzing.RandBuff(2024)),
+			Block: newBlock,
+			TD:    td,
 		}, nil
 	case NewPooledTransactionHashesMsg:
 		txs := s.makeTxs()
@@ -252,4 +303,22 @@ func (s *Suite) GetHeaders(req *GetBlockHeadersPacket) ([]*types.Header, error) 
 // HeadersMatch headersMatch returns whether the received headers match the given request
 func HeadersMatch(expected []*types.Header, headers []*types.Header) bool {
 	return reflect.DeepEqual(expected, headers)
+}
+
+// 辅助函数：计算总 gas 使用量
+func calculateGasUsed(txs types.Transactions) uint64 {
+	var total uint64
+	for _, tx := range txs {
+		total += tx.Gas()
+	}
+	return total
+}
+
+// 辅助函数：计算总难度
+func calculateTotalDifficulty(chain *Chain) *big.Int {
+	td := new(big.Int).Set(chain.genesis.Difficulty)
+	for _, block := range chain.blocks {
+		td.Add(td, block.Difficulty())
+	}
+	return td
 }
