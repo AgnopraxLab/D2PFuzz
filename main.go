@@ -1,7 +1,24 @@
+// Copyright 2020 Fudong and Hosen
+// This file is part of the D2PFuzz library.
+//
+// The D2PFuzz library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The D2PFuzz library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the D2PFuzz library. If not, see <http://www.gnu.org/licenses/>.
+
 package main
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +38,7 @@ var setenvCommand = &cli.Command{
 		protocolFlag,
 		targetFlag,
 		engineFlag,
+		chainEnvDirFlag,
 	},
 }
 
@@ -37,13 +55,6 @@ const (
 	outputRootDir = "out"
 	crashesDir    = "crashes"
 )
-
-var protocols = []string{
-	"discv4",
-	"discv5",
-	"eth",
-	"snap",
-}
 
 func initApp() *cli.App {
 	app := cli.NewApp()
@@ -70,8 +81,8 @@ func run(c *cli.Context) error {
 		outputRootDir,
 		crashesDir,
 	}
-	for _, protocol := range protocols {
-		directories = append(directories, fmt.Sprintf("%v/%v", outputRootDir, protocol))
+	for i := 0; i < 256; i++ {
+		directories = append(directories, fmt.Sprintf("%v/%v", outputRootDir, common.Bytes2Hex([]byte{byte(i)})))
 	}
 	ensureDirs(directories...)
 	genThreads := c.Int(flags.ThreadsFlag.Name)
@@ -123,7 +134,8 @@ func setenv(c *cli.Context) error {
 	conf := &config.Config{
 		ProtocolFlag: c.String("protocol"),
 		TargetFlag:   c.String("target"),
-		EngineFlag:   c.String("engine"),
+		EngineFlag:   c.Bool("engine"),
+		ChainEnvFlag: c.String("chain"),
 	}
 
 	err := config.WriteConfig(conf)
