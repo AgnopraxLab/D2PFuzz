@@ -18,12 +18,14 @@ package fuzzing
 
 import (
 	"io"
+	"log"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 
 	"D2PFuzz/d2p/protocol/discv4"
 	"D2PFuzz/d2p/protocol/discv5"
 	"D2PFuzz/d2p/protocol/eth"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
 const (
@@ -125,10 +127,23 @@ func (m *V4Maker) ToSubTest() *stJSON {
 }
 
 func (m *V4Maker) Start(traceOutput io.Writer) error {
+	// init logger
+	var logger *log.Logger
+	if traceOutput != nil {
+		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
+	}
 
+	// Send packet sequence
 	for _, packet := range m.packets {
-		m.client.Send(m.target, packet)
-
+		if err := m.client.Send(m.target, packet); err != nil {
+			if logger != nil {
+				logger.Printf("Failed to send packet: %v", err)
+			}
+		}
+		// Record send log info
+		if logger != nil {
+			logger.Printf("Sent packet to target: %s, packet: %v", m.target.String(), packet.Kind())
+		}
 	}
 
 	return nil

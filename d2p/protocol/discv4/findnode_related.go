@@ -2,12 +2,13 @@ package discv4
 
 import (
 	"errors"
+	"net"
+	"time"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/p2p/netutil"
-	"net"
-	"time"
 )
 
 func (t *UDPv4) sendFindnode(toid enode.ID, toaddr *net.UDPAddr, target Pubkey) ([]*node, error) {
@@ -55,7 +56,6 @@ func (t *UDPv4) makeFindnode(target Pubkey) *Findnode {
 		Expiration: uint64(time.Now().Add(expiration).Unix()),
 	}
 }
-
 
 func (t *UDPv4) nodeFromRPC(sender *net.UDPAddr, rn Node) (*node, error) {
 	if rn.UDP <= 1024 {

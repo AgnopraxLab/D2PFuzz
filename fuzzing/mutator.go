@@ -2,9 +2,10 @@ package fuzzing
 
 import (
 	"encoding/binary"
-	"github.com/ethereum/go-ethereum/rlp"
 	"math/rand"
 	"unsafe"
+
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 var (

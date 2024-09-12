@@ -2,8 +2,9 @@ package fuzzing
 
 import (
 	crand "crypto/rand"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"math/rand"
+
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 // RandHex produces some random hex data

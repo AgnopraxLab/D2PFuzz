@@ -6,11 +6,12 @@ import (
 	"crypto/elliptic"
 	"errors"
 	"fmt"
+	"math/big"
+	"time"
+
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
-	"math/big"
-	"time"
 )
 
 // Expired checks whether the given UNIX time stamp is in the past.

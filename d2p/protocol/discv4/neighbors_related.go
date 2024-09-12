@@ -2,11 +2,12 @@ package discv4
 
 import (
 	"crypto/ecdsa"
+	"net"
+	"time"
+
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/netutil"
-	"net"
-	"time"
 )
 
 func (t *UDPv4) sendNeighbors(from *net.UDPAddr, fromID enode.ID, closest []*node) {
@@ -52,4 +53,3 @@ func nodeToRPC(n *node) Node {
 	}
 	return Node{ID: ekey, IP: n.IP(), UDP: uint16(n.UDP()), TCP: uint16(n.TCP())}
 }
-

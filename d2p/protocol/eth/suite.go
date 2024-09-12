@@ -1,14 +1,16 @@
 package eth
 
 import (
-	"D2PFuzz/fuzzing"
 	"crypto/ecdsa"
 	"errors"
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"math/big"
+
+	"D2PFuzz/fuzzing"
 )
 
 type Suite struct {

@@ -1,8 +1,9 @@
 package discv5
 
 import (
-	"D2PFuzz/fuzzing"
 	"math/rand"
+
+	"D2PFuzz/fuzzing"
 )
 
 func (seed *V5Seed) PacketMutate(packets []Packet, mut *fuzzing.Mutator) {

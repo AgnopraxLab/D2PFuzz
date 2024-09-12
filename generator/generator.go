@@ -19,10 +19,10 @@ package generator
 import (
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/crypto"
 	"net"
 
 	"github.com/ethereum/go-ethereum/common/mclock"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -46,11 +46,11 @@ func GenerateV4Packet(f *filler.Filler, target string) *fuzzing.V4Maker {
 	node, _ = getNode(target)
 	cli = initDiscv4()
 
-	// init oracle
+	// TODO: init oracle and series
 
 	// Generate a sequence of Packets
 	for _, i := range series {
-		packet := cli.GenPacket(i, node)
+		packet := cli.GenPacket(f, i, node)
 		packets = append(packets, packet)
 	}
 
@@ -69,11 +69,11 @@ func GenerateV5Packet(f *filler.Filler, target string) *fuzzing.V5Maker {
 	node, _ = getNode(target)
 	cli = initDiscv5()
 
-	// init oracle
+	// TODO: init oracle and series
 
 	// Generate a sequence of Packets
 	for _, i := range series {
-		packet := cli.GenPacket(i, node)
+		packet := cli.GenPacket(f, i, node)
 		packets = append(packets, packet)
 	}
 
@@ -95,7 +95,7 @@ func GenerateEthPacket(f *filler.Filler, target, chain string) *fuzzing.EthMaker
 		fmt.Printf("failed to initialize eth clients: %v", err)
 	}
 
-	// init oracle
+	// TODO: init oracle and series
 
 	// Generate a sequence of Packets
 

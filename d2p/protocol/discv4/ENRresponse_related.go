@@ -1,9 +1,10 @@
 package discv4
 
 import (
+	"net"
+
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"net"
 )
 
 func (t *UDPv4) sendENRResponse(to *net.UDPAddr, toID enode.ID, mac []byte) {

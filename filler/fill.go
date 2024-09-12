@@ -3,6 +3,16 @@ package filler
 import (
 	"encoding/binary"
 	"math/big"
+	"math/rand"
+	"net"
+
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/ethereum/go-ethereum/rlp"
+
+	"D2PFuzz/d2p/protocol/discv4"
+	"D2PFuzz/d2p/protocol/discv5"
 )
 
 // Filler can be used to fill objects from a data source.
@@ -164,4 +174,102 @@ func (f *Filler) Reset() {
 // UsedUp returns wether all bytes from the source have been used.
 func (f *Filler) UsedUp() bool {
 	return f.usedUp
+}
+
+// Filler addition
+
+// FillExpiration fills the expiration field with a random uint64 value.
+func (f *Filler) FillExpiration() uint64 {
+	return f.Uint64() // 随机生成一个 uint64 时间戳
+}
+
+// FillRest fills the Rest field with random RLP raw values.
+func (f *Filler) FillRest() []rlp.RawValue {
+	numValues := rand.Intn(10) // 随机生成 0-10 个 Rest 字段
+	rest := make([]rlp.RawValue, numValues)
+	for i := range rest {
+		rest[i] = f.ByteSlice(32) // 随机填充 32 字节的值
+	}
+	return rest
+}
+
+// FillReplyToken generates a random reply token.
+func (f *Filler) FillReplyToken() []byte {
+	return f.ByteSlice(64) // 生成 64 字节的随机回复令牌
+}
+
+// FillPubkey fills the Pubkey field with a random 64-byte value.
+func (f *Filler) FillPubkey() discv4.Pubkey {
+	var pub discv4.Pubkey
+	copy(pub[:], f.ByteSlice(64)) // 随机生成一个 64 字节的公钥
+	return pub
+}
+
+// FillIP fills the IP field with a random IP address.
+func (f *Filler) FillIP() net.IP {
+	ipLength := 4 // 选择 IPv4 地址
+	if rand.Intn(2) == 1 {
+		ipLength = 16 // 50% 概率选择 IPv6 地址
+	}
+	return net.IP(f.ByteSlice(ipLength))
+}
+
+// FillPort generates a random port number.
+func (f *Filler) FillPort() int {
+	return rand.Intn(65535) // 随机生成端口号
+}
+
+// FillReqID generates a random request ID.
+func (f *Filler) FillReqID() []byte {
+	return f.ByteSlice(8) // 生成8字节的随机请求ID
+}
+
+// FillENRSeq generates a random ENR sequence number.
+func (f *Filler) FillENRSeq() uint64 {
+	return f.Uint64() // 随机生成一个uint64 ENR序列号
+}
+
+// FillNonce generates a random Nonce.
+func (f *Filler) FillNonce() discv5.Nonce {
+	var nonce discv5.Nonce
+	copy(nonce[:], f.ByteSlice(12)) // 生成12字节的随机 Nonce
+	return nonce
+}
+
+// FillChallengeData generates random challenge data.
+func (f *Filler) FillChallengeData() []byte {
+	return f.ByteSlice(32) // 生成32字节的随机挑战数据
+}
+
+// FillDistances generates random distances for Findnode.
+func (f *Filler) FillDistances() []uint {
+	return []uint{uint(rand.Uint32()), uint(rand.Uint32()), uint(rand.Uint32())} // 将uint32显式转换为uint
+}
+
+// FillMessage generates a random message.
+func (f *Filler) FillMessage() []byte {
+	return f.ByteSlice(64) // 生成64字节的随机消息
+}
+
+// FillENRRecords generates random ENR records.
+func (f *Filler) FillENRRecords(count int) []*enr.Record {
+	var records []*enr.Record
+	for i := 0; i < count; i++ {
+		key, _ := crypto.GenerateKey()
+		var r enr.Record
+		r.Set(enr.IP(f.FillIP()))
+		r.Set(enr.UDP(f.FillPort()))
+		r.Set(enr.TCP(f.FillPort()))
+		r.Set(enode.Secp256k1(key.PublicKey))
+		r.SetSeq(f.Uint64()) // 使用随机 ENR 序列号
+		enode.SignV4(&r, key)
+		records = append(records, &r)
+	}
+	return records
+}
+
+// FillNode generates a random node.
+func (f *Filler) FillNode() *enode.Node {
+	key, _ := crypto.GenerateKey()
+	return enode.NewV4(&key.PublicKey, f.FillIP(), f.FillPort(), f.FillPort())
 }

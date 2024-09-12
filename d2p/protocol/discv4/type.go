@@ -1,15 +1,17 @@
 package discv4
 
 import (
-	"D2PFuzz/fuzzing"
 	"encoding/hex"
 	"fmt"
+	"math/rand"
+	"net"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
-	"math/rand"
-	"net"
+
+	"D2PFuzz/fuzzing"
 )
 
 // RPC packet types

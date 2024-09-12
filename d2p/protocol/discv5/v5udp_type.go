@@ -1,8 +1,6 @@
 package discv5
 
 import (
-	"D2PFuzz/d2p"
-	"D2PFuzz/fuzzing"
 	"context"
 	"crypto/ecdsa"
 	crand "crypto/rand"
@@ -13,11 +11,13 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/mclock"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+
+	"D2PFuzz/d2p"
+	"D2PFuzz/filler"
+	"D2PFuzz/fuzzing"
 )
 
 const (
@@ -139,125 +139,70 @@ func (t *UDPv5) Send(n *enode.Node, p Packet, challenge *Whoareyou) (Nonce, erro
 	return nonce, err
 }
 
-func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
+func (t *UDPv5) GenPacket(f *filler.Filler, packetType string, n *enode.Node) Packet {
 	var (
-		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
+		// addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
 		packetTypes = []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"}
 	)
-
 	switch packetType {
 	case "ping":
 		pingPacket := &Ping{
-			//ENRSeq: t.localNode.Node().Seq(),
-			ReqID:  []byte("reqid"), // 使用固定的 ReqID 用于测试
-			ENRSeq: 5,
+			ReqID:  f.FillReqID(),
+			ENRSeq: f.FillENRSeq(),
 		}
-		reqID := make([]byte, 8)
-		crand.Read(reqID)
-		pingPacket.SetRequestID(reqID)
 		return pingPacket
-
 	case "pong":
 		pongPacket := &Pong{
-			ENRSeq: t.localNode.Seq(),
-			ToIP:   addr.IP,
-			ToPort: uint16(addr.Port),
+			ReqID:  f.FillReqID(),
+			ENRSeq: f.FillENRSeq(),
+			ToIP:   f.FillIP(),
+			ToPort: uint16(f.FillPort()),
 		}
-		reqID := make([]byte, 8)
-		crand.Read(reqID)
-		pongPacket.SetRequestID(reqID)
 		return pongPacket
-
 	case "findnode":
 		findnodePacket := &Findnode{
-			Distances: []uint{256, 255, 254}, // 示例距离
+			ReqID:     f.FillReqID(),
+			Distances: f.FillDistances(),
 		}
-		reqID := make([]byte, 8)
-		crand.Read(reqID)
-		findnodePacket.SetRequestID(reqID)
 		return findnodePacket
-
 	case "nodes":
-		key, _ := crypto.GenerateKey()
-		var r enr.Record
-		r.Set(enr.IP(net.IP{127, 0, 0, 1}))
-		r.Set(enr.UDP(30303))
-		r.Set(enr.TCP(30303))
-		r.Set(enode.Secp256k1(key.PublicKey))
-		r.SetSeq(1)
-		enode.SignV4(&r, key)
-
-		var records []*enr.Record
-		for i := 0; i < 3; i++ {
-			records = append(records, &r)
-		}
-
+		records := f.FillENRRecords(3)
 		nodesPacket := &Nodes{
+			ReqID:     f.FillReqID(),
 			RespCount: uint8(len(records)),
 			Nodes:     records,
 		}
-		reqID := make([]byte, 8)
-		crand.Read(reqID)
-		nodesPacket.SetRequestID(reqID)
 		return nodesPacket
-
 	case "talkrequest":
 		talkReqPacket := &TalkRequest{
-			Protocol: "example-protocol",
-			Message:  []byte("Hello, world!"),
+			ReqID:    f.FillReqID(),
+			Protocol: "discv5",
+			Message:  f.FillMessage(),
 		}
-		reqID := make([]byte, 8)
-		crand.Read(reqID)
-		talkReqPacket.SetRequestID(reqID)
 		return talkReqPacket
-
 	case "talkresponse":
 		talkRespPacket := &TalkResponse{
-			Message: []byte("Response received"),
+			ReqID:   f.FillReqID(),
+			Message: f.FillMessage(),
 		}
-		reqID := make([]byte, 8)
-		crand.Read(reqID)
-		talkRespPacket.SetRequestID(reqID)
 		return talkRespPacket
-	/*case "whoareyou":
-	whoareyouPacket := &Whoareyou{
-		ChallengeData: make([]byte, 32),
-		RecordSeq:     1721275104493,
-		Node:          t.localNode.Node(),
-	}
-	crand.Read(whoareyouPacket.IDNonce[:])
-	crand.Read(whoareyouPacket.Nonce[:])
-	whoareyouPacket.sent = t.clock.Now()
-	return whoareyouPacket*/
 	case "whoareyou":
-		// 创建一个新的 enr.Record
-		r := enr.Record{}
-		r.Set(enr.UDP(30303))   // 设置 UDP 端口
-		r.SetSeq(1721275398453) // 设置序列号
-
-		// 创建一个新的 enode.Node
-		id := enode.HexID("6516a94edcc63ec65b32ab7ea215e45fdce8ded08dccc8878c9d1642fd3eba85")
-		remoteNode := enode.SignNull(&r, id)
-
 		whoareyouPacket := &Whoareyou{
-			ChallengeData: make([]byte, 32),
-			RecordSeq:     1721275398453, // 使用打印出的 RecordSeq
-			Node:          remoteNode,    // 使用新创建的 Node
+			ChallengeData: f.FillChallengeData(),
+			RecordSeq:     f.FillENRSeq(),
+			Node:          f.FillNode(),
 		}
-		crand.Read(whoareyouPacket.IDNonce[:])
-		crand.Read(whoareyouPacket.Nonce[:])
 		whoareyouPacket.sent = t.clock.Now()
 		return whoareyouPacket
 	case "unknown":
 		unknownPacket := &Unknown{
-			Nonce: Nonce{}, // 创建一个空的 Nonce
+			Nonce: Nonce(f.FillNonce()),
 		}
-		crand.Read(unknownPacket.Nonce[:])
 		return unknownPacket
 	case "random":
 		randomIndex := cryptoRandIntn(len(packetTypes))
 		randomType := packetTypes[randomIndex]
-		return t.GenPacket(randomType, n)
+		return t.GenPacket(f, randomType, n)
 	default:
 		return nil
 	}
@@ -267,30 +212,6 @@ func cryptoRandIntn(n int) int {
 	b := make([]byte, 4)
 	crand.Read(b)
 	return int(binary.BigEndian.Uint32(b) % uint32(n))
-}
-
-func (t *UDPv5) CreateSeed(node *enode.Node) (*V5Seed, error) {
-	var packets []Packet
-
-	// 生成各种类型的Packet并添加到packets切片中
-	packetTypes := []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"}
-
-	for _, pType := range packetTypes {
-		packet := t.GenPacket(pType, node)
-		if packet != nil {
-			packets = append(packets, packet)
-		}
-	}
-	seedID := fmt.Sprintf("%d", time.Now().Unix())
-	seed := &V5Seed{
-		ID:        seedID,
-		Packets:   packets,
-		Priority:  1,
-		Mutations: 0,
-		Series:    make([]*StateSeries, 0),
-	}
-
-	return seed, nil
 }
 
 func (t *UDPv5) RunPacketTest(seed *V5Seed, node *enode.Node, mut *fuzzing.Mutator) (*V5Seed, error) {
@@ -379,7 +300,7 @@ func (t *UDPv5) EncodePacket(id enode.ID, addr string, packet Packet, challenge 
 	return t.codec.Encode(id, addr, packet, challenge)
 }
 
-func (t *UDPv5) DecodePacket(input []byte, fromAddr string) (enode.ID, *enode.Node, v5wire.Packet, error) {
+func (t *UDPv5) DecodePacket(input []byte, fromAddr string) (enode.ID, *enode.Node, Packet, error) {
 	return t.codec.Decode(input, fromAddr)
 
 }
