@@ -1,18 +1,18 @@
 package discv5
 
 import (
-	"D2PFuzz/fuzzing"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"strings"
+
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
-	"net"
-	"strings"
 )
 
 const (
@@ -40,8 +40,6 @@ type Packet interface {
 	// AppendLogInfo returns its argument 'ctx' with additional fields
 	// appended for logging purposes.
 	AppendLogInfo(ctx []interface{}) []interface{}
-
-	mutate(mut *fuzzing.Mutator)
 }
 
 // Message types.
@@ -296,39 +294,4 @@ func (req *TalkResponse) String() string {
 
 func (req *TalkResponse) AppendLogInfo(ctx []interface{}) []interface{} {
 	return append(ctx, "req", hexutil.Bytes(req.ReqID), "len", len(req.Message))
-}
-
-// mutate
-func (req *Whoareyou) mutate(mut *fuzzing.Mutator) {
-	mut.MutateBytes(&req.ChallengeData)
-}
-
-func (req *Unknown) mutate(mut *fuzzing.Mutator) {
-
-}
-
-func (req *Ping) mutate(mut *fuzzing.Mutator) {
-	mut.MutateBytes(&req.ReqID)
-}
-
-func (req *Pong) mutate(mut *fuzzing.Mutator) {
-	mut.MutateBytes(&req.ReqID)
-}
-
-func (req *Findnode) mutate(mut *fuzzing.Mutator) {
-	mut.MutateBytes(&req.ReqID)
-}
-
-func (req *Nodes) mutate(mut *fuzzing.Mutator) {
-	mut.MutateBytes(&req.ReqID)
-}
-
-func (req *TalkRequest) mutate(mut *fuzzing.Mutator) {
-	mut.MutateBytes(&req.ReqID)
-	mut.MutateBytes(&req.Message)
-}
-
-func (req *TalkResponse) mutate(mut *fuzzing.Mutator) {
-	mut.MutateBytes(&req.ReqID)
-	mut.MutateBytes(&req.Message)
 }

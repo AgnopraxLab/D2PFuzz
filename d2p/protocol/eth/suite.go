@@ -3,14 +3,14 @@ package eth
 import (
 	"crypto/ecdsa"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-
-	"D2PFuzz/fuzzing"
+	"golang.org/x/exp/rand"
 )
 
 type Suite struct {
@@ -44,10 +44,15 @@ type PacketSpecification struct {
 func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, error) {
 	switch packetType {
 	case StatusMsg:
+		buf := make([]byte, 2024)
+		_, err := rand.Read(buf)
+		if err != nil {
+			fmt.Println("Error generating random bytes:", err)
+		}
 		return &StatusPacket{
 			ProtocolVersion: uint32(s.conn.negotiatedProtoVersion),
 			NetworkID:       s.chain.config.ChainID.Uint64(),
-			TD:              new(big.Int).SetBytes(fuzzing.RandBuff(2024)),
+			TD:              new(big.Int).SetBytes(buf),
 			Head:            s.chain.Head().Hash(),
 			Genesis:         s.chain.GetBlock(0).Hash(),
 			ForkID:          s.chain.ForkID(),
@@ -115,9 +120,14 @@ func (s *Suite) GenPacket(packetType int, spec *PacketSpecification) (Packet, er
 			BlockBodiesResponse: bodies,
 		}, nil
 	case NewBlockMsg:
+		buf := make([]byte, 2024)
+		_, err := rand.Read(buf)
+		if err != nil {
+			fmt.Println("Error generating random bytes:", err)
+		}
 		return &NewBlockPacket{
 			Block: s.chain.Head(),
-			TD:    new(big.Int).SetBytes(fuzzing.RandBuff(2024)),
+			TD:    new(big.Int).SetBytes(buf),
 		}, nil
 	case NewPooledTransactionHashesMsg:
 		txs := s.makeTxs()

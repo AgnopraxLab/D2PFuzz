@@ -16,8 +16,8 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
 
-	"D2PFuzz/d2p"
-	"D2PFuzz/filler"
+	"github.com/AgnopraxLab/D2PFuzz/d2p"
+	"github.com/AgnopraxLab/D2PFuzz/filler"
 )
 
 // UDPv4 implements the v4 wire protocol.
@@ -261,7 +261,7 @@ func (t *UDPv4) GenPacket(f *filler.Filler, packetType string, n *enode.Node) Pa
 		}
 	case "findnode":
 		req := &Findnode{
-			Target:     f.FillPubkey(), // 使用随机生成的 Pubkey
+			Target:     Pubkey(f.FillPubkey()), // 使用随机生成的 Pubkey
 			Expiration: f.FillExpiration(),
 			Rest:       f.FillRest(), // 随机填充 Rest 字段
 		}

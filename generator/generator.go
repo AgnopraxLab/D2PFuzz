@@ -27,12 +27,12 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 
-	"D2PFuzz/d2p"
-	"D2PFuzz/d2p/protocol/discv4"
-	"D2PFuzz/d2p/protocol/discv5"
-	"D2PFuzz/d2p/protocol/eth"
-	"D2PFuzz/filler"
-	"D2PFuzz/fuzzing"
+	"github.com/AgnopraxLab/D2PFuzz/d2p"
+	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv4"
+	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv5"
+	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
+	"github.com/AgnopraxLab/D2PFuzz/filler"
+	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 )
 
 func GenerateV4Packet(f *filler.Filler, target string) *fuzzing.V4Maker {

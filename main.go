@@ -18,16 +18,15 @@ package main
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"os"
 	"os/exec"
 	"path/filepath"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/urfave/cli/v2"
 
-	"D2PFuzz/config"
-	"D2PFuzz/flags"
-	"D2PFuzz/fuzzer"
+	"github.com/AgnopraxLab/D2PFuzz/config"
+	"github.com/AgnopraxLab/D2PFuzz/fuzzer"
 )
 
 var setenvCommand = &cli.Command{
@@ -85,7 +84,7 @@ func run(c *cli.Context) error {
 		directories = append(directories, fmt.Sprintf("%v/%v", outputRootDir, common.Bytes2Hex([]byte{byte(i)})))
 	}
 	ensureDirs(directories...)
-	genThreads := c.Int(flags.ThreadsFlag.Name)
+	genThreads := c.Int(threadsFlag.Name)
 	cmd := startGenerator(genThreads)
 	return cmd.Wait()
 }

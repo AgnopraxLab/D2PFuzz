@@ -1,3 +1,19 @@
+// Copyright 2024 Fudong and Hosen
+// This file is part of the D2PFuzz library.
+//
+// The D2PFuzz library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The D2PFuzz library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the D2PFuzz library. If not, see <http://www.gnu.org/licenses/>.
+
 package filler
 
 import (
@@ -10,9 +26,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
-
-	"D2PFuzz/d2p/protocol/discv4"
-	"D2PFuzz/d2p/protocol/discv5"
 )
 
 // Filler can be used to fill objects from a data source.
@@ -178,6 +191,9 @@ func (f *Filler) UsedUp() bool {
 
 // Filler addition
 
+type Nonce [12]byte
+type Pubkey [64]byte
+
 // FillExpiration fills the expiration field with a random uint64 value.
 func (f *Filler) FillExpiration() uint64 {
 	return f.Uint64() // 随机生成一个 uint64 时间戳
@@ -199,8 +215,8 @@ func (f *Filler) FillReplyToken() []byte {
 }
 
 // FillPubkey fills the Pubkey field with a random 64-byte value.
-func (f *Filler) FillPubkey() discv4.Pubkey {
-	var pub discv4.Pubkey
+func (f *Filler) FillPubkey() Pubkey {
+	var pub Pubkey
 	copy(pub[:], f.ByteSlice(64)) // 随机生成一个 64 字节的公钥
 	return pub
 }
@@ -230,8 +246,8 @@ func (f *Filler) FillENRSeq() uint64 {
 }
 
 // FillNonce generates a random Nonce.
-func (f *Filler) FillNonce() discv5.Nonce {
-	var nonce discv5.Nonce
+func (f *Filler) FillNonce() Nonce {
+	var nonce Nonce
 	copy(nonce[:], f.ByteSlice(12)) // 生成12字节的随机 Nonce
 	return nonce
 }

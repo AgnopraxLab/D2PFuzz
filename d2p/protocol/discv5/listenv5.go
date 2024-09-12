@@ -1,9 +1,9 @@
 package discv5
 
 import (
-	"D2PFuzz/d2p"
 	"context"
 	"errors"
+	"github.com/AgnopraxLab/D2PFuzz/d2p"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/netutil"
@@ -55,7 +55,6 @@ func newUDPv5(conn d2p.UDPConn, ln *enode.LocalNode, cfg d2p.Config) (*UDPv5, er
 	t.talk = newTalkSystem(t)
 	return t, nil
 }
-
 
 // Close shuts down packet processing.
 func (t *UDPv5) Close() {

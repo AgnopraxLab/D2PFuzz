@@ -1,14 +1,15 @@
 package discv5
 
 import (
-	"D2PFuzz/d2p"
 	crand "crypto/rand"
 	"errors"
 	"fmt"
+	"net"
+
+	"github.com/AgnopraxLab/D2PFuzz/d2p"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/p2p/discover/v5wire"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"net"
 )
 
 // Errors
