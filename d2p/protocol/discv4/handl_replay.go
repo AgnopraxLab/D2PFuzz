@@ -1,12 +1,14 @@
 package discv4
 
 import (
+	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/enr"
+	"log"
 	"net"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/p2p/enr"
 )
 
 // handleReply dispatches a reply packet, invoking reply matchers. It returns
@@ -78,11 +80,22 @@ func (t *UDPv4) verifyPing(h *packetHandlerV4, from *net.UDPAddr, fromID enode.I
 }
 
 func (t *UDPv4) handlePing(h *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, mac []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered in handlePing: %v", r)
+		}
+	}()
+
+	// 打印接收到 Ping 包的信息
+	log.Printf("Received Ping packet from %s (ID: %s)", from.String(), fromID.String())
+
+	// 获取并打印 Ping 包的内容
 	req := h.Packet.(*Ping)
+	log.Printf("Ping packet content: From: %v, To: %v", req.From, req.To)
 
 	// Reply with Pong.
 	if err := t.sendPong(fromID, from, req, mac); err != nil {
-		// handle error if needed
+		log.Printf("Error sending Pong: %v", err)
 	}
 
 	// Ping back if our last pong on file is too far in the past.
@@ -105,6 +118,14 @@ func (t *UDPv4) handlePing(h *packetHandlerV4, from *net.UDPAddr, fromID enode.I
 
 func (t *UDPv4) verifyPong(h *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, fromKey Pubkey) error {
 	req := h.Packet.(*Pong)
+
+	// 打印 Pong 包的内容
+	fmt.Printf("Received Pong packet:\n")
+	fmt.Printf("  From: %s\n", from.String())
+	fmt.Printf("  To: %s:%d\n", req.To.IP, req.To.UDP)
+	fmt.Printf("  ReplyTok: %x\n", req.ReplyTok)
+	fmt.Printf("  Expiration: %d\n", req.Expiration)
+	fmt.Printf("  ENRSeq: %d\n", req.ENRSeq)
 
 	if Expired(req.Expiration) {
 		return errExpired
@@ -137,31 +158,73 @@ func (t *UDPv4) verifyFindnode(h *packetHandlerV4, from *net.UDPAddr, fromID eno
 }
 
 func (t *UDPv4) handleFindnode(h *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, mac []byte) {
-	req := h.Packet.(*Findnode)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered in handleFindnode: %v", r)
+		}
+	}()
 
-	// 创建一个自定义的节点记录
-	key, _ := crypto.GenerateKey()
-	var r enr.Record
+	// 打印接收到 Findnode 包的信息
+	log.Printf("Received Findnode packet from %s (ID: %s)", from.String(), fromID.String())
+
+	// 获取并打印 Findnode 包的内容
+	req := h.Packet.(*Findnode)
+	log.Printf("Findnode packet content: Target: %x", req.Target)
+
+	// 生成新的私钥
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		log.Printf("Error generating key: %v", err)
+		return
+	}
+
+	// 创建一个新的 ENR
+	r := enr.Record{}
+
+	// 使用 Set 方法添加字段，这可能会 panic
 	r.Set(enr.IP(net.IP{127, 0, 0, 1}))
 	r.Set(enr.UDP(30303))
-	r.Set(enr.TCP(30303)) //16个一组
-	r.Set(Secp256k1(key.PublicKey))
-	r.Set(enr.WithEntry("target", req.Target))
+	r.Set(enr.TCP(30303))
+	r.Set(enode.Secp256k1(key.PublicKey))
+
+	// 使用私钥签名 ENR
+	err = enode.SignV4(&r, key)
+	if err != nil {
+		log.Printf("Error signing ENR: %v", err)
+		return
+	}
 
 	// 使用节点记录创建一个新的 enode.Node 对象
-	customNode, _ := enode.New(enode.ValidSchemes, &r)
+	customNode, err := enode.New(enode.V4ID{}, &r)
+	if err != nil {
+		log.Printf("Error creating custom node: %v", err)
+		return
+	}
+
+	log.Printf("Custom node created: %v", customNode.String())
 
 	// 将自定义节点作为最接近的节点
 	closest := []*node{wrapNode(customNode)}
 
 	// 发送 neighbors
 	t.sendNeighbors(from, fromID, closest)
+	log.Printf("Sent Neighbors response to %s", from.String())
 }
 
 // NEIGHBORS/v4
 
 func (t *UDPv4) verifyNeighbors(h *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, fromKey Pubkey) error {
 	req := h.Packet.(*Neighbors)
+
+	// 打印 Neighbors 包的内容
+	fmt.Printf("Received Neighbors packet:\n")
+	fmt.Printf("  From: %s\n", from.String())
+	fmt.Printf("  Expiration: %d\n", req.Expiration)
+	fmt.Printf("  Nodes:\n")
+	for i, node := range req.Nodes {
+		fmt.Printf("    Node %d: %v\n", i, node) // 假设 Node 实现了 String() 方法，适当调整根据实际情况
+	}
+	fmt.Printf("  Rest: %v\n", req.Rest)
 
 	if Expired(req.Expiration) {
 		return errExpired
@@ -187,12 +250,33 @@ func (t *UDPv4) verifyENRRequest(h *packetHandlerV4, from *net.UDPAddr, fromID e
 }
 
 func (t *UDPv4) handleENRRequest(h *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, mac []byte) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered in handleENRRequest: %v", r)
+		}
+	}()
+
+	// 打印接收到 ENRRequest 包的信息
+	log.Printf("Received ENRRequest packet from %s (ID: %s)", from.String(), fromID.String())
+
+	// 获取并打印 ENRRequest 包的内容
+	req := h.Packet.(*ENRRequest)
+	log.Printf("ENRRequest packet content: %+v", req)
+
 	t.sendENRResponse(from, fromID, mac)
+
 }
 
 // ENRRESPONSE/v4
 
 func (t *UDPv4) verifyENRResponse(h *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, fromKey Pubkey) error {
+	req := h.Packet.(*ENRResponse)
+	// 打印 ENRResponse 包的内容
+	fmt.Printf("Received ENRResponse packet:\n")
+	fmt.Printf("  From: %s\n", from.String())
+	fmt.Printf("  ReplyTok: %x\n", req.ReplyTok)
+	fmt.Printf("  Record: %v\n", req.Record)
+
 	if !t.handleReply(fromID, from.IP, h.Packet) {
 		return errUnsolicitedReply
 	}

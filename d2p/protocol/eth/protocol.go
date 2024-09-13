@@ -1,5 +1,10 @@
 package eth
 
+import (
+	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/rlp"
+)
+
 // Unexported devp2p message codes from p2p/peer.go.
 const (
 	handshakeMsg = 0x00
@@ -34,4 +39,14 @@ func protoOffset(proto Proto) uint64 {
 	default:
 		panic("unhandled protocol")
 	}
+}
+
+// Unexported handshake structure from p2p/peer.go.
+type protoHandshake struct {
+	Version    uint64
+	Name       string
+	Caps       []p2p.Cap
+	ListenPort uint64
+	ID         []byte
+	Rest       []rlp.RawValue `rlp:"tail"`
 }

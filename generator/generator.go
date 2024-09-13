@@ -98,7 +98,7 @@ func GenerateEthPacket(f *filler.Filler, target, chain string) *fuzzing.EthMaker
 	}
 
 	// TODO: init oracle and series
-	state := eth.NewOracleState() // 创建Oracle状态
+	state := eth.InitOracleState(cli)
 
 	// Generate a sequence of Packets
 	spec := &eth.PacketSpecification{
@@ -115,18 +115,12 @@ func GenerateEthPacket(f *filler.Filler, target, chain string) *fuzzing.EthMaker
 			fmt.Println("GenPacket fail")
 		}
 		// Checking and Correcting Packets with Oracle
-		checkedPacket, err := eth.OracleCheck(packet, state)
+		checkedPacket, err := eth.OracleCheck(packet, state, cli)
 		if err != nil {
 			fmt.Println("oracle check fail")
 		}
 		state.PacketHistory = append(state.PacketHistory, checkedPacket)
 		packets = append(packets, packet)
-	}
-
-	// Multi-package logic checking after generating all packages
-	err = eth.MultiPacketCheck(state)
-	if err != nil {
-		fmt.Println("multi-packet check fail")
 	}
 
 	ethmaker := fuzzing.NewEthMaker(cli, node, packets)
