@@ -5,11 +5,13 @@ import (
 	"compress/gzip"
 	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/crypto"
 	"io"
+	"math/big"
 	"os"
 	"path/filepath"
 	"sort"
@@ -63,7 +65,7 @@ func NewChain(dir string) (*Chain, error) {
 	if err != nil {
 		return nil, err
 	}
-	state, err := readState(filepath.Join(dir, "headstate.json"))
+	sTate, err := readState(filepath.Join(dir, "headstate.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +76,7 @@ func NewChain(dir string) (*Chain, error) {
 	return &Chain{
 		genesis: gen,
 		blocks:  blocks,
-		state:   state,
+		state:   sTate,
 		senders: accounts,
 		config:  gen.Config,
 	}, nil
@@ -133,15 +135,15 @@ func readState(file string) (map[common.Address]state.DumpAccount, error) {
 		return nil, fmt.Errorf("unable to unmarshal state: %v", err)
 	}
 
-	state := make(map[common.Address]state.DumpAccount)
+	sTate := make(map[common.Address]state.DumpAccount)
 	for key, acct := range dump.Accounts {
 		var addr common.Address
 		if err := addr.UnmarshalText([]byte(key)); err != nil {
 			return nil, fmt.Errorf("invalid address %q", key)
 		}
-		state[addr] = acct
+		sTate[addr] = acct
 	}
-	return state, nil
+	return sTate, nil
 }
 
 func readAccounts(file string) (map[common.Address]*senderInfo, error) {
@@ -176,6 +178,16 @@ func (c *Chain) Head() *types.Block {
 	return c.blocks[c.Len()-1]
 }
 
+// TD calculates the total difficulty of the chain at the
+// chain head.
+func (c *Chain) TD() *big.Int {
+	sum := new(big.Int)
+	for _, block := range c.blocks[:c.Len()] {
+		sum.Add(sum, block.Difficulty())
+	}
+	return sum
+}
+
 func (c *Chain) GetBlock(number int) *types.Block {
 	return c.blocks[number]
 }
@@ -206,4 +218,37 @@ func (c *Chain) SignTx(from common.Address, tx *types.Transaction) (*types.Trans
 		return nil, fmt.Errorf("account not available for signing: %s", from)
 	}
 	return types.SignTx(tx, signer, acc.Key)
+}
+
+// GetHeaders returns the headers base on an ethGetPacketHeadersPacket.
+func (c *Chain) GetHeaders(req *GetBlockHeadersPacket) ([]*types.Header, error) {
+	if req.Amount < 1 {
+		return nil, errors.New("no block headers requested")
+	}
+	var (
+		headers     = make([]*types.Header, req.Amount)
+		blockNumber uint64
+	)
+	// Range over blocks to check if our chain has the requested header.
+	for _, block := range c.blocks {
+		if block.Hash() == req.Origin.Hash || block.Number().Uint64() == req.Origin.Number {
+			headers[0] = block.Header()
+			blockNumber = block.Number().Uint64()
+		}
+	}
+	if headers[0] == nil {
+		return nil, fmt.Errorf("no headers found for given origin number %v, hash %v", req.Origin.Number, req.Origin.Hash)
+	}
+	if req.Reverse {
+		for i := 1; i < int(req.Amount); i++ {
+			blockNumber -= 1 - req.Skip
+			headers[i] = c.blocks[blockNumber].Header()
+		}
+		return headers, nil
+	}
+	for i := 1; i < int(req.Amount); i++ {
+		blockNumber += 1 + req.Skip
+		headers[i] = c.blocks[blockNumber].Header()
+	}
+	return headers, nil
 }

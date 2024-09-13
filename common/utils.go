@@ -37,8 +37,6 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-var ()
-
 func initDiscv4(thread int) []*discv4.UDPv4 {
 	var (
 		clients  []*discv4.UDPv4
@@ -124,14 +122,19 @@ func initeth(thread int, dest *enode.Node, dir string) ([]*eth.Suite, error) {
 	)
 
 	for i := 0; i < thread; i++ {
-		pri, _ := crypto.GenerateKey()
+		pri, err := crypto.GenerateKey()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate key for client %d: %v", i+1, err)
+		}
 		client, err := eth.NewSuite(dest, dir, pri)
 		if err != nil {
-			return nil, errors.New("New Suite fail")
+			return nil, fmt.Errorf("failed to create new Suite for client %d: %v", i+1, err)
+		}
+		if err := client.InitializeAndConnect(); err != nil {
+			return nil, fmt.Errorf("initialization and connection failed for client %d: %v", i+1, err)
 		}
 		clients = append(clients, client)
 	}
-
 	return clients, nil
 }
 
@@ -602,7 +605,7 @@ func discv4Generator(packetType string, count int, node *enode.Node, genTest boo
 		// todo: need Fuzzer send generator just return array of raw packet
 		if genTest {
 			data, _ := json.MarshalIndent(req, "", "")
-			fmt.Printf(string(data))
+			fmt.Printf("Sending packet: %s\n", string(data))
 
 			// 根据数据包类型设置预期的响应类型
 			var expectedResponseType byte
@@ -613,6 +616,15 @@ func discv4Generator(packetType string, count int, node *enode.Node, genTest boo
 				expectedResponseType = discv4.NeighborsPacket
 			case "ENRRequest":
 				expectedResponseType = discv4.ENRResponsePacket
+			case "pong":
+				fmt.Printf("Send pong packet, no further action needed\n")
+				continue
+			case "neighbors":
+				fmt.Printf("Send neighbors packet, processing not implemented\n")
+				continue
+			case "ENRResponse":
+				fmt.Printf("Send ENR response, no further action needed\n")
+				continue
 			// 添加其他数据包类型的处理...
 			default:
 				fmt.Printf("Unknown packet type: %s\n", packetType)
@@ -621,9 +633,14 @@ func discv4Generator(packetType string, count int, node *enode.Node, genTest boo
 
 			// 设置回复匹配器
 			rm := client.Pending(node.ID(), node.IP(), expectedResponseType, func(p discv4.Packet) (matched bool, requestDone bool) {
-				// 这里可以添加更详细的匹配逻辑
-				fmt.Printf("Received response: %+v\n", p)
-				return true, true
+				fmt.Printf("Received packet of type: %T\n", p)
+				if pong, ok := p.(*discv4.Pong); ok {
+					fmt.Printf("Received Pong response: %+v\n", pong)
+					return true, true
+				}
+				// 记录其他类型的包，但不将它们视为匹配
+				fmt.Printf("Received non-Pong packet: %+v\n", p)
+				return false, false
 			})
 
 			// 发送数据包
@@ -658,21 +675,13 @@ func discv5Generator(packetType string, count int, node *enode.Node, genTest boo
 
 	for i := 0; i < count; i++ {
 		req := client.GenPacket(packetType, node)
-		//println(req.String())
-
-		fmt.Printf("lnIP: %v\n", client.LocalNode().Node().IP().String())
-
-		// 在调用 EncodePacket 之前打印输入
-		fmt.Printf("EncodePacket Input:\n")
-		fmt.Printf("packet: %+v\n", req)
-		fmt.Printf("challenge: nil\n")
 
 		// 调用 EncodePacket
 		//en_packet, nonce, err := client.EncodePacket(node.ID(), addr, packet, nil)
 		if genTest {
 			data, _ := json.MarshalIndent(req, "", "")
 			fmt.Printf(string(data))
-			nonce, err := client.Send(node, req, nil)
+			nonce, err := sendAndReceive(client, node, req)
 			if err != nil {
 				panic(fmt.Errorf("can't send %v: %v", packetType, err))
 			}
@@ -685,14 +694,77 @@ func discv5Generator(packetType string, count int, node *enode.Node, genTest boo
 	return reqQueues, nil
 }
 
+const waitTime = 5 * time.Second
+
+func sendAndReceive(client *discv5.UDPv5, node *enode.Node, req discv5.Packet) (discv5.Nonce, error) {
+	nonce, err := client.Send(node, req, nil)
+	if err != nil {
+		return nonce, fmt.Errorf("failed to send packet: %v", err)
+	}
+
+	// 设置读取超时
+	client.SetReadDeadline(time.Now().Add(waitTime))
+
+	buf := make([]byte, 1280)
+	n, fromAddr, err := client.ReadFromUDP(buf)
+	if err != nil {
+		return nonce, fmt.Errorf("failed to read response: %v", err)
+	}
+
+	packet, _, err := client.Decode(buf[:n], fromAddr.String())
+	if err != nil {
+		return nonce, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	switch resp := packet.(type) {
+	case *discv5.Whoareyou:
+		if resp.Nonce != nonce {
+			return nonce, fmt.Errorf("wrong nonce in WHOAREYOU")
+		}
+		// 处理握手
+		challenge := &discv5.Whoareyou{
+			Nonce:     resp.Nonce,
+			IDNonce:   resp.IDNonce,
+			RecordSeq: resp.RecordSeq,
+		}
+		nonce, err = client.Send(node, req, challenge)
+		if err != nil {
+			return nonce, fmt.Errorf("failed to send handshake: %v", err)
+		}
+		// 再次读取响应
+		return sendAndReceive(client, node, req)
+	case *discv5.Unknown:
+		fmt.Printf("Got Unknown: Nonce=%x\n", resp.Nonce)
+	case *discv5.Ping:
+		fmt.Printf("Got Ping包: ReqID=%x, ENRSeq=%d\n", resp.ReqID, resp.ENRSeq)
+	case *discv5.Pong:
+		fmt.Printf("Got Pong包: ReqID=%x, ENRSeq=%d, ToIP=%v, ToPort=%d\n", resp.ReqID, resp.ENRSeq, resp.ToIP, resp.ToPort)
+	case *discv5.Findnode:
+		fmt.Printf("Got Findnode包: ReqID=%x, Distances=%v, OpID=%d\n", resp.ReqID, resp.Distances, resp.OpID)
+	case *discv5.Nodes:
+		fmt.Printf("Got Nodes包: ReqID=%x, RespCount=%d, Nodes数量=%d\n", resp.ReqID, resp.RespCount, len(resp.Nodes))
+		for i, node := range resp.Nodes {
+			fmt.Printf("  Node %d: %v\n", i, node)
+		}
+	case *discv5.TalkRequest:
+		fmt.Printf("Got TalkRequest包: ReqID=%x, Protocol=%s, Message=%x\n", resp.ReqID, resp.Protocol, resp.Message)
+	case *discv5.TalkResponse:
+		fmt.Printf("Got TalkResponse包: ReqID=%x, Message=%x\n", resp.ReqID, resp.Message)
+	default:
+		return nonce, fmt.Errorf("unexpected response type: %T", resp)
+	}
+	return nonce, nil
+}
+
 func ethGenerator(dir string, packetType, count int, nodeList *enode.Node, genTestFlag bool) error {
 	clients, err := initeth(1, nodeList, dir)
 	if err != nil {
-		return errors.New("clients init error")
+		return fmt.Errorf("ethGenerator failed: %v", err)
 	}
 	client := clients[0]
 
-	state := eth.NewOracleState() // 创建Oracle状态
+	// 初始化Oracle状态
+	state := eth.InitOracleState(client)
 
 	// 初始化 PacketSpecification
 	spec := &eth.PacketSpecification{
@@ -712,7 +784,7 @@ func ethGenerator(dir string, packetType, count int, nodeList *enode.Node, genTe
 		}
 
 		// 使用Oracle检查并修正数据包
-		checkedPacket, err := eth.OracleCheck(packet, state)
+		checkedPacket, err := eth.OracleCheck(packet, state, client)
 		if err != nil {
 			return errors.New("oracle check fail")
 		}
@@ -720,14 +792,39 @@ func ethGenerator(dir string, packetType, count int, nodeList *enode.Node, genTe
 		state.PacketHistory = append(state.PacketHistory, checkedPacket)
 	}
 
-	// 在生成所有包后进行多包逻辑检验
-	err = eth.MultiPacketCheck(state)
-	if err != nil {
-		return errors.New("multi-packet check fail")
-	}
-	// 输出修正后的包
+	// 发送包并处理响应
 	for _, packet := range state.PacketHistory {
-		println(packet)
+		switch p := packet.(type) {
+		case *eth.GetBlockHeadersPacket:
+			// 使用 Suite 的方法发送消息
+			if err := client.SendMsg(eth.ETH68, eth.GetBlockHeadersMsg, p); err != nil {
+				return fmt.Errorf("could not send message: %v", err)
+			}
+
+			headers := new(eth.BlockHeadersPacket)
+			if err := client.ReadMsg(eth.ETH68, eth.BlockHeadersMsg, headers); err != nil {
+				return fmt.Errorf("error reading msg: %v", err)
+			}
+
+			if headers.RequestId != p.RequestId {
+				return errors.New("unexpected request id")
+			}
+
+			expected, err := client.GetHeaders(p)
+			if err != nil {
+				return fmt.Errorf("failed to get headers for given request: %v", err)
+			}
+
+			if !eth.HeadersMatch(expected, headers.BlockHeadersRequest) {
+				return errors.New("header mismatch")
+			}
+
+			fmt.Printf("Received headers for request %d\n", headers.RequestId)
+
+		// 添加其他数据包类型的处理...
+		default:
+			fmt.Printf("Unsupported packet type: %T\n", packet)
+		}
 	}
 
 	return nil
