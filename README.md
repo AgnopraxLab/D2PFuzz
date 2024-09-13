@@ -7,31 +7,28 @@ D2PFuzz is a fuzzer tool for analyze the Ethernet DevP2P protocol. It is able to
 Introduction of some files and directories:
 
 - `README.md`: basic information about D2PFuzz
-- `cmd/`: Executable commands
-- `d2p/`: ethereum devp2p protocol
+- `generator/`: Generator tool for fuzzer
+- `d2p/`: Ethereum devp2p protocol related
 - `fuzzing/` : Mutation tools used in fuzz testing
+- `fuzzer` : Fuzzer testing tool
 - `utils/` : External Toolkit
 - `test/`: Test Data
 
-## Tools
+## Environment
+You need to have golang and go-ethereum installed
 
-### 1. Packet Generator
+## Install instructions
 
-Run:
-
+```shell
+# Clone the repo to a place of your liking using
+git clone git@github.com:AgnopraxLab/D2PFuzz.git
+# Enter the repo
+cd D2PFuzz
+# Build the binary
+go build
+# Setting environment
+./D2PFuzz setenv
+# Run the fuzzer
+./FuzzyVM run
 ```
-Usage:
-  packet-generator [flag]
-
-Flags:
-  -p, --protocol   Specify the protocol to test
-  -t, --type       Type of packet to generate (e.g., 'ping')
-  -c, --count      Number of packets to generate
-  -f, --file       Specify the file containing test data
-  
-Example:
-packet-generator --protocol "discv4" --type "ping" --count 2 --file "./test.txt"
-```
-
-### 2. DevP2P Fuzzer
-Updating...
+# Setenv
