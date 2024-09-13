@@ -3,8 +3,9 @@ package discv5
 import (
 	"bytes"
 	"fmt"
-	"github.com/ethereum/go-ethereum/p2p/enode"
 	"net"
+
+	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
 // makeTalkResponse creates a TalkResponse packet.
@@ -20,7 +21,6 @@ func (t *UDPv5) sendTalkResponse(reqID []byte, toID enode.ID, toAddr *net.UDPAdd
 	resp := t.makeTalkResponse(reqID, message)
 	return t.sendResponse(toID, toAddr, resp)
 }
-
 
 // handleCallResponse dispatches a response packet to the call waiting for it.
 func (t *UDPv5) handleCallResponse(fromID enode.ID, fromAddr *net.UDPAddr, p Packet) bool {

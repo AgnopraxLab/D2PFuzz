@@ -4,13 +4,13 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/p2p"
 	"net"
 	"reflect"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/rlpx"
 	"github.com/ethereum/go-ethereum/rlp"
 )

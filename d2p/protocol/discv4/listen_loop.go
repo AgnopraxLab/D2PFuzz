@@ -1,19 +1,21 @@
 package discv4
 
 import (
-	"D2PFuzz/d2p"
 	"container/list"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
-	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/p2p/netutil"
 	"io"
 	"net"
 	"slices"
 	"time"
+
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/netutil"
+
+	"github.com/AgnopraxLab/D2PFuzz/d2p"
 )
 
 // Errors

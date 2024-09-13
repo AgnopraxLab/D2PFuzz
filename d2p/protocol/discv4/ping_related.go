@@ -37,7 +37,6 @@ func (t *UDPv4) sendPing(n *enode.Node, callback func()) (seq uint64, err error)
 	return seq, err
 }
 
-
 func (t *UDPv4) makePing(toaddr *net.UDPAddr) *Ping {
 	return &Ping{
 		Version:    4,

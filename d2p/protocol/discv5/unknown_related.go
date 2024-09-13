@@ -2,10 +2,10 @@ package discv5
 
 import (
 	crand "crypto/rand"
-	"github.com/ethereum/go-ethereum/p2p/enode"
 	"net"
-)
 
+	"github.com/ethereum/go-ethereum/p2p/enode"
+)
 
 // makeUnknown creates an Unknown packet with a random nonce.
 func (t *UDPv5) makeUnknown() *Unknown {

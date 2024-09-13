@@ -3,8 +3,9 @@ package discv5
 import (
 	crand "crypto/rand"
 	"errors"
-	"github.com/ethereum/go-ethereum/p2p/enode"
 	"net"
+
+	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
 var (

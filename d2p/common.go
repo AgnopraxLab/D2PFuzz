@@ -2,12 +2,12 @@ package d2p
 
 import (
 	"crypto/ecdsa"
+	"net"
+
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"net"
 )
 
 type UDPConn interface {
@@ -15,10 +15,6 @@ type UDPConn interface {
 	WriteToUDP(b []byte, addr *net.UDPAddr) (n int, err error)
 	Close() error
 	LocalAddr() net.Addr
-}
-
-type ConnClient interface {
-	Self() *enode.Node
 }
 
 type Config struct {

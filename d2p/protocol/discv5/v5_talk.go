@@ -1,10 +1,11 @@
 package discv5
 
 import (
-	"github.com/ethereum/go-ethereum/p2p/enode"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
 // This is a limit for the number of concurrent talk requests.

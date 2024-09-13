@@ -1,9 +1,10 @@
 package discv4
 
 import (
-	"github.com/ethereum/go-ethereum/p2p/enode"
 	"net"
 	"time"
+
+	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
 func (t *UDPv4) sendPong(toid enode.ID, toaddr *net.UDPAddr, req *Ping, mac []byte) error {
@@ -20,4 +21,3 @@ func (t *UDPv4) makePong(toaddr *net.UDPAddr, req *Ping, mac []byte) *Pong {
 		ENRSeq:     t.localNode.Node().Seq(),
 	}
 }
-
