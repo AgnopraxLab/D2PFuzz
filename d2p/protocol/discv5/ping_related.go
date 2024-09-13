@@ -1,13 +1,14 @@
 package discv5
 
 import (
-	"github.com/ethereum/go-ethereum/p2p/enode"
 	"net"
+
+	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
 func (t *UDPv5) makePing(toaddr *net.UDPAddr) *Ping {
 	return &Ping{
-		ENRSeq:     t.localNode.Node().Seq(),
+		ENRSeq: t.localNode.Node().Seq(),
 		// 添加其他必要的字段,如 Version, From, To 等
 	}
 }

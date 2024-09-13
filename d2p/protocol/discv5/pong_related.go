@@ -1,8 +1,9 @@
 package discv5
 
 import (
-	"github.com/ethereum/go-ethereum/p2p/enode"
 	"net"
+
+	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
 func (t *UDPv5) makePong(reqID []byte, toAddr *net.UDPAddr) *Pong {
@@ -26,4 +27,3 @@ func (t *UDPv5) sendPong(reqID []byte, toID enode.ID, toAddr *net.UDPAddr) error
 	pong := t.makePong(reqID, toAddr)
 	return t.sendResponse(toID, toAddr, pong)
 }
-

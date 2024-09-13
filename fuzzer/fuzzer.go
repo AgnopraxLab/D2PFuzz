@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the D2PFuzz library. If not, see <http://www.gnu.org/licenses/>.
 
+// Package fuzzer is the entry point for go-fuzz.
 package fuzzer
 
 import (
@@ -21,13 +22,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ethereum/go-ethereum/common"
+	"golang.org/x/crypto/sha3"
+
 	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/filler"
 	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
-	"golang.org/x/crypto/sha3"
-
-	"github.com/ethereum/go-ethereum/common"
 )
 
 var (

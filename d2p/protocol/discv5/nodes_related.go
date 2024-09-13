@@ -3,10 +3,11 @@ package discv5
 import (
 	"crypto/ecdsa"
 	"crypto/rand"
+	"net"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"net"
 )
 
 func (t *UDPv5) makeNodes(count int) *Nodes {

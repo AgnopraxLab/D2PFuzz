@@ -14,6 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the D2PFuzz library. If not, see <http://www.gnu.org/licenses/>.
 
+// Package main creates a fuzzer for Ethereum DevP2P Protocol implementations.
 package main
 
 import (

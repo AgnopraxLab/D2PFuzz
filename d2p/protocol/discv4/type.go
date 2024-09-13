@@ -3,7 +3,6 @@ package discv4
 import (
 	"encoding/hex"
 	"fmt"
-
 	"net"
 
 	"github.com/ethereum/go-ethereum/crypto"

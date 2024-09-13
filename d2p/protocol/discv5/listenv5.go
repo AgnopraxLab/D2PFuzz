@@ -3,12 +3,14 @@ package discv5
 import (
 	"context"
 	"errors"
-	"github.com/AgnopraxLab/D2PFuzz/d2p"
+	"io"
+	"net"
+
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/netutil"
-	"io"
-	"net"
+
+	"github.com/AgnopraxLab/D2PFuzz/d2p"
 )
 
 // ListenV5 listens on the given connection.
