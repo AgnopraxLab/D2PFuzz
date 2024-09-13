@@ -18,10 +18,13 @@ package filler
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math/big"
 	"math/rand"
 	"net"
+	"time"
 
+	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -288,4 +291,64 @@ func (f *Filler) FillENRRecords(count int) []*enr.Record {
 func (f *Filler) FillNode() *enode.Node {
 	key, _ := crypto.GenerateKey()
 	return enode.NewV4(&key.PublicKey, f.FillIP(), f.FillPort(), f.FillPort())
+}
+
+// Fill eth protocol addition
+
+// FillProtocolVersion fills the ProtocolVersion field.
+func (f *Filler) FillProtocolVersion() uint32 {
+	return f.Uint32() // Random 32-bit unsigned integer
+}
+
+// FillNetworkID fills the NetworkID field.
+func (f *Filler) FillNetworkID() uint64 {
+	return f.Uint64() // Random 64-bit unsigned integer
+}
+
+// FillTD fills the TD (Total Difficulty) field.
+func (f *Filler) FillTD() *big.Int {
+	buf := make([]byte, 2024)
+	_, err := rand.Read(buf)
+	if err != nil {
+		fmt.Println("Error generating random bytes:", err)
+	}
+	return new(big.Int).SetBytes(buf)
+}
+
+// FillHash fills a Hash field (32 bytes).
+func (f *Filler) FillHash() [32]byte {
+	var hash [32]byte
+	copy(hash[:], f.ByteSlice(32))
+	return hash
+}
+
+// FillForkID generates a new forkid.ID using random data from the filler.
+func (f *Filler) FillForkID() forkid.ID {
+	var hash [4]byte
+	copy(hash[:], f.ByteSlice(4)) // Get 4 random bytes for the Hash field
+	next := f.Uint64()            // Get a random uint64 for the Next field
+	return forkid.ID{
+		Hash: hash,
+		Next: next,
+	}
+}
+
+// FillRequestId generates a random request ID for network requests.
+func (f *Filler) FillRequestId() uint64 {
+	return f.Uint64()
+}
+
+// FillAmount generates a random amount for BlockHeader requests.
+func (f *Filler) FillAmount() uint64 {
+	return f.Uint64() % 100 // Arbitrary amount, can adjust as needed
+}
+
+// FillGasCap generates random gas cap values.
+func (f *Filler) FillGasCap() *big.Int {
+	return f.GasInt()
+}
+
+// FillTime generates a future timestamp as the expiration time.
+func (f *Filler) FillTime() uint64 {
+	return uint64(time.Now().Add(time.Duration(f.Uint64()%1000) * time.Second).Unix())
 }

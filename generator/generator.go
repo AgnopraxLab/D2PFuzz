@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -86,7 +87,7 @@ func GenerateEthPacket(f *filler.Filler, target, chain string) *fuzzing.EthMaker
 		node    *enode.Node
 		cli     *eth.Suite
 		packets []eth.Packet
-		//series  []string
+		series  []int
 	)
 
 	node, _ = getNode(target)
@@ -96,8 +97,36 @@ func GenerateEthPacket(f *filler.Filler, target, chain string) *fuzzing.EthMaker
 	}
 
 	// TODO: init oracle and series
+	state := eth.NewOracleState() // 创建Oracle状态
 
 	// Generate a sequence of Packets
+	spec := &eth.PacketSpecification{
+		BlockNumbers: []int{10, 20, 30},
+		BlockHashes:  make([]common.Hash, 3),
+	}
+	for i := 0; i < 3; i++ {
+		hash := crypto.Keccak256([]byte(fmt.Sprintf("hash%d", i)))
+		spec.BlockHashes[i] = common.BytesToHash(hash[:])
+	}
+	for _, packetType := range series {
+		packet, err := cli.GenPacket(f, packetType, spec)
+		if err != nil {
+			fmt.Println("GenPacket fail")
+		}
+		// Checking and Correcting Packets with Oracle
+		checkedPacket, err := eth.OracleCheck(packet, state)
+		if err != nil {
+			fmt.Println("oracle check fail")
+		}
+		state.PacketHistory = append(state.PacketHistory, checkedPacket)
+		packets = append(packets, packet)
+	}
+
+	// Multi-package logic checking after generating all packages
+	err = eth.MultiPacketCheck(state)
+	if err != nil {
+		fmt.Println("multi-packet check fail")
+	}
 
 	ethmaker := fuzzing.NewEthMaker(cli, node, packets)
 	return ethmaker

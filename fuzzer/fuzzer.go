@@ -19,12 +19,13 @@ package fuzzer
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+
 	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/filler"
 	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 	"golang.org/x/crypto/sha3"
-	"os"
 
 	"github.com/ethereum/go-ethereum/common"
 )
