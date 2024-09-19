@@ -83,6 +83,13 @@ func (p *NewBlockHashesPacket) Unpack() ([]common.Hash, []uint64) {
 	return hashes, numbers
 }
 
+// NewPooledTransactionHashesPacket68 represents a transaction announcement packet on eth/68 and newer.
+type NewPooledTransactionHashesPacket68 struct {
+	Types  []byte
+	Sizes  []uint32
+	Hashes []common.Hash
+}
+
 // TransactionsPacket is the network packet for broadcasting new transactions.
 type TransactionsPacket []*types.Transaction
 

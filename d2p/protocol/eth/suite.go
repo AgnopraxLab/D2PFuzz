@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/eth/protocols/eth"
+	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
 	"reflect"
 	"time"
@@ -23,13 +25,15 @@ type Suite struct {
 	chain    *Chain
 	conn     *Conn
 	pri      *ecdsa.PrivateKey
+	engine   *EngineClient
 }
 
-func NewSuite(dest *enode.Node, chainDir string, pri *ecdsa.PrivateKey) (*Suite, error) {
+func NewSuite(dest *enode.Node, chainDir, engineURL, jwt string) (*Suite, error) {
 	chain, err := NewChain(chainDir)
 	if err != nil {
 		return nil, err
 	}
+	engine, err := NewEngineClient(chainDir, engineURL, jwt)
 	if err != nil {
 		return nil, err
 	}
@@ -37,20 +41,8 @@ func NewSuite(dest *enode.Node, chainDir string, pri *ecdsa.PrivateKey) (*Suite,
 	return &Suite{
 		DestList: dest,
 		chain:    chain,
-		pri:      pri,
+		engine:   engine,
 	}, nil
-}
-
-// InitializeAndConnect 封装了初始化、连接和对等过程
-func (s *Suite) InitializeAndConnect() error {
-	conn, err := s.dial()
-	if err != nil {
-		return fmt.Errorf("dial failed: %v", err)
-	}
-	if err := conn.peer(s.chain, nil); err != nil {
-		return fmt.Errorf("peer failed: %v", err)
-	}
-	return nil
 }
 
 type PacketSpecification struct {
@@ -474,13 +466,13 @@ func HeadersMatch(expected []*types.Header, headers []*types.Header) bool {
 }
 
 // 辅助函数：计算总 gas 使用量
-func calculateGasUsed(txs types.Transactions) uint64 {
+/*func calculateGasUsed(txs types.Transactions) uint64 {
 	var total uint64
 	for _, tx := range txs {
 		total += tx.Gas()
 	}
 	return total
-}
+}*/
 
 // 辅助函数：计算总难度
 func calculateTotalDifficulty(chain *Chain) *big.Int {
@@ -489,4 +481,141 @@ func calculateTotalDifficulty(chain *Chain) *big.Int {
 		td.Add(td, block.Difficulty())
 	}
 	return td
+}
+
+// InitializeAndConnect 封装了初始化、连接和对等过程
+func (s *Suite) InitializeAndConnect() error {
+	conn, err := s.dial()
+	if err != nil {
+		return fmt.Errorf("dial failed: %v", err)
+	}
+	defer conn.Close()
+	if err := conn.peer(s.chain, nil); err != nil {
+		return fmt.Errorf("peer failed: %v", err)
+	}
+	return nil
+}
+
+func (s *Suite) SendForkchoiceUpdated() error {
+	return s.engine.sendForkchoiceUpdated()
+}
+
+// SendTxs sends the given transactions to the node and
+// expects the node to accept and propagate them.
+func (s *Suite) SendTxs(txs []*types.Transaction) error {
+	// Open sending conn.
+	sendConn, err := s.dial()
+	if err != nil {
+		return err
+	}
+	defer sendConn.Close()
+	if err = sendConn.peer(s.chain, nil); err != nil {
+		return fmt.Errorf("peering failed: %v", err)
+	}
+
+	// Open receiving conn.
+	recvConn, err := s.dial()
+	if err != nil {
+		return err
+	}
+	defer recvConn.Close()
+	if err = recvConn.peer(s.chain, nil); err != nil {
+		return fmt.Errorf("peering failed: %v", err)
+	}
+
+	if err = sendConn.Write(EthProto, eth.TransactionsMsg, eth.TransactionsPacket(txs)); err != nil {
+		return fmt.Errorf("failed to write message to connection: %v", err)
+	}
+
+	var (
+		got = make(map[common.Hash]bool)
+		end = time.Now().Add(timeout)
+	)
+
+	// Wait for the transaction announcements, make sure all txs ar propagated.
+	for time.Now().Before(end) {
+		msg, err := recvConn.ReadEth()
+		if err != nil {
+			return fmt.Errorf("failed to read from connection: %w", err)
+		}
+		switch msg := msg.(type) {
+		case *eth.TransactionsPacket:
+			for _, tx := range *msg {
+				got[tx.Hash()] = true
+			}
+		case *NewPooledTransactionHashesPacket68:
+			for _, hash := range msg.Hashes {
+				got[hash] = true
+			}
+		default:
+			return fmt.Errorf("unexpected eth wire msg: %s", pretty.Sdump(msg))
+		}
+
+		// Check if all txs received.
+		allReceived := func() bool {
+			for _, tx := range txs {
+				if !got[tx.Hash()] {
+					return false
+				}
+			}
+			return true
+		}
+		if allReceived() {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("timed out waiting for txs")
+}
+
+// ReadEth reads an Eth sub-protocol wire message.
+func (c *Conn) ReadEth() (any, error) {
+	c.SetReadDeadline(time.Now().Add(timeout))
+	for {
+		code, data, _, err := c.Conn.Read()
+		if err != nil {
+			return nil, err
+		}
+		if code == pingMsg {
+			c.Write(baseProto, pongMsg, []byte{})
+			continue
+		}
+		if getProto(code) != EthProto {
+			// Read until eth message.
+			continue
+		}
+		code -= baseProtoLen
+
+		var msg any
+		switch int(code) {
+		case eth.StatusMsg:
+			msg = new(StatusPacket)
+		case eth.GetBlockHeadersMsg:
+			msg = new(GetBlockHeadersPacket)
+		case eth.BlockHeadersMsg:
+			msg = new(BlockHeadersPacket)
+		case eth.GetBlockBodiesMsg:
+			msg = new(GetBlockBodiesPacket)
+		case eth.BlockBodiesMsg:
+			msg = new(BlockBodiesPacket)
+		case eth.NewBlockMsg:
+			msg = new(NewBlockPacket)
+		case eth.NewBlockHashesMsg:
+			msg = new(NewBlockHashesPacket)
+		case eth.TransactionsMsg:
+			msg = new(TransactionsPacket)
+		case eth.NewPooledTransactionHashesMsg:
+			msg = new(NewPooledTransactionHashesPacket68)
+		case eth.GetPooledTransactionsMsg:
+			msg = new(GetPooledTransactionsPacket)
+		case eth.PooledTransactionsMsg:
+			msg = new(PooledTransactionsPacket)
+		default:
+			panic(fmt.Sprintf("unhandled eth msg code %d", code))
+		}
+		if err := rlp.DecodeBytes(data, msg); err != nil {
+			return nil, fmt.Errorf("unable to decode eth msg: %v", err)
+		}
+		return msg, nil
+	}
 }
