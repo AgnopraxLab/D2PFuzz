@@ -17,8 +17,10 @@
 package fuzzing
 
 import (
+	"fmt"
 	"io"
 	"log"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -30,8 +32,9 @@ import (
 
 const (
 	// Encryption/authentication parameters.
-	aesKeySize   = 16
-	gcmNonceSize = 12
+	aesKeySize             = 16
+	gcmNonceSize           = 12
+	NoPendingRequired byte = 0
 )
 
 // Maker await a decision
@@ -135,18 +138,86 @@ func (m *V4Maker) Start(traceOutput io.Writer) error {
 
 	// Send packet sequence
 	for _, packet := range m.packets {
-		if err := m.client.Send(m.target, packet); err != nil {
+		// 根据数据包类型设置预期的响应类型
+		var expectedResponseType byte
+		expectedResponseType = processPacket(packet)
+		if expectedResponseType != NoPendingRequired {
+
+			// 设置回复匹配器
+			rm := m.client.Pending(m.target.ID(), m.target.IP(), expectedResponseType, func(p discv4.Packet) (matched bool, requestDone bool) {
+				fmt.Printf("Received packet of type: %T\n", p)
+				if pong, ok := p.(*discv4.Pong); ok {
+					fmt.Printf("Received Pong response: %+v\n", pong)
+					return true, true
+				}
+				if neighbors, ok := p.(*discv4.Neighbors); ok {
+					fmt.Printf("Received Neighbors response: %+v\n", neighbors)
+					return true, true
+				}
+				if ENRresponse, ok := p.(*discv4.ENRResponse); ok {
+					fmt.Printf("Received ENR response: %+v\n", ENRresponse)
+					return true, true
+				}
+				return false, false
+			})
+
+			if err := m.client.Send(m.target, packet); err != nil {
+				if logger != nil {
+					logger.Printf("Failed to send packet: %v", err)
+				}
+			}
+			// Record send log info
 			if logger != nil {
-				logger.Printf("Failed to send packet: %v", err)
+				logger.Printf("Sent packet to target: %s, packet: %v", m.target.String(), packet.Kind())
+			}
+
+			// 使用新的 WaitForResponse 方法等待响应
+			if err := rm.WaitForResponse(5 * time.Second); err != nil {
+				if logger != nil {
+					logger.Printf("Timeout waiting for response")
+				}
+			}
+		} else {
+			if err := m.client.Send(m.target, packet); err != nil {
+				if logger != nil {
+					logger.Printf("Failed to send packet: %v", err)
+				}
+			}
+			// Record send log info
+			if logger != nil {
+				logger.Printf("Sent packet to target: %s, packet: %v", m.target.String(), packet.Kind())
 			}
 		}
-		// Record send log info
-		if logger != nil {
-			logger.Printf("Sent packet to target: %s, packet: %v", m.target.String(), packet.Kind())
-		}
+		time.Sleep(time.Second)
 	}
 
 	return nil
+}
+
+func processPacket(packet discv4.Packet) byte {
+	switch packet.Kind() {
+	case discv4.PingPacket:
+		fmt.Println("Received ping packet, expecting pong response")
+		return discv4.PongPacket
+	case discv4.FindnodePacket:
+		fmt.Println("Received findnode packet, expecting neighbors response")
+		return discv4.NeighborsPacket
+	case discv4.ENRRequestPacket:
+		fmt.Println("Received ENR request packet, expecting ENR response")
+		return discv4.ENRResponsePacket
+	case discv4.PongPacket:
+		fmt.Println("Received pong packet, no pending required")
+		return NoPendingRequired
+	case discv4.NeighborsPacket:
+		fmt.Println("Received neighbors packet, no pending required")
+		return NoPendingRequired
+	case discv4.ENRResponsePacket:
+		fmt.Println("Received ENR response, no pending required")
+		return NoPendingRequired
+	default:
+		fmt.Printf("Unknown packet type: %v\n", packet.Kind())
+		return NoPendingRequired
+	}
 }
 
 func (m *V4Maker) SetResult(root, logs common.Hash) {
@@ -178,12 +249,87 @@ func (m *V5Maker) ToSubTest() *stJSON {
 }
 
 func (m *V5Maker) Start(traceOutput io.Writer) error {
-
 	for _, packet := range m.packets {
-		m.client.Send(m.target, packet, nil)
+		nonce, err := m.sendAndReceive(packet, traceOutput)
+		if err != nil {
+			return fmt.Errorf("failed to send and receive packet")
+		}
+
+		if traceOutput != nil {
+			fmt.Println(traceOutput, "Sent packet, nonce: %x\n", nonce)
+		}
+
+		time.Sleep(time.Second) // Sleep between sends as in the original code
 	}
 
 	return nil
+}
+
+func (m *V5Maker) sendAndReceive(req discv5.Packet, traceOutput io.Writer) (discv5.Nonce, error) {
+	const waitTime = 5 * time.Second
+
+	nonce, err := m.client.Send(m.target, req, nil)
+	if err != nil {
+		return nonce, fmt.Errorf("failed to send packet: %v", err)
+	}
+
+	m.client.SetReadDeadline(time.Now().Add(waitTime))
+	buf := make([]byte, 1280)
+	n, fromAddr, err := m.client.ReadFromUDP(buf)
+	if err != nil {
+		return nonce, fmt.Errorf("failed to read response: %v", err)
+	}
+
+	packet, _, err := m.client.Decode(buf[:n], fromAddr.String())
+	if err != nil {
+		return nonce, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	if traceOutput != nil {
+		m.logPacketInfo(packet, traceOutput)
+	}
+
+	if whoareyou, ok := packet.(*discv5.Whoareyou); ok {
+		if whoareyou.Nonce != nonce {
+			return nonce, fmt.Errorf("wrong nonce in WHOAREYOU")
+		}
+		challenge := &discv5.Whoareyou{
+			Nonce:     whoareyou.Nonce,
+			IDNonce:   whoareyou.IDNonce,
+			RecordSeq: whoareyou.RecordSeq,
+		}
+		nonce, err = m.client.Send(m.target, req, challenge)
+		if err != nil {
+			return nonce, fmt.Errorf("failed to send handshake: %v", err)
+		}
+		return m.sendAndReceive(req, traceOutput)
+	}
+
+	return nonce, nil
+}
+
+func (m *V5Maker) logPacketInfo(packet discv5.Packet, traceOutput io.Writer) {
+	switch resp := packet.(type) {
+	case *discv5.Unknown:
+		fmt.Println(traceOutput, "Got Unknown: Nonce=%x\n", resp.Nonce)
+	case *discv5.Ping:
+		fmt.Println(traceOutput, "Got Ping: ReqID=%x, ENRSeq=%d\n", resp.ReqID, resp.ENRSeq)
+	case *discv5.Pong:
+		fmt.Println(traceOutput, "Got Pong: ReqID=%x, ENRSeq=%d, ToIP=%v, ToPort=%d\n", resp.ReqID, resp.ENRSeq, resp.ToIP, resp.ToPort)
+	case *discv5.Findnode:
+		fmt.Println(traceOutput, "Got Findnode: ReqID=%x, Distances=%v, OpID=%d\n", resp.ReqID, resp.Distances, resp.OpID)
+	case *discv5.Nodes:
+		fmt.Println(traceOutput, "Got Nodes: ReqID=%x, RespCount=%d, Nodes count=%d\n", resp.ReqID, resp.RespCount, len(resp.Nodes))
+		for i, node := range resp.Nodes {
+			fmt.Println(traceOutput, "  Node %d: %v\n", i, node)
+		}
+	case *discv5.TalkRequest:
+		fmt.Println(traceOutput, "Got TalkRequest: ReqID=%x, Protocol=%s, Message=%x\n", resp.ReqID, resp.Protocol, resp.Message)
+	case *discv5.TalkResponse:
+		fmt.Println(traceOutput, "Got TalkResponse: ReqID=%x, Message=%x\n", resp.ReqID, resp.Message)
+	default:
+		fmt.Println(traceOutput, "Unexpected response type: %T\n", resp)
+	}
 }
 
 func (m *V5Maker) SetResult(root, logs common.Hash) {
@@ -215,6 +361,68 @@ func (m *EthMaker) ToSubTest() *stJSON {
 }
 
 func (m *EthMaker) Start(traceOutput io.Writer) error {
+	for _, packet := range m.packets {
+		if traceOutput != nil {
+			fmt.Println(traceOutput, "Processing packet of type: %T\n", packet)
+		}
+
+		switch p := packet.(type) {
+		case *eth.GetBlockHeadersPacket:
+			if err := m.handleGetBlockHeadersPacket(p, traceOutput); err != nil {
+				return err
+			}
+		// Add other packet types here as needed
+		// case *eth.GetBlockBodiesPacket:
+		//     if err := m.handleGetBlockBodiesPacket(p, traceOutput); err != nil {
+		//         return err
+		//     }
+		// case *eth.GetReceiptsPacket:
+		//     if err := m.handleGetReceiptsPacket(p, traceOutput); err != nil {
+		//         return err
+		//     }
+		default:
+			if traceOutput != nil {
+				fmt.Println(traceOutput, "Unsupported packet type: %T\n", packet)
+			}
+		}
+
+		// Sleep between packet processing to avoid overwhelming the network
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	return nil
+}
+
+func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, traceOutput io.Writer) error {
+	if traceOutput != nil {
+		fmt.Println(traceOutput, "Sending GetBlockHeadersPacket with RequestId: %d\n", p.RequestId)
+	}
+
+	if err := m.client.SendMsg(eth.ETH68, eth.GetBlockHeadersMsg, p); err != nil {
+		return fmt.Errorf("could not send GetBlockHeadersMsg: %v", err)
+	}
+
+	headers := new(eth.BlockHeadersPacket)
+	if err := m.client.ReadMsg(eth.ETH68, eth.BlockHeadersMsg, headers); err != nil {
+		return fmt.Errorf("error reading BlockHeadersMsg: %v", err)
+	}
+
+	if headers.RequestId != p.RequestId {
+		return fmt.Errorf("unexpected request id: got %d, want %d", headers.RequestId, p.RequestId)
+	}
+
+	expected, err := m.client.GetHeaders(p)
+	if err != nil {
+		return fmt.Errorf("failed to get headers for given request: %v", err)
+	}
+
+	if !eth.HeadersMatch(expected, headers.BlockHeadersRequest) {
+		return fmt.Errorf("header mismatch")
+	}
+
+	if traceOutput != nil {
+		fmt.Println(traceOutput, "Received headers for request %d\n", headers.RequestId)
+	}
 
 	return nil
 }
