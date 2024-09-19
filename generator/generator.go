@@ -110,6 +110,7 @@ func GenerateEthPacket(f *filler.Filler, target, chain string) *fuzzing.EthMaker
 		spec.BlockHashes[i] = common.BytesToHash(hash[:])
 	}
 	for _, packetType := range series {
+
 		packet, err := cli.GenPacket(f, packetType, spec)
 		if err != nil {
 			fmt.Println("GenPacket fail")
@@ -190,7 +191,7 @@ func initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 	pri, _ := crypto.GenerateKey()
 	client, err := eth.NewSuite(dest, dir, pri)
 	if err != nil {
-		return nil, errors.New("New Suite fail")
+		return nil, errors.New("new Suite fail")
 	}
 
 	return client, nil

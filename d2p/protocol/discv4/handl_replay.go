@@ -222,7 +222,7 @@ func (t *UDPv4) verifyNeighbors(h *packetHandlerV4, from *net.UDPAddr, fromID en
 	fmt.Printf("  Expiration: %d\n", req.Expiration)
 	fmt.Printf("  Nodes:\n")
 	for i, node := range req.Nodes {
-		fmt.Printf("    Node %d: %v\n", i, node) // 假设 Node 实现了 String() 方法，适当调整根据实际情况
+		fmt.Printf(" Node %d: %v\n ", i, node) // 假设 Node 实现了 String() 方法，适当调整根据实际情况
 	}
 	fmt.Printf("  Rest: %v\n", req.Rest)
 

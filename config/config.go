@@ -46,7 +46,7 @@ func ReadConfig() (*Config, error) {
 	return config, nil
 }
 
-// WriteConfig
+// WriteConfig 写配置文件
 func WriteConfig(config *Config) error {
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {

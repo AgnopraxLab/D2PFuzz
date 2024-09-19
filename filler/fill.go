@@ -230,7 +230,7 @@ func (f *Filler) FillIP() net.IP {
 	if rand.Intn(2) == 1 {
 		ipLength = 16 // 50% 概率选择 IPv6 地址
 	}
-	return net.IP(f.ByteSlice(ipLength))
+	return f.ByteSlice(ipLength)
 }
 
 // FillPort generates a random port number.

@@ -2,7 +2,6 @@ package eth
 
 import (
 	"crypto/ecdsa"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"math/big"
@@ -27,9 +26,6 @@ type Suite struct {
 
 func NewSuite(dest *enode.Node, chainDir string, pri *ecdsa.PrivateKey) (*Suite, error) {
 	chain, err := NewChain(chainDir)
-	if err != nil {
-		return nil, err
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -235,11 +231,6 @@ func (s *Suite) GenPacket(f *filler.Filler, packetType int, spec *PacketSpecific
 			ForkID:          f.FillForkID(),
 		}, nil
 	case NewBlockHashesMsg:
-		// 使用 crypto/rand 包生成随机哈希
-		randomBytes := make([]byte, 32)
-		if _, err := rand.Read(randomBytes); err != nil {
-			return nil, fmt.Errorf("failed to generate random hash: %v", err)
-		}
 		return &NewBlockHashesPacket{
 			{
 				Hash:   f.FillHash(),
@@ -278,7 +269,9 @@ func (s *Suite) GenPacket(f *filler.Filler, packetType int, spec *PacketSpecific
 		return &GetBlockBodiesPacket{
 			RequestId: f.FillRequestId(),
 			GetBlockBodiesRequest: GetBlockBodiesRequest{
-				f.FillHash(), f.FillHash(),
+				f.FillHash(),
+				//////////////////////////////////////////////////////////////////以下有问题
+				f.FillHash(),
 			},
 		}, nil
 	case BlockBodiesMsg:
@@ -288,6 +281,7 @@ func (s *Suite) GenPacket(f *filler.Filler, packetType int, spec *PacketSpecific
 			if blockNum < len(s.chain.blocks) {
 				block := s.chain.GetBlock(blockNum)
 				if block != nil {
+					////////////////////////////////////////////////是不是有问题
 					body := &BlockBody{
 						Transactions: block.Transactions(),
 						Uncles:       block.Uncles(),

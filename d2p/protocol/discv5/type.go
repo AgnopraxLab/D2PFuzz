@@ -239,7 +239,7 @@ func (req *Nodes) AppendLogInfo(ctx []interface{}) []interface{} {
 	)
 }
 
-// 为 Nodes 实现 json.Marshaler 接口
+// MarshalJSON 为 Nodes 实现 json.Marshaler 接口
 func (req *Nodes) MarshalJSON() ([]byte, error) {
 	type NodeInfo struct {
 		Seq       uint64 `json:"seq"`

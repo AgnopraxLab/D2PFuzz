@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
-// Constants to match up protocol versions and messages
+// ETH68 Constants to match up protocol versions and messages
 const (
 	ETH68 = 68
 )
