@@ -22,8 +22,14 @@ const (
 
 const (
 	baseProto Proto = iota
-	EthProto
+	ethProto
 	snapProto
+)
+
+const (
+	BaseProto Proto = iota
+	EthProto
+	SnapProto
 )
 
 type Proto int

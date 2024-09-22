@@ -28,7 +28,7 @@ type Suite struct {
 	engine   *EngineClient
 }
 
-func NewSuite(dest *enode.Node, chainDir, engineURL, jwt string) (*Suite, error) {
+func NewSuite(dest *enode.Node, chainDir string, pri *ecdsa.PrivateKey, engineURL, jwt string) (*Suite, error) {
 	chain, err := NewChain(chainDir)
 	if err != nil {
 		return nil, err
@@ -42,6 +42,7 @@ func NewSuite(dest *enode.Node, chainDir, engineURL, jwt string) (*Suite, error)
 		DestList: dest,
 		chain:    chain,
 		engine:   engine,
+		pri:      pri,
 	}, nil
 }
 

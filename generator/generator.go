@@ -188,7 +188,7 @@ func initDiscv5() *discv5.UDPv5 {
 func initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 
 	pri, _ := crypto.GenerateKey()
-	client, err := eth.NewSuite(dest, dir, pri)
+	client, err := eth.NewSuite(dest, dir, pri, 1, 1)
 	if err != nil {
 		return nil, errors.New("new Suite fail")
 	}

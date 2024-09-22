@@ -368,6 +368,20 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 		}
 
 		switch p := packet.(type) {
+		case *eth.StatusPacket:
+			if err := m.client.InitializeAndConnect(); err != nil {
+				return fmt.Errorf("initialization and connection failed: %v", err)
+			}
+
+		case *eth.TransactionsPacket:
+			// Nudge client out of syncing mode to accept pending txs.
+			if err := m.client.SendForkchoiceUpdated(); err != nil {
+				return fmt.Errorf("failed to send next block: %v", err)
+			}
+			if err := m.handleTransactionPacket(p, traceOutput); err != nil {
+				return err
+			}
+
 		case *eth.GetBlockHeadersPacket:
 			// 初始化连接
 			if err := m.client.InitializeAndConnect(); err != nil {
@@ -377,6 +391,7 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 			if err := m.handleGetBlockHeadersPacket(p, traceOutput); err != nil {
 				return err
 			}
+
 		case *eth.GetBlockBodiesPacket:
 			// 初始化连接
 			if err := m.client.InitializeAndConnect(); err != nil {
@@ -386,12 +401,35 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 			if err := m.handleGetBlockBodiesPacket(p, traceOutput); err != nil {
 				return err
 			}
-		case *eth.TransactionsPacket:
-			// Nudge client out of syncing mode to accept pending txs.
-			if err := m.client.SendForkchoiceUpdated(); err != nil {
-				return fmt.Errorf("failed to send next block: %v", err)
+
+		case *eth.NewBlockHashesPacket, *eth.BlockHeadersPacket, *eth.BlockBodiesPacket, *eth.NewBlockPacket, *eth.PooledTransactionsPacket, *eth.ReceiptsPacket:
+			if err := m.client.InitializeAndConnect(); err != nil {
+				return fmt.Errorf("initialization and connection failed: %v", err)
 			}
-			if err := m.handleTransactionPacket(p, traceOutput); err != nil {
+
+			if err := m.handleSendOnlyPacket(p, traceOutput); err != nil {
+				return err
+			}
+
+		case *eth.NewPooledTransactionHashesPacket:
+			//待补充
+
+		case *eth.GetPooledTransactionsPacket:
+			// 初始化连接
+			if err := m.client.InitializeAndConnect(); err != nil {
+				return fmt.Errorf("initialization and connection failed: %v", err)
+			}
+
+			if err := m.handleGetPooledTransactionsPacket(p, traceOutput); err != nil {
+				return err
+			}
+		case *eth.GetReceiptsPacket:
+			// 初始化连接
+			if err := m.client.InitializeAndConnect(); err != nil {
+				return fmt.Errorf("initialization and connection failed: %v", err)
+			}
+
+			if err := m.handleGetReceiptsPacket(p, traceOutput); err != nil {
 				return err
 			}
 		// Add other packet types here as needed
@@ -413,6 +451,70 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 		time.Sleep(time.Millisecond * 100)
 	}
 
+	return nil
+}
+func (m *EthMaker) handleSendOnlyPacket(packet interface{}, traceOutput io.Writer) error {
+	var msgcode uint64
+
+	switch packet.(type) {
+	case *eth.NewBlockHashesPacket:
+		msgcode = eth.NewBlockHashesMsg
+		if traceOutput != nil {
+			fmt.Println(traceOutput, "Sending NewBlockHashesPacket")
+		}
+	case *eth.BlockHeadersPacket:
+		msgcode = eth.BlockHeadersMsg
+		if traceOutput != nil {
+			fmt.Println(traceOutput, "Sending BlockHeadersPacket")
+		}
+	case *eth.BlockBodiesPacket:
+		msgcode = eth.BlockBodiesMsg
+		if traceOutput != nil {
+			fmt.Println(traceOutput, "Sending BlockBodiesPacket")
+		}
+	case *eth.NewBlockPacket:
+		msgcode = eth.NewBlockMsg
+		if traceOutput != nil {
+			fmt.Println(traceOutput, "Sending NewBlockPacket")
+		}
+	case *eth.PooledTransactionsPacket:
+		msgcode = eth.PooledTransactionsMsg
+		if traceOutput != nil {
+			fmt.Println(traceOutput, "Sending PooledTransactionsPacket")
+		}
+	case *eth.ReceiptsPacket:
+		msgcode = eth.ReceiptsMsg
+		if traceOutput != nil {
+			fmt.Println(traceOutput, "Sending ReceiptsPacket")
+		}
+	default:
+		return fmt.Errorf("unsupported packet type: %T", packet)
+	}
+
+	if err := m.client.SendMsg(eth.EthProto, msgcode, packet); err != nil {
+		return fmt.Errorf("could not send %T: %v", packet, err)
+	}
+
+	return nil
+}
+
+func (m *EthMaker) handleTransactionPacket(p *eth.TransactionsPacket, traceOutput io.Writer) error {
+	if traceOutput != nil {
+		fmt.Println(traceOutput, "Sending transaction")
+	}
+	for i, tx := range *p {
+		if traceOutput != nil {
+			fmt.Println(traceOutput, "Sending transaction %d\n", i+1)
+		}
+
+		if err := m.client.SendTxs([]*types.Transaction{tx}); err != nil {
+			return fmt.Errorf("failed to send transaction: %v", err)
+		}
+
+		if traceOutput != nil {
+			fmt.Println(traceOutput, "Transaction %d sent successfully\n", i+1)
+		}
+	}
 	return nil
 }
 
@@ -480,23 +582,63 @@ func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, trace
 	return nil
 }
 
-func (m *EthMaker) handleTransactionPacket(p *eth.TransactionsPacket, traceOutput io.Writer) error {
+func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransactionsPacket, traceOutput io.Writer) error {
 	if traceOutput != nil {
-		fmt.Println(traceOutput, "Sending transaction")
+		fmt.Println(traceOutput, "Sending GetPooledTransactionsPacket with RequestId: %d\n", p.RequestId)
 	}
-	for i, tx := range *p {
-		if traceOutput != nil {
-			fmt.Println(traceOutput, "Sending transaction %d\n", i+1)
-		}
 
-		if err := m.client.SendTxs([]*types.Transaction{tx}); err != nil {
-			return fmt.Errorf("failed to send transaction: %v", err)
-		}
-
-		if traceOutput != nil {
-			fmt.Println(traceOutput, "Transaction %d sent successfully\n", i+1)
-		}
+	if err := m.client.SendMsg(eth.EthProto, eth.GetPooledTransactionsMsg, p); err != nil {
+		return fmt.Errorf("could not send GetBlockBodiesMsg: %v", err)
 	}
+
+	resp := new(eth.PooledTransactionsPacket)
+	if err := m.client.ReadMsg(eth.EthProto, eth.PooledTransactionsMsg, resp); err != nil {
+		return fmt.Errorf("error reading BlockBodiesMsg: %v", err)
+	}
+
+	if got, want := resp.RequestId, p.RequestId; got != want {
+		return fmt.Errorf("unexpected request id in response: got %d, want %d", got, want)
+	}
+
+	bodies := resp.PooledTransactionsResponse
+	if len(bodies) != len(p.GetPooledTransactionsRequest) {
+		return fmt.Errorf("wrong bodies in response: expected %d bodies, got %d", len(p.GetPooledTransactionsRequest), len(bodies))
+	}
+
+	if traceOutput != nil {
+		fmt.Println(traceOutput, "Received block bodies for request %d\n", resp.RequestId)
+	}
+
+	return nil
+}
+
+func (m *EthMaker) handleGetReceiptsPacket(p *eth.GetReceiptsPacket, traceOutput io.Writer) error {
+	if traceOutput != nil {
+		fmt.Println(traceOutput, "Sending GetPooledTransactionsPacket with RequestId: %d\n", p.RequestId)
+	}
+
+	if err := m.client.SendMsg(eth.EthProto, eth.GetReceiptsMsg, p); err != nil {
+		return fmt.Errorf("could not send GetBlockBodiesMsg: %v", err)
+	}
+
+	resp := new(eth.ReceiptsPacket)
+	if err := m.client.ReadMsg(eth.EthProto, eth.ReceiptsMsg, resp); err != nil {
+		return fmt.Errorf("error reading BlockBodiesMsg: %v", err)
+	}
+
+	if got, want := resp.RequestId, p.RequestId; got != want {
+		return fmt.Errorf("unexpected request id in response: got %d, want %d", got, want)
+	}
+
+	bodies := resp.ReceiptsResponse
+	if len(bodies) != len(p.GetReceiptsRequest) {
+		return fmt.Errorf("wrong bodies in response: expected %d bodies, got %d", len(p.GetReceiptsRequest), len(bodies))
+	}
+
+	if traceOutput != nil {
+		fmt.Println(traceOutput, "Received block bodies for request %d\n", resp.RequestId)
+	}
+
 	return nil
 }
 
