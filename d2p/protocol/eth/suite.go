@@ -5,11 +5,12 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/eth/protocols/eth"
-	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
 	"reflect"
 	"time"
+
+	"github.com/ethereum/go-ethereum/eth/protocols/eth"
+	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -28,7 +29,7 @@ type Suite struct {
 	engine   *EngineClient
 }
 
-func NewSuite(dest *enode.Node, chainDir string, pri *ecdsa.PrivateKey, engineURL, jwt string) (*Suite, error) {
+func NewSuite(dest *enode.Node, chainDir, engineURL, jwt string, pri *ecdsa.PrivateKey) (*Suite, error) {
 	chain, err := NewChain(chainDir)
 	if err != nil {
 		return nil, err
@@ -524,7 +525,7 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 		return fmt.Errorf("peering failed: %v", err)
 	}
 
-	if err = sendConn.Write(EthProto, eth.TransactionsMsg, eth.TransactionsPacket(txs)); err != nil {
+	if err = sendConn.Write(ethProto, eth.TransactionsMsg, eth.TransactionsPacket(txs)); err != nil {
 		return fmt.Errorf("failed to write message to connection: %v", err)
 	}
 
@@ -581,7 +582,7 @@ func (c *Conn) ReadEth() (any, error) {
 			c.Write(baseProto, pongMsg, []byte{})
 			continue
 		}
-		if getProto(code) != EthProto {
+		if getProto(code) != ethProto {
 			// Read until eth message.
 			continue
 		}
