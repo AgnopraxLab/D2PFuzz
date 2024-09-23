@@ -193,5 +193,6 @@ func initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 		return nil, errors.New("new Suite fail")
 	}
 
-	return client, nil
+	// return client, nil
+	return nil, nil
 }

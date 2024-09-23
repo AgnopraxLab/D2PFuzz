@@ -64,7 +64,7 @@ func getProto(code uint64) Proto {
 	case code < baseProtoLen:
 		return baseProto
 	case code < baseProtoLen+ethProtoLen:
-		return EthProto
+		return ethProto
 	case code < baseProtoLen+ethProtoLen+snapProtoLen:
 		return snapProto
 	default:
