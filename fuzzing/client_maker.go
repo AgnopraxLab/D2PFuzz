@@ -375,9 +375,9 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 
 		case *eth.TransactionsPacket:
 			// Nudge client out of syncing mode to accept pending txs.
-			if err := m.client.SendForkchoiceUpdated(); err != nil {
+			/*if err := m.client.SendForkchoiceUpdated(); err != nil {
 				return fmt.Errorf("failed to send next block: %v", err)
-			}
+			}*/
 			if err := m.handleTransactionPacket(p, traceOutput); err != nil {
 				return err
 			}
@@ -412,7 +412,15 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 			}
 
 		case *eth.NewPooledTransactionHashesPacket:
-			//待补充
+			/*if err := m.client.SendForkchoiceUpdated(); err != nil {
+				return fmt.Errorf("failed to send next block: %v", err)
+			}*/
+			if err := m.client.InitializeAndConnect(); err != nil {
+				return fmt.Errorf("initialization and connection failed: %v", err)
+			}
+			if err := m.handlePooledTransactionHashesPacket(p, traceOutput); err != nil {
+				return err
+			}
 
 		case *eth.GetPooledTransactionsPacket:
 			// 初始化连接
@@ -575,6 +583,30 @@ func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, trace
 		return fmt.Errorf("wrong bodies in response: expected %d bodies, got %d", len(p.GetBlockBodiesRequest), len(bodies))
 	}
 
+	if traceOutput != nil {
+		fmt.Println(traceOutput, "Received block bodies for request %d\n", resp.RequestId)
+	}
+
+	return nil
+}
+
+func (m *EthMaker) handlePooledTransactionHashesPacket(p *eth.NewPooledTransactionHashesPacket, traceOutput io.Writer) error {
+	if traceOutput != nil {
+		fmt.Println(traceOutput, "Sending NewPooledTransactionHashesPacket")
+	}
+
+	if err := m.client.SendMsg(eth.EthProto, eth.NewPooledTransactionHashesMsg, p); err != nil {
+		return fmt.Errorf("could not send GetBlockBodiesMsg: %v", err)
+	}
+
+	resp := new(eth.GetPooledTransactionsPacket)
+	if err := m.client.ReadMsg(eth.EthProto, eth.GetPooledTransactionsMsg, resp); err != nil {
+		return fmt.Errorf("error reading BlockBodiesMsg: %v", err)
+	}
+
+	if got, want := len(resp.GetPooledTransactionsRequest), len(p.Hashes); got != want {
+		return fmt.Errorf("unexpected number of txs requested: got %d, want %d", got, want)
+	}
 	if traceOutput != nil {
 		fmt.Println(traceOutput, "Received block bodies for request %d\n", resp.RequestId)
 	}
