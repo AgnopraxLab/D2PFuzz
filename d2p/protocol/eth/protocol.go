@@ -26,6 +26,12 @@ const (
 	snapProto
 )
 
+const (
+	BaseProto Proto = iota
+	EthProto
+	SnapProto
+)
+
 type Proto int
 
 func protoOffset(proto Proto) uint64 {
@@ -49,4 +55,19 @@ type protoHandshake struct {
 	ListenPort uint64
 	ID         []byte
 	Rest       []rlp.RawValue `rlp:"tail"`
+}
+
+// getProto returns the protocol a certain message code is associated with
+// (assuming the negotiated capabilities are exactly {eth,snap})
+func getProto(code uint64) Proto {
+	switch {
+	case code < baseProtoLen:
+		return baseProto
+	case code < baseProtoLen+ethProtoLen:
+		return ethProto
+	case code < baseProtoLen+ethProtoLen+snapProtoLen:
+		return snapProto
+	default:
+		panic("unhandled msg code beyond last protocol")
+	}
 }

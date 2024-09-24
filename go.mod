@@ -6,6 +6,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1
 	github.com/ethereum/go-ethereum v1.14.5
+	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/urfave/cli/v2 v2.27.1
 	golang.org/x/crypto v0.22.0
 )

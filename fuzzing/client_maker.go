@@ -18,10 +18,11 @@ package fuzzing
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/core/types"
 	"io"
 	"log"
 	"time"
+
+	"github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -33,9 +34,9 @@ import (
 
 const (
 	// Encryption/authentication parameters.
-	aesKeySize             = 16
 	gcmNonceSize           = 12
 	NoPendingRequired byte = 0xFF // 使用一个特殊值来表示不需要设置 Pending
+	aesKeySize             = 16
 )
 
 // Maker await a decision
@@ -363,6 +364,10 @@ func (m *EthMaker) ToSubTest() *stJSON {
 
 func (m *EthMaker) Start(traceOutput io.Writer) error {
 	for _, packet := range m.packets {
+		if traceOutput != nil {
+			fmt.Println(traceOutput, "Processing packet of type: %T\n", packet)
+		}
+
 		switch p := packet.(type) {
 		case *eth.StatusPacket:
 			if err := m.client.InitializeAndConnect(); err != nil {
