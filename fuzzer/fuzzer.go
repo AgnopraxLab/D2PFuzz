@@ -28,7 +28,6 @@ import (
 	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/filler"
 	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
-	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
 
 var (
@@ -87,7 +86,7 @@ func discv4Fuzzer(data []byte, engine bool, target string) int {
 		return -1
 	}
 	f := filler.NewFiller(data)
-	testMaker := generator.GenerateV4Packet(f, target)
+	testMaker := fuzzing.NewV4Maker(f, target)
 
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
@@ -111,7 +110,7 @@ func discv5Fuzzer(data []byte, engine bool, target string) int {
 		return -1
 	}
 	f := filler.NewFiller(data)
-	testMaker := generator.GenerateV5Packet(f, target)
+	testMaker := fuzzing.NewV5Maker(f, target)
 
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
@@ -135,7 +134,7 @@ func ethFuzzer(data []byte, engine bool, target, chain string) int {
 		return -1
 	}
 	f := filler.NewFiller(data)
-	testMaker := generator.GenerateEthPacket(f, target, chain)
+	testMaker := fuzzing.NewEthMaker(f, target, chain)
 
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))

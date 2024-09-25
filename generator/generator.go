@@ -34,68 +34,32 @@ import (
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv5"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
 	"github.com/AgnopraxLab/D2PFuzz/filler"
-	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 )
 
-func GenerateV4Packet(f *filler.Filler, target string) *fuzzing.V4Maker {
-	var (
-		node    *enode.Node
-		cli     *discv4.UDPv4
-		packets []discv4.Packet
-		series  []string
-	)
-
-	node, _ = getNode(target)
-	cli = initDiscv4()
-
-	// TODO: init oracle and series
+func GenerateV4Packet(cli *discv4.UDPv4, node *enode.Node, f *filler.Filler, series []string) []discv4.Packet {
+	var packets []discv4.Packet
 
 	// Generate a sequence of Packets
 	for _, i := range series {
 		packet := cli.GenPacket(f, i, node)
 		packets = append(packets, packet)
 	}
-
-	v4maker := fuzzing.NewV4Maker(cli, node, packets)
-	return v4maker
+	return packets
 }
 
-func GenerateV5Packet(f *filler.Filler, target string) *fuzzing.V5Maker {
-	var (
-		node    *enode.Node
-		cli     *discv5.UDPv5
-		packets []discv5.Packet
-		series  []string
-	)
-
-	node, _ = getNode(target)
-	cli = initDiscv5()
-
-	// TODO: init oracle and series
+func GenerateV5Packet(cli *discv5.UDPv5, node *enode.Node, f *filler.Filler, series []string) []discv5.Packet {
+	var packets []discv5.Packet
 
 	// Generate a sequence of Packets
 	for _, i := range series {
 		packet := cli.GenPacket(f, i, node)
 		packets = append(packets, packet)
 	}
-
-	v5maker := fuzzing.NewV5Maker(cli, node, packets)
-	return v5maker
+	return packets
 }
 
-func GenerateEthPacket(f *filler.Filler, target, chain string) *fuzzing.EthMaker {
-	var (
-		node    *enode.Node
-		cli     *eth.Suite
-		packets []eth.Packet
-		series  []int
-	)
-
-	node, _ = getNode(target)
-	cli, err := initeth(node, chain)
-	if err != nil {
-		fmt.Printf("failed to initialize eth clients: %v", err)
-	}
+func GenerateEthPacket(cli *eth.Suite, f *filler.Filler, series []int) []eth.Packet {
+	var packets []eth.Packet
 
 	// TODO: init oracle and series
 	state := eth.InitOracleState(cli)
@@ -123,11 +87,10 @@ func GenerateEthPacket(f *filler.Filler, target, chain string) *fuzzing.EthMaker
 		packets = append(packets, packet)
 	}
 
-	ethmaker := fuzzing.NewEthMaker(cli, node, packets)
-	return ethmaker
+	return packets
 }
 
-func initDiscv4() *discv4.UDPv4 {
+func InitDiscv4() *discv4.UDPv4 {
 	cfg := d2p.Config{
 		PrivateKey: d2p.GenKey(),
 		Log:        log.Root(),
@@ -154,7 +117,7 @@ func initDiscv4() *discv4.UDPv4 {
 	return client
 }
 
-func initDiscv5() *discv5.UDPv5 {
+func InitDiscv5() *discv5.UDPv5 {
 	var (
 		DefaultProtocolID = [6]byte{'d', 'i', 's', 'c', 'v', '5'}
 	)
@@ -185,14 +148,13 @@ func initDiscv5() *discv5.UDPv5 {
 	return client
 }
 
-func initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
+func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 
 	pri, _ := crypto.GenerateKey()
-	client, err := eth.NewSuite(dest, dir, pri, 1, 1)
+	client, err := eth.NewSuite(dest, dir, pri)
 	if err != nil {
-		return nil, errors.New("new Suite fail")
+		return nil, errors.New("New Suite fail")
 	}
 
-	// return client, nil
-	return nil, nil
+	return client, nil
 }
