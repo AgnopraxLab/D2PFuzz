@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -49,6 +50,12 @@ type V4Maker struct {
 
 	root common.Hash
 	logs common.Hash
+}
+
+type v4result struct {
+	result_1 *discv4.Pong
+	result_2 *discv4.Neighbors
+	n        *enode.Node
 }
 
 func NewV4Maker(f *filler.Filler, targetDir string) *V4Maker {
@@ -94,66 +101,86 @@ func (m *V4Maker) ToSubTest() *stJSON {
 }
 
 func (m *V4Maker) Start(traceOutput io.Writer) error {
-	// init logger
-	var logger *log.Logger
+	var (
+		wg       sync.WaitGroup
+		resultCh = make(chan *v4result, len(m.targetList))
+		errorCh  = make(chan error, len(m.targetList))
+		logger   *log.Logger
+	)
+
 	if traceOutput != nil {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
-	// Send packet sequence
-	for _, packet := range m.packets {
-		// 根据数据包类型设置预期的响应类型
-		var expectedResponseType byte
-		expectedResponseType = processPacket(packet)
-		if expectedResponseType != NoPendingRequired {
-
-			// 设置回复匹配器
-			rm := m.client.Pending(m.target.ID(), m.target.IP(), expectedResponseType, func(p discv4.Packet) (matched bool, requestDone bool) {
-				fmt.Printf("Received packet of type: %T\n", p)
-				if pong, ok := p.(*discv4.Pong); ok {
-					fmt.Printf("Received Pong response: %+v\n", pong)
-					return true, true
-				}
-				if neighbors, ok := p.(*discv4.Neighbors); ok {
-					fmt.Printf("Received Neighbors response: %+v\n", neighbors)
-					return true, true
-				}
-				if ENRresponse, ok := p.(*discv4.ENRResponse); ok {
-					fmt.Printf("Received ENR response: %+v\n", ENRresponse)
-					return true, true
-				}
-				return false, false
-			})
-
-			if err := m.client.Send(m.target, packet); err != nil {
-				if logger != nil {
-					logger.Printf("Failed to send packet: %v", err)
-				}
+	// Iterate over each target object
+	for _, target := range m.targetList {
+		wg.Add(1)
+		go func(target *enode.Node) {
+			defer wg.Done()
+			result := &v4result{
+				n: target,
 			}
-			// Record send log info
-			if logger != nil {
-				logger.Printf("Sent packet to target: %s, packet: %v", m.target.String(), packet.Kind())
+			// First round: sending testSeq packets
+			for _, packetType := range m.testSeq {
+				req := m.client.GenPacket(&m.filler, packetType, target)
+				m.client.Send(target, req)
+				logger.Printf("Sent test packet to target: %s, packet: %v", target.String(), req.Kind())
 			}
 
-			// 使用新的 WaitForResponse 方法等待响应
-			if err := rm.WaitForResponse(5 * time.Second); err != nil {
+			// Round 2: sending stateSeq packets
+			for _, packetType := range m.stateSeq {
+				req := m.client.GenPacket(&m.filler, packetType, target)
+				// Set the expected response type based on the packet type
+				rm := m.client.Pending(target.ID(), target.IP(), processPacket(req), func(p discv4.Packet) (matched bool, requestDone bool) {
+					logger.Printf("Received packet of type: %T\n", p)
+					if pong, ok := p.(*discv4.Pong); ok {
+						logger.Printf("Received Pong response: %+v\n", pong)
+						result.result_1 = p.(*discv4.Pong)
+						return true, true
+					}
+					if neighbors, ok := p.(*discv4.Neighbors); ok {
+						logger.Printf("Received Neighbors response: %+v\n", neighbors)
+						result.result_2 = p.(*discv4.Neighbors)
+						return true, true
+					}
+					return false, false
+				})
+				if err := m.client.Send(target, req); err != nil {
+					if logger != nil {
+						logger.Printf("Failed to send packet: %v", err)
+					}
+				}
+				// Record send log info
 				if logger != nil {
-					logger.Printf("Timeout waiting for response")
+					logger.Printf("Sent state packet to target: %s, packet: %v", target.String(), req.Kind())
+				}
+				// Waiting for a response with the new WaitForResponse method
+				if err := rm.WaitForResponse(1 * time.Second); err != nil {
+					if logger != nil {
+						logger.Printf("Timeout waiting for response")
+					}
 				}
 			}
-		} else {
-			if err := m.client.Send(m.target, packet); err != nil {
-				if logger != nil {
-					logger.Printf("Failed to send packet: %v", err)
-				}
-			}
-			// Record send log info
-			if logger != nil {
-				logger.Printf("Sent packet to target: %s, packet: %v", m.target.String(), packet.Kind())
-			}
-		}
-		time.Sleep(time.Second)
+			resultCh <- result
+		}(target)
 	}
+	// Wait for all goroutines to complete
+	go func() {
+		wg.Wait()
+		close(resultCh)
+		close(errorCh)
+	}()
+	for err := range errorCh {
+		if err != nil {
+			return fmt.Errorf("error occurred during fuzzing: %v", err)
+		}
+	}
+	// TODO: Need deal result
+	var allResults []*v4result
+	for result := range resultCh {
+		allResults = append(allResults, result)
+	}
+	// fmt.Printf("All results: %v\n", allResults)
 
 	return nil
 }

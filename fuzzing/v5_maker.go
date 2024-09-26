@@ -19,7 +19,9 @@ package fuzzing
 import (
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -48,6 +50,12 @@ type V5Maker struct {
 
 	root common.Hash
 	logs common.Hash
+}
+
+type v5result struct {
+	result_1 *discv5.Pong
+	result_2 *discv5.Nodes
+	n        *enode.Node
 }
 
 func NewV5Maker(f *filler.Filler, targetDir string) *V5Maker {
@@ -92,26 +100,78 @@ func (m *V5Maker) ToSubTest() *stJSON {
 }
 
 func (m *V5Maker) Start(traceOutput io.Writer) error {
-	for _, packet := range m.packets {
-		nonce, err := m.sendAndReceive(packet, traceOutput)
-		if err != nil {
-			return fmt.Errorf("failed to send and receive packet")
-		}
+	var (
+		wg       sync.WaitGroup
+		resultCh = make(chan *v5result, len(m.targetList))
+		errorCh  = make(chan error, len(m.targetList))
+		logger   *log.Logger
+	)
 
-		if traceOutput != nil {
-			fmt.Println(traceOutput, "Sent packet, nonce: %x\n", nonce)
-		}
-
-		time.Sleep(time.Second) // Sleep between sends as in the original code
+	if traceOutput != nil {
+		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
+
+	// Iterate over each target object
+	for _, target := range m.targetList {
+		wg.Add(1)
+		go func(target *enode.Node) {
+			defer wg.Done()
+			result := &v5result{
+				n: target,
+			}
+			// First round: sending testSeq packets
+			for _, packetType := range m.testSeq {
+				req := m.client.GenPacket(&m.filler, packetType, target)
+				nonce, err := m.sendAndReceive(target, req, traceOutput)
+				if err != nil {
+					fmt.Errorf("failed to send and receive packet")
+				}
+				logger.Printf("Sent test packet to target: %s, packet: %v", target.String(), req.Kind())
+				if traceOutput != nil {
+					logger.Println(traceOutput, "Sent packet, nonce: %x\n", nonce)
+				}
+			}
+
+			// Round 2: sending stateSeq packets
+			for _, packetType := range m.stateSeq {
+				req := m.client.GenPacket(&m.filler, packetType, target)
+				// Set the expected response type based on the packet type
+				nonce, err := m.sendAndReceive(target, req, traceOutput)
+				if err != nil {
+					fmt.Errorf("failed to send and receive packet")
+				}
+				if traceOutput != nil {
+					logger.Println(traceOutput, "Sent packet, nonce: %x\n", nonce)
+				}
+			}
+			resultCh <- result
+		}(target)
+	}
+	// Wait for all goroutines to complete
+	go func() {
+		wg.Wait()
+		close(resultCh)
+		close(errorCh)
+	}()
+	for err := range errorCh {
+		if err != nil {
+			return fmt.Errorf("error occurred during fuzzing: %v", err)
+		}
+	}
+	// TODO: Need deal result
+	var allResults []*v5result
+	for result := range resultCh {
+		allResults = append(allResults, result)
+	}
+	// fmt.Printf("All results: %v\n", allResults)
 
 	return nil
 }
 
-func (m *V5Maker) sendAndReceive(req discv5.Packet, traceOutput io.Writer) (discv5.Nonce, error) {
+func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOutput io.Writer) (discv5.Nonce, error) {
 	const waitTime = 5 * time.Second
 
-	nonce, err := m.client.Send(m.target, req, nil)
+	nonce, err := m.client.Send(target, req, nil)
 	if err != nil {
 		return nonce, fmt.Errorf("failed to send packet: %v", err)
 	}
@@ -141,11 +201,11 @@ func (m *V5Maker) sendAndReceive(req discv5.Packet, traceOutput io.Writer) (disc
 			IDNonce:   whoareyou.IDNonce,
 			RecordSeq: whoareyou.RecordSeq,
 		}
-		nonce, err = m.client.Send(m.target, req, challenge)
+		nonce, err = m.client.Send(target, req, challenge)
 		if err != nil {
 			return nonce, fmt.Errorf("failed to send handshake: %v", err)
 		}
-		return m.sendAndReceive(req, traceOutput)
+		return m.sendAndReceive(target, req, traceOutput)
 	}
 
 	return nonce, nil
