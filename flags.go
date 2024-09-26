@@ -55,4 +55,11 @@ var (
 		Name:  "chain",
 		Usage: "Test chain env directory (required)",
 	}
+
+	// run generate packet
+	packetTypeFlag = &cli.StringFlag{
+		Name:  "ptype",
+		Usage: "Packet type use generate",
+		Value: "random",
+	}
 )
