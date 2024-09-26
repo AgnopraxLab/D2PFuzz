@@ -22,19 +22,18 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/mclock"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/p2p/enr"
-
 	"github.com/AgnopraxLab/D2PFuzz/d2p"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv4"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv5"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
 	"github.com/AgnopraxLab/D2PFuzz/filler"
 	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/mclock"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/enr"
 )
 
 func GenerateV4Packet(f *filler.Filler, target string) *fuzzing.V4Maker {
@@ -187,9 +186,18 @@ func initDiscv5() *discv5.UDPv5 {
 }
 
 func initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
+	jwtPath, secret, err := eth.MakeJWTSecret()
+	if err != nil {
+		fmt.Printf("could not make jwt secret: %v", err)
+	}
+	geth, err := eth.RunGeth("./testdata", jwtPath)
+	if err != nil {
+		fmt.Printf("could not run geth: %v", err)
+	}
+	defer geth.Close()
 
 	pri, _ := crypto.GenerateKey()
-	client, err := eth.NewSuite(dest, dir, pri, "", "")
+	client, err := eth.NewSuite(dest, dir, pri, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
 	if err != nil {
 		return nil, errors.New("new Suite fail")
 	}
