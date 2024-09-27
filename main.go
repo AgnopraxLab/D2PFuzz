@@ -28,6 +28,7 @@ import (
 
 	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/fuzzer"
+	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
 
 var setenvCommand = &cli.Command{
@@ -48,6 +49,18 @@ var runCommand = &cli.Command{
 	Action: run,
 	Flags: []cli.Flag{
 		threadsFlag,
+	},
+}
+
+var genCommand = &cli.Command{
+	Name:   "generator",
+	Usage:  "Runs the generator",
+	Action: generate,
+	Flags: []cli.Flag{
+		protocolFlag,
+		targetFlag,
+		chainEnvDirFlag,
+		packetTypeFlag,
 	},
 }
 
@@ -145,4 +158,13 @@ func setenv(c *cli.Context) error {
 
 	fmt.Println("Config has been set.")
 	return nil
+}
+
+func generate(c *cli.Context) error {
+	// Retrieve the protocol and packet type from CLI flags
+	protocol := c.String("protocol")
+	packetType := c.String("ptype")
+	target := c.String("target")
+
+	return generator.RunGenerate(protocol, target, packetType)
 }
