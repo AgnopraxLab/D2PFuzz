@@ -20,10 +20,10 @@ package generator
 import (
 	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -96,11 +96,20 @@ func InitDiscv5() *discv5.UDPv5 {
 }
 
 func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
+	jwtPath, secret, err := eth.MakeJWTSecret()
+	if err != nil {
+		fmt.Printf("could not make jwt secret: %v", err)
+	}
+	geth, err := eth.RunGeth("./testdata", jwtPath)
+	if err != nil {
+		fmt.Printf("could not run geth: %v", err)
+	}
+	defer geth.Close()
 
 	pri, _ := crypto.GenerateKey()
-	client, err := eth.NewSuite(dest, dir, pri)
+	client, err := eth.NewSuite(dest, dir, pri, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
 	if err != nil {
-		return nil, errors.New("New Suite fail")
+		return nil, fmt.Errorf("new suite fail")
 	}
 
 	return client, nil
@@ -122,7 +131,7 @@ func RunGenerate(protocol, target, ptype string) error {
 		packet := client.GenPacket(f, ptype, node)
 		jsonData, err := json.Marshal(packet)
 		if err != nil {
-			return errors.New("Error encoding JSON")
+			return fmt.Errorf("error encoding JSON")
 		}
 		fmt.Println(string(jsonData))
 	case "discv5":
@@ -130,7 +139,7 @@ func RunGenerate(protocol, target, ptype string) error {
 		packet := client.GenPacket(f, ptype, node)
 		jsonData, err := json.Marshal(packet)
 		if err != nil {
-			return errors.New("Error encoding JSON")
+			return fmt.Errorf("error encoding JSON")
 		}
 		fmt.Println(string(jsonData))
 	case "eth":

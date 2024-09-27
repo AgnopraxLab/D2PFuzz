@@ -107,9 +107,9 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 
 		case *eth.TransactionsPacket:
 			// Nudge client out of syncing mode to accept pending txs.
-			/*if err := m.client.SendForkchoiceUpdated(); err != nil {
+			if err := m.client.SendForkchoiceUpdated(); err != nil {
 				return fmt.Errorf("failed to send next block: %v", err)
-			}*/
+			}
 			if err := m.handleTransactionPacket(p, traceOutput); err != nil {
 				return err
 			}
@@ -144,9 +144,9 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 			}
 
 		case *eth.NewPooledTransactionHashesPacket:
-			/*if err := m.client.SendForkchoiceUpdated(); err != nil {
+			if err := m.client.SendForkchoiceUpdated(); err != nil {
 				return fmt.Errorf("failed to send next block: %v", err)
-			}*/
+			}
 			if err := m.client.InitializeAndConnect(); err != nil {
 				return fmt.Errorf("initialization and connection failed: %v", err)
 			}
@@ -172,15 +172,6 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 			if err := m.handleGetReceiptsPacket(p, traceOutput); err != nil {
 				return err
 			}
-		// Add other packet types here as needed
-		// case *eth.GetBlockBodiesPacket:
-		//     if err := m.handleGetBlockBodiesPacket(p, traceOutput); err != nil {
-		//         return err
-		//     }
-		// case *eth.GetReceiptsPacket:
-		//     if err := m.handleGetReceiptsPacket(p, traceOutput); err != nil {
-		//         return err
-		//     }
 		default:
 			if traceOutput != nil {
 				fmt.Println(traceOutput, "Unsupported packet type: %T\n", packet)
