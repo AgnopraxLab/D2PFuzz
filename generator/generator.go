@@ -18,6 +18,7 @@
 package generator
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,7 +35,6 @@ import (
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv5"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
 	"github.com/AgnopraxLab/D2PFuzz/filler"
-	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 )
 
 func InitDiscv4() *discv4.UDPv4 {
@@ -112,7 +112,9 @@ func RunGenerate(protocol, target, ptype string) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse target node: %v", err)
 	}
-	f := filler.NewFiller(fuzzing.RandBuff(1000))
+	bytes := make([]byte, 1000)
+	rand.Read(bytes)
+	f := filler.NewFiller(bytes)
 
 	switch protocol {
 	case "discv4":
