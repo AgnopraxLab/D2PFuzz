@@ -17,12 +17,9 @@
 package generator
 
 import (
-	"fmt"
 	"net"
-	"strings"
 
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
 func getLocalIP() net.IP {
@@ -38,21 +35,4 @@ func getLocalIP() net.IP {
 		}
 	}
 	return nil
-}
-
-func getNode(target string) (*enode.Node, error) {
-	// Remove possible BOM and whitespace characters
-	cleanContent := strings.TrimSpace(target)
-	cleanContent = strings.TrimPrefix(cleanContent, "\uFEFF")
-
-	if !strings.HasPrefix(cleanContent, "enr:") {
-		return nil, fmt.Errorf("invalid ENR: missing 'enr:' prefix")
-	}
-
-	node, err := enode.Parse(enode.ValidSchemes, cleanContent)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse enode: %v", err)
-	}
-
-	return node, nil
 }

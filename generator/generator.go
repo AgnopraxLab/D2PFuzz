@@ -18,7 +18,8 @@
 package generator
 
 import (
-	"errors"
+	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"net"
 
@@ -34,100 +35,9 @@ import (
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv5"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
 	"github.com/AgnopraxLab/D2PFuzz/filler"
-	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 )
 
-func GenerateV4Packet(f *filler.Filler, target string) *fuzzing.V4Maker {
-	var (
-		node    *enode.Node
-		cli     *discv4.UDPv4
-		packets []discv4.Packet
-		series  []string
-	)
-
-	node, _ = getNode(target)
-	cli = initDiscv4()
-
-	// TODO: init oracle and series
-
-	// Generate a sequence of Packets
-	for _, i := range series {
-		packet := cli.GenPacket(f, i, node)
-		packets = append(packets, packet)
-	}
-
-	v4maker := fuzzing.NewV4Maker(cli, node, packets)
-	return v4maker
-}
-
-func GenerateV5Packet(f *filler.Filler, target string) *fuzzing.V5Maker {
-	var (
-		node    *enode.Node
-		cli     *discv5.UDPv5
-		packets []discv5.Packet
-		series  []string
-	)
-
-	node, _ = getNode(target)
-	cli = initDiscv5()
-
-	// TODO: init oracle and series
-
-	// Generate a sequence of Packets
-	for _, i := range series {
-		packet := cli.GenPacket(f, i, node)
-		packets = append(packets, packet)
-	}
-
-	v5maker := fuzzing.NewV5Maker(cli, node, packets)
-	return v5maker
-}
-
-func GenerateEthPacket(f *filler.Filler, target, chain string) *fuzzing.EthMaker {
-	var (
-		node    *enode.Node
-		cli     *eth.Suite
-		packets []eth.Packet
-		series  []int
-	)
-
-	node, _ = getNode(target)
-	cli, err := initeth(node, chain)
-	if err != nil {
-		fmt.Printf("failed to initialize eth clients: %v", err)
-	}
-
-	// TODO: init oracle and series
-	state := eth.InitOracleState(cli)
-
-	// Generate a sequence of Packets
-	spec := &eth.PacketSpecification{
-		BlockNumbers: []int{10, 20, 30},
-		BlockHashes:  make([]common.Hash, 3),
-	}
-	for i := 0; i < 3; i++ {
-		hash := crypto.Keccak256([]byte(fmt.Sprintf("hash%d", i)))
-		spec.BlockHashes[i] = common.BytesToHash(hash[:])
-	}
-	for _, packetType := range series {
-		packet, err := cli.GenPacket(f, packetType, spec)
-		if err != nil {
-			fmt.Println("GenPacket fail")
-		}
-		// Checking and Correcting Packets with Oracle
-		checkedPacket, err := eth.OracleCheck(packet, state, cli)
-		if err != nil {
-			fmt.Println("oracle check fail")
-		}
-		state.PacketHistory = append(state.PacketHistory, checkedPacket)
-		packets = append(packets, packet)
-	}
-
-	ethmaker := fuzzing.NewEthMaker(cli, node, packets)
-	return ethmaker
-}
-
-func initDiscv4() *discv4.UDPv4 {
+func InitDiscv4() *discv4.UDPv4 {
 	cfg := d2p.Config{
 		PrivateKey: d2p.GenKey(),
 		Log:        log.Root(),
@@ -154,7 +64,7 @@ func initDiscv4() *discv4.UDPv4 {
 	return client
 }
 
-func initDiscv5() *discv5.UDPv5 {
+func InitDiscv5() *discv5.UDPv5 {
 	var (
 		DefaultProtocolID = [6]byte{'d', 'i', 's', 'c', 'v', '5'}
 	)
@@ -185,14 +95,57 @@ func initDiscv5() *discv5.UDPv5 {
 	return client
 }
 
-func initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
+func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
+	jwtPath, secret, err := eth.MakeJWTSecret()
+	if err != nil {
+		fmt.Printf("could not make jwt secret: %v", err)
+	}
+	geth, err := eth.RunGeth("./testdata", jwtPath)
+	if err != nil {
+		fmt.Printf("could not run geth: %v", err)
+	}
+	defer geth.Close()
 
 	pri, _ := crypto.GenerateKey()
-	client, err := eth.NewSuite(dest, dir, pri, "", "")
+	client, err := eth.NewSuite(dest, dir, pri, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
 	if err != nil {
-		return nil, errors.New("new Suite fail")
+		return nil, fmt.Errorf("new suite fail")
 	}
 
-	// return client, nil
 	return client, nil
+}
+
+func RunGenerate(protocol, target, ptype string) error {
+	// Parse the target into an enode
+	node, err := enode.ParseV4(target)
+	if err != nil {
+		return fmt.Errorf("failed to parse target node: %v", err)
+	}
+	bytes := make([]byte, 1000)
+	rand.Read(bytes)
+	f := filler.NewFiller(bytes)
+
+	switch protocol {
+	case "discv4":
+		client := InitDiscv4()
+		packet := client.GenPacket(f, ptype, node)
+		jsonData, err := json.Marshal(packet)
+		if err != nil {
+			return fmt.Errorf("error encoding JSON")
+		}
+		fmt.Println(string(jsonData))
+	case "discv5":
+		client := InitDiscv5()
+		packet := client.GenPacket(f, ptype, node)
+		jsonData, err := json.Marshal(packet)
+		if err != nil {
+			return fmt.Errorf("error encoding JSON")
+		}
+		fmt.Println(string(jsonData))
+	case "eth":
+		return nil
+	default:
+		return fmt.Errorf("unsupported protocol: %s", protocol)
+	}
+	return nil
 }

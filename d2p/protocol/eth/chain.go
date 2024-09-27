@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/ecdsa"
+	crand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -21,6 +24,11 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	neth "github.com/ethereum/go-ethereum/eth"
+	"github.com/ethereum/go-ethereum/eth/catalyst"
+	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -251,4 +259,69 @@ func (c *Chain) GetHeaders(req *GetBlockHeadersPacket) ([]*types.Header, error) 
 		headers[i] = c.blocks[blockNumber].Header()
 	}
 	return headers, nil
+}
+
+func MakeJWTSecret() (string, [32]byte, error) {
+	var secret [32]byte
+	if _, err := crand.Read(secret[:]); err != nil {
+		return "", secret, fmt.Errorf("failed to create jwt secret: %v", err)
+	}
+	jwtPath := path.Join(os.TempDir(), "jwt_secret")
+	if err := os.WriteFile(jwtPath, []byte(hexutil.Encode(secret[:])), 0600); err != nil {
+		return "", secret, fmt.Errorf("failed to prepare jwt secret file: %v", err)
+	}
+	return jwtPath, secret, nil
+}
+
+// runGeth creates and starts a geth node
+func RunGeth(dir string, jwtPath string) (*node.Node, error) {
+	stack, err := node.New(&node.Config{
+		AuthAddr: "127.0.0.1",
+		AuthPort: 0,
+		P2P: p2p.Config{
+			ListenAddr:  "127.0.0.1:0",
+			NoDiscovery: true,
+			MaxPeers:    10, // in case a test requires multiple connections, can be changed in the future
+			NoDial:      true,
+		},
+		JWTSecret: jwtPath,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = setupGeth(stack, dir)
+	if err != nil {
+		stack.Close()
+		return nil, err
+	}
+	if err = stack.Start(); err != nil {
+		stack.Close()
+		return nil, err
+	}
+	return stack, nil
+}
+
+func setupGeth(stack *node.Node, dir string) error {
+	chain, err := NewChain(dir)
+	if err != nil {
+		return err
+	}
+	backend, err := neth.New(stack, &ethconfig.Config{
+		Genesis:        &chain.genesis,
+		NetworkId:      chain.genesis.Config.ChainID.Uint64(), // 19763
+		DatabaseCache:  10,
+		TrieCleanCache: 10,
+		TrieDirtyCache: 16,
+		TrieTimeout:    60 * time.Minute,
+		SnapshotCache:  10,
+	})
+	if err != nil {
+		return err
+	}
+	if err := catalyst.Register(stack, backend); err != nil {
+		return fmt.Errorf("failed to register catalyst service: %v", err)
+	}
+	_, err = backend.BlockChain().InsertChain(chain.blocks[1:])
+	return err
 }

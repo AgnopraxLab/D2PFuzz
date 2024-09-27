@@ -22,6 +22,10 @@ import (
 	"io/ioutil"
 )
 
+const (
+	SequenceLength = 100
+)
+
 // Config 结构体
 type Config struct {
 	ProtocolFlag string `json:"protocolFlag"`
