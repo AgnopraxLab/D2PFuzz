@@ -11,6 +11,7 @@ Introduction of some files and directories:
 - `d2p/`: Ethereum devp2p protocol related
 - `fuzzing/` : Mutation tools used in fuzz testing
 - `fuzzer` : Fuzzer testing tool
+- `filler` : Data fill tool
 - `utils/` : External Toolkit
 - `test/`: Test Data
 
@@ -28,7 +29,12 @@ cd D2PFuzz
 go build
 # Setting environment
 ./D2PFuzz setenv
+# Run the generator
+./D2PFuzz generator
 # Run the fuzzer
 ./FuzzyVM run
 ```
 # Setenv
+Configure Fuzz's runtime environment and related configurations
+# Generator
+Package generation tests can be performed with this tool

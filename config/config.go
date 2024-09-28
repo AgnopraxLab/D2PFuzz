@@ -1,4 +1,4 @@
-// Copyright 2020 Fudong and Hosen
+// Copyright 2024 Fudong and Hosen
 // This file is part of the D2PFuzz library.
 //
 // The D2PFuzz library is free software: you can redistribute it and/or modify
