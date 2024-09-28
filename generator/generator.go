@@ -115,12 +115,10 @@ func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 	return client, nil
 }
 
-func RunGenerate(protocol, target, ptype string) error {
+func RunGenerate(protocol, targetDir, ptype string) error {
 	// Parse the target into an enode
-	node, err := enode.ParseV4(target)
-	if err != nil {
-		return fmt.Errorf("failed to parse target node: %v", err)
-	}
+	nodeList, _ := getList(targetDir)
+	node := nodeList[0]
 	bytes := make([]byte, 1000)
 	rand.Read(bytes)
 	f := filler.NewFiller(bytes)

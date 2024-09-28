@@ -76,6 +76,7 @@ func initApp() *cli.App {
 	app.Commands = []*cli.Command{
 		setenvCommand,
 		runCommand,
+		genCommand,
 	}
 	return app
 }

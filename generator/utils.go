@@ -17,9 +17,13 @@
 package generator
 
 import (
+	"bufio"
+	"fmt"
 	"net"
+	"os"
 
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
 func getLocalIP() net.IP {
@@ -35,4 +39,31 @@ func getLocalIP() net.IP {
 		}
 	}
 	return nil
+}
+
+func getList(fName string) ([]*enode.Node, error) {
+	file, err := os.Open(fName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %v", err)
+	}
+	defer file.Close()
+
+	var nodeList []*enode.Node
+
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		node := enode.MustParse(line)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse enode: %v", err)
+		}
+		nodeList = append(nodeList, node)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading file: %v", err)
+	}
+
+	return nodeList, nil
 }
