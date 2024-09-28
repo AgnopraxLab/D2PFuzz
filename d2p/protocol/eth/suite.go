@@ -217,7 +217,7 @@ type PacketSpecification struct {
 // 	}
 // }
 
-func (s *Suite) GenPacket(f *filler.Filler, packetType int, spec *PacketSpecification) (Packet, error) {
+func (s *Suite) GenPacket(f *filler.Filler, packetType int) (Packet, error) {
 	switch packetType {
 	case StatusMsg:
 		return &StatusPacket{
@@ -255,13 +255,14 @@ func (s *Suite) GenPacket(f *filler.Filler, packetType int, spec *PacketSpecific
 		}, nil
 	case BlockHeadersMsg:
 		// Filling based on provided specification (spec.BlockNumbers)
-		headers := make([]*types.Header, 0, len(spec.BlockNumbers))
-		for _, blockNum := range spec.BlockNumbers {
-			if blockNum < len(s.chain.blocks) {
-				block := s.chain.GetBlock(blockNum)
-				if block != nil {
-					headers = append(headers, block.Header())
-				}
+		count := f.FillRequestId() % 256
+		headers := make([]*types.Header, 0, count)
+
+		for i := uint64(0); i < count; i++ {
+			blockNum := int(f.FillRequestId() % uint64(len(s.chain.blocks)))
+			block := s.chain.GetBlock(blockNum)
+			if block != nil {
+				headers = append(headers, block.Header())
 			}
 		}
 		return &BlockHeadersPacket{
@@ -277,8 +278,10 @@ func (s *Suite) GenPacket(f *filler.Filler, packetType int, spec *PacketSpecific
 		}, nil
 	case BlockBodiesMsg:
 		// Similar logic as BlockHeadersMsg with filler
-		bodies := make([]*BlockBody, 0, len(spec.BlockNumbers))
-		for _, blockNum := range spec.BlockNumbers {
+		count := f.FillRequestId() % 256
+		bodies := make([]*BlockBody, 0, count)
+		for i := uint64(0); i < count; i++ {
+			blockNum := int(f.FillRequestId() % uint64(len(s.chain.blocks)))
 			if blockNum < len(s.chain.blocks) {
 				block := s.chain.GetBlock(blockNum)
 				if block != nil {
@@ -371,10 +374,11 @@ func (s *Suite) GenPacket(f *filler.Filler, packetType int, spec *PacketSpecific
 		}, nil
 	case PooledTransactionsMsg:
 		txs := s.makeTxs(f)
-		pooledTxs := make([]*types.Transaction, 0, len(spec.BlockHashes))
-		for _, hash := range spec.BlockHashes {
+		count := int(f.FillRequestId() % 256)
+		pooledTxs := make([]*types.Transaction, 0, count)
+		for i := 0; i < count; i++ {
 			for _, tx := range txs {
-				if tx.Hash() == hash {
+				if tx.Hash() == f.FillHash() {
 					pooledTxs = append(pooledTxs, tx)
 					break
 				}
@@ -392,10 +396,11 @@ func (s *Suite) GenPacket(f *filler.Filler, packetType int, spec *PacketSpecific
 			},
 		}, nil
 	case ReceiptsMsg:
-		receipts := make([][]*types.Receipt, 0, len(spec.BlockNumbers))
-		for _, blockNum := range spec.BlockNumbers {
-			if blockNum < len(s.chain.blocks) {
-				block := s.chain.blocks[blockNum]
+		count := int(f.FillRequestId() % 256)
+		receipts := make([][]*types.Receipt, 0, count)
+		for i := 0; i < count; i++ {
+			if i < len(s.chain.blocks) {
+				block := s.chain.blocks[i]
 				if block != nil {
 					blockReceipts := make([]*types.Receipt, len(block.Transactions()))
 					for j, tx := range block.Transactions() {

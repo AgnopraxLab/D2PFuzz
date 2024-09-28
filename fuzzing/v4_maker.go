@@ -89,7 +89,7 @@ func (m *V4Maker) ToSubTest() *stJSON {
 	for _, fork := range m.forks {
 		postState := make(map[string][]stPostState)
 		postState[fork] = []stPostState{
-			stPostState{
+			{
 				Logs:    m.logs,
 				Root:    m.root,
 				Indexes: stIndex{Gas: 0, Value: 0, Data: 0},
