@@ -185,6 +185,12 @@ func (m *V4Maker) Start(traceOutput io.Writer) error {
 	return nil
 }
 
+func (v *V4Maker) Close() {
+	if v.client != nil {
+		v.client.Close()
+	}
+}
+
 func (m *V4Maker) SetResult(root, logs common.Hash) {
 	m.root = root
 	m.logs = logs

@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/urfave/cli/v2"
 
+	"github.com/AgnopraxLab/D2PFuzz/benchmark"
 	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/fuzzer"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
@@ -40,6 +41,15 @@ var setenvCommand = &cli.Command{
 		targetFlag,
 		engineFlag,
 		chainEnvDirFlag,
+	},
+}
+
+var benchCommand = &cli.Command{
+	Name:   "bench",
+	Usage:  "Starts a benchmarking run",
+	Action: bench,
+	Flags: []cli.Flag{
+		countFlag,
 	},
 }
 
@@ -75,6 +85,7 @@ func initApp() *cli.App {
 	app.Usage = "Generator for Ethereum DevP2P protocol tests"
 	app.Commands = []*cli.Command{
 		setenvCommand,
+		benchCommand,
 		runCommand,
 		genCommand,
 	}
@@ -88,6 +99,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func bench(c *cli.Context) error {
+	benchmark.RunFullBench(c.Int(countFlag.Name))
+	return nil
 }
 
 func run(c *cli.Context) error {

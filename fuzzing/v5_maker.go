@@ -168,6 +168,12 @@ func (m *V5Maker) Start(traceOutput io.Writer) error {
 	return nil
 }
 
+func (v *V5Maker) Close() {
+	if v.client != nil {
+		v.client.Close()
+	}
+}
+
 func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOutput io.Writer) (discv5.Nonce, error) {
 	const waitTime = 5 * time.Second
 

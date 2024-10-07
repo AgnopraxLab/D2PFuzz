@@ -18,12 +18,13 @@ package fuzzing
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/p2p/enode"
 	"io"
 	"log"
 	"math/rand"
 	"sync"
 	"time"
+
+	"github.com/ethereum/go-ethereum/p2p/enode"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"

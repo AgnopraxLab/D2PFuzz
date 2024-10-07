@@ -34,7 +34,7 @@ type Config struct {
 	ChainEnvFlag string `json:"chainFlag"`
 }
 
-const configFileName = "config.json"
+const configFileName = "./fuzzer/config.json"
 
 // ReadConfig 读取配置文件
 func ReadConfig() (*Config, error) {

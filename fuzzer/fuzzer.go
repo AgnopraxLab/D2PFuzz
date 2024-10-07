@@ -88,6 +88,9 @@ func discv4Fuzzer(data []byte, engine bool, target string) int {
 	f := filler.NewFiller(data)
 	testMaker := fuzzing.NewV4Maker(f, target)
 
+	// Ensure resources are released after testMaker usage
+	defer testMaker.Close()
+
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
 	// Execute the test and write out the resulting trace
@@ -111,6 +114,9 @@ func discv5Fuzzer(data []byte, engine bool, target string) int {
 	}
 	f := filler.NewFiller(data)
 	testMaker := fuzzing.NewV5Maker(f, target)
+
+	// Ensure resources are released after testMaker usage
+	defer testMaker.Close()
 
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
