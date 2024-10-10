@@ -34,7 +34,7 @@ type Config struct {
 	ChainEnvFlag string `json:"chainFlag"`
 }
 
-const configFileName = "./fuzzer/config.json"
+const configFileName = "config.json"
 
 // ReadConfig 读取配置文件
 func ReadConfig() (*Config, error) {
@@ -56,7 +56,7 @@ func WriteConfig(config *Config) error {
 	if err != nil {
 		return fmt.Errorf("could not marshal config data: %v", err)
 	}
-	err = ioutil.WriteFile(configFileName, data, 0644)
+	err = ioutil.WriteFile("./fuzzer"+configFileName, data, 0644)
 	if err != nil {
 		return fmt.Errorf("could not write config file: %v", err)
 	}

@@ -49,7 +49,10 @@ var benchCommand = &cli.Command{
 	Usage:  "Starts a benchmarking run",
 	Action: bench,
 	Flags: []cli.Flag{
+		protocolFlag,
+		targetFlag,
 		countFlag,
+		chainEnvDirFlag,
 	},
 }
 
@@ -102,7 +105,7 @@ func main() {
 }
 
 func bench(c *cli.Context) error {
-	benchmark.RunFullBench(c.Int(countFlag.Name))
+	benchmark.RunFullBench(c.String("protocol"), c.String("target"), c.String("chain"), c.Int(countFlag.Name))
 	return nil
 }
 

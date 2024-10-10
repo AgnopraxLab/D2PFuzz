@@ -52,11 +52,14 @@ func NewFiller(data []byte) *Filler {
 
 // incPointer increments the internal pointer
 // to the next position to be read.
-func (f *Filler) incPointer(i int) {
-	if f.pointer+i >= len(f.data) {
-		f.usedUp = true
+func (f *Filler) incPointer(n int) {
+	if len(f.data) == 0 {
+		// If data is empty, set pointer to 0 to avoid divide by zero
+		f.pointer = 0
+		return
 	}
-	f.pointer = (f.pointer + i) % len(f.data)
+
+	f.pointer = (f.pointer + n) % len(f.data)
 }
 
 // Bool returns a new bool.
@@ -141,23 +144,39 @@ func (f *Filler) MemInt() *big.Int {
 
 // ByteSlice returns a byteslice with `items` values.
 func (f *Filler) ByteSlice(items int) []byte {
-	// TODO (MariusVanDerWijden) this can be done way more efficiently
-	b := make([]byte, items)
-	if f.pointer+items < len(f.data) {
-		copy(b, f.data[f.pointer:])
-	} else {
-		// Not enough data available
-		for i := 0; i < items; {
-			it := copy(b[i:], f.data[f.pointer:])
-			if it == 0 {
-				panic("should not happen, infinite loop")
-			}
-			i += it
-			f.pointer = 0
-		}
-		f.usedUp = true
+	// Ensure items is not zero to avoid issues
+	if items <= 0 {
+		return nil
 	}
-	f.incPointer(items)
+
+	b := make([]byte, items)
+
+	// Check if f.data is initialized or if the pointer is invalid
+	if len(f.data) == 0 {
+		// If f.data is empty, generate random data and return
+		rand.Read(b)
+		return b
+	}
+
+	remaining := len(f.data) - f.pointer
+
+	if remaining >= items {
+		copy(b, f.data[f.pointer:])
+		f.incPointer(items)
+	} else {
+		// Fill the remaining part with available data
+		copy(b, f.data[f.pointer:])
+		f.incPointer(remaining)
+
+		// Randomly generate additional data if not enough
+		additionalData := make([]byte, items-remaining)
+		rand.Read(additionalData) // Fills the slice with random data
+		copy(b[remaining:], additionalData)
+
+		// Optionally add generated data back to f.data
+		f.data = append(f.data, additionalData...)
+	}
+
 	return b
 }
 
@@ -199,75 +218,75 @@ type Pubkey [64]byte
 
 // FillExpiration fills the expiration field with a random uint64 value.
 func (f *Filler) FillExpiration() uint64 {
-	return f.Uint64() // 随机生成一个 uint64 时间戳
+	return f.Uint64()
 }
 
 // FillRest fills the Rest field with random RLP raw values.
 func (f *Filler) FillRest() []rlp.RawValue {
-	numValues := rand.Intn(10) // 随机生成 0-10 个 Rest 字段
+	numValues := rand.Intn(10)
 	rest := make([]rlp.RawValue, numValues)
 	for i := range rest {
-		rest[i] = f.ByteSlice(32) // 随机填充 32 字节的值
+		rest[i] = f.ByteSlice(32)
 	}
 	return rest
 }
 
 // FillReplyToken generates a random reply token.
 func (f *Filler) FillReplyToken() []byte {
-	return f.ByteSlice(64) // 生成 64 字节的随机回复令牌
+	return f.ByteSlice(64)
 }
 
 // FillPubkey fills the Pubkey field with a random 64-byte value.
 func (f *Filler) FillPubkey() Pubkey {
 	var pub Pubkey
-	copy(pub[:], f.ByteSlice(64)) // 随机生成一个 64 字节的公钥
+	copy(pub[:], f.ByteSlice(64))
 	return pub
 }
 
 // FillIP fills the IP field with a random IP address.
 func (f *Filler) FillIP() net.IP {
-	ipLength := 4 // 选择 IPv4 地址
+	ipLength := 4
 	if rand.Intn(2) == 1 {
-		ipLength = 16 // 50% 概率选择 IPv6 地址
+		ipLength = 16
 	}
 	return net.IP(f.ByteSlice(ipLength))
 }
 
 // FillPort generates a random port number.
 func (f *Filler) FillPort() int {
-	return rand.Intn(65535) // 随机生成端口号
+	return rand.Intn(65535)
 }
 
 // FillReqID generates a random request ID.
 func (f *Filler) FillReqID() []byte {
-	return f.ByteSlice(8) // 生成8字节的随机请求ID
+	return f.ByteSlice(8)
 }
 
 // FillENRSeq generates a random ENR sequence number.
 func (f *Filler) FillENRSeq() uint64 {
-	return f.Uint64() // 随机生成一个uint64 ENR序列号
+	return f.Uint64()
 }
 
 // FillNonce generates a random Nonce.
 func (f *Filler) FillNonce() Nonce {
 	var nonce Nonce
-	copy(nonce[:], f.ByteSlice(12)) // 生成12字节的随机 Nonce
+	copy(nonce[:], f.ByteSlice(12))
 	return nonce
 }
 
 // FillChallengeData generates random challenge data.
 func (f *Filler) FillChallengeData() []byte {
-	return f.ByteSlice(32) // 生成32字节的随机挑战数据
+	return f.ByteSlice(32)
 }
 
 // FillDistances generates random distances for Findnode.
 func (f *Filler) FillDistances() []uint {
-	return []uint{uint(rand.Uint32()), uint(rand.Uint32()), uint(rand.Uint32())} // 将uint32显式转换为uint
+	return []uint{uint(rand.Uint32()), uint(rand.Uint32()), uint(rand.Uint32())}
 }
 
 // FillMessage generates a random message.
 func (f *Filler) FillMessage() []byte {
-	return f.ByteSlice(64) // 生成64字节的随机消息
+	return f.ByteSlice(64)
 }
 
 // FillENRRecords generates random ENR records.
@@ -280,7 +299,7 @@ func (f *Filler) FillENRRecords(count int) []*enr.Record {
 		r.Set(enr.UDP(f.FillPort()))
 		r.Set(enr.TCP(f.FillPort()))
 		r.Set(enode.Secp256k1(key.PublicKey))
-		r.SetSeq(f.Uint64()) // 使用随机 ENR 序列号
+		r.SetSeq(f.Uint64())
 		enode.SignV4(&r, key)
 		records = append(records, &r)
 	}

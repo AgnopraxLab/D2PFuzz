@@ -17,16 +17,18 @@ package benchmark
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"golang.org/x/exp/rand"
 
-	"github.com/AgnopraxLab/D2PFuzz/fuzzer"
+	"github.com/AgnopraxLab/D2PFuzz/filler"
+	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 )
 
 // RunFullBench runs a full benchmark with N runs.
-func RunFullBench(N int) {
-	time, err := testExcution(N)
+func RunFullBench(prot, target, chainDir string, N int) {
+	time, err := testExcution(prot, target, chainDir, N)
 	// Basic building blocks
 	printResult("BenchmarkTestGeneration", time, err)
 }
@@ -39,15 +41,35 @@ func printResult(name string, time time.Duration, err error) {
 	fmt.Printf("Benchmark %v took %v \n", name, time.String())
 }
 
-// testExcution excution a fuzzer.
-func testExcution(N int) (time.Duration, error) {
-	rnd := make([]byte, 40)
+func newFiller() (*filler.Filler, error) {
+	rand.Seed(12345)
+	rnd := make([]byte, 4000)
 	if _, err := rand.Read(rnd); err != nil {
-		return 0, err
+		return nil, err
 	}
+	return filler.NewFiller(rnd), nil
+}
+
+// testExcution excution a fuzzer.
+func testExcution(prot, target, chainDir string, N int) (time.Duration, error) {
+	f, err := newFiller()
+	if err != nil {
+		return time.Nanosecond, err
+	}
+	// var traceFile *os.File
 	start := time.Now()
 	for i := 0; i < N; i++ {
-		fuzzer.Fuzz(rnd)
+		switch prot {
+		case "discv4":
+			testMaker := fuzzing.NewV4Maker(f, target)
+			testMaker.Start(os.Stdout)
+		case "discv5":
+			testMaker := fuzzing.NewV5Maker(f, target)
+			testMaker.Start(os.Stdout)
+		case "eth":
+			testMaker := fuzzing.NewEthMaker(f, target, chainDir)
+			testMaker.Start(os.Stdout)
+		}
 	}
 	return time.Since(start), nil
 }
