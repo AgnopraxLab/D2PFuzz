@@ -49,10 +49,7 @@ var benchCommand = &cli.Command{
 	Usage:  "Starts a benchmarking run",
 	Action: bench,
 	Flags: []cli.Flag{
-		protocolFlag,
-		targetFlag,
 		countFlag,
-		chainEnvDirFlag,
 	},
 }
 
@@ -105,7 +102,12 @@ func main() {
 }
 
 func bench(c *cli.Context) error {
-	benchmark.RunFullBench(c.String("protocol"), c.String("target"), c.String("chain"), c.Int(countFlag.Name))
+	conf, err := config.ReadConfig()
+	if err != nil {
+		fmt.Printf("Error reading config: %v\n", err)
+		return err
+	}
+	benchmark.RunFullBench(conf.ProtocolFlag, conf.TargetFlag, conf.ChainEnvFlag, c.Int(countFlag.Name))
 	return nil
 }
 
@@ -164,14 +166,24 @@ func ensureDirs(dirs ...string) {
 }
 
 func setenv(c *cli.Context) error {
-	conf := &config.Config{
-		ProtocolFlag: c.String("protocol"),
-		TargetFlag:   c.String("target"),
-		EngineFlag:   c.Bool("engine"),
-		ChainEnvFlag: c.String("chain"),
+	targetPath, err := filepath.Abs(c.String("target"))
+	if err != nil {
+		return fmt.Errorf("could not get absolute path for target: %v", err)
 	}
 
-	err := config.WriteConfig(conf)
+	chainPath, err := filepath.Abs(c.String("chain"))
+	if err != nil {
+		return fmt.Errorf("could not get absolute path for chain: %v", err)
+	}
+
+	conf := &config.Config{
+		ProtocolFlag: c.String("protocol"),
+		TargetFlag:   targetPath,
+		EngineFlag:   c.Bool("engine"),
+		ChainEnvFlag: chainPath,
+	}
+
+	err = config.WriteConfig(conf)
 	if err != nil {
 		return fmt.Errorf("could not write config: %v", err)
 	}

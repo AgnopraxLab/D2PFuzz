@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"path/filepath"
 )
 
 const (
@@ -34,11 +35,18 @@ type Config struct {
 	ChainEnvFlag string `json:"chainFlag"`
 }
 
-const configFileName = "config.json"
+func getConfigFilePath() (string, error) {
+	return filepath.Abs("./config.json")
+}
 
-// ReadConfig 读取配置文件
+// ReadConfig
 func ReadConfig() (*Config, error) {
 	config := &Config{}
+	configFileName, err := getConfigFilePath()
+	if err != nil {
+		return nil, fmt.Errorf("could not get config file path: %v", err)
+	}
+
 	data, err := ioutil.ReadFile(configFileName)
 	if err != nil {
 		return nil, fmt.Errorf("could not read config file: %v", err)
@@ -56,7 +64,11 @@ func WriteConfig(config *Config) error {
 	if err != nil {
 		return fmt.Errorf("could not marshal config data: %v", err)
 	}
-	err = ioutil.WriteFile("./fuzzer"+configFileName, data, 0644)
+	configFileName, err := getConfigFilePath()
+	if err != nil {
+		return fmt.Errorf("could not get config file path: %v", err)
+	}
+	err = ioutil.WriteFile(configFileName, data, 0644)
 	if err != nil {
 		return fmt.Errorf("could not write config file: %v", err)
 	}
