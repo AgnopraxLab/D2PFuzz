@@ -197,6 +197,7 @@ func generate(c *cli.Context) error {
 	protocol := c.String("protocol")
 	packetType := c.String("ptype")
 	target := c.String("target")
+	chainDir := c.String("chain")
 
-	return generator.RunGenerate(protocol, target, packetType)
+	return generator.RunGenerate(protocol, target, chainDir, packetType)
 }

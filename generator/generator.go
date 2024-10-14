@@ -18,9 +18,10 @@
 package generator
 
 import (
-	"crypto/rand"
+	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -100,7 +101,7 @@ func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 	if err != nil {
 		fmt.Printf("could not make jwt secret: %v", err)
 	}
-	geth, err := eth.RunGeth("./testdata", jwtPath)
+	geth, err := eth.RunGeth(dir, jwtPath)
 	if err != nil {
 		fmt.Printf("could not run geth: %v", err)
 	}
@@ -115,13 +116,19 @@ func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 	return client, nil
 }
 
-func RunGenerate(protocol, targetDir, ptype string) error {
+func RunGenerate(protocol, targetDir, chainDir, ptype string) error {
 	// Parse the target into an enode
 	nodeList, _ := getList(targetDir)
 	node := nodeList[0]
 	bytes := make([]byte, 1000)
-	rand.Read(bytes)
+	crand.Read(bytes)
 	f := filler.NewFiller(bytes)
+	options := []int{
+		eth.StatusMsg, eth.NewBlockHashesMsg, eth.TransactionsMsg, eth.GetBlockHeadersMsg,
+		eth.BlockHeadersMsg, eth.GetBlockBodiesMsg, eth.BlockBodiesMsg, eth.NewBlockMsg,
+		eth.NewPooledTransactionHashesMsg, eth.GetPooledTransactionsMsg, eth.PooledTransactionsMsg,
+		eth.GetReceiptsMsg, eth.ReceiptsMsg,
+	}
 
 	switch protocol {
 	case "discv4":
@@ -141,7 +148,19 @@ func RunGenerate(protocol, targetDir, ptype string) error {
 		}
 		fmt.Println(string(jsonData))
 	case "eth":
-		return nil
+		client, err := Initeth(node, chainDir)
+		if err != nil {
+			return fmt.Errorf("error init eth client")
+		}
+		packet, err := client.GenPacket(f, options[rand.Intn(len(options))])
+		if err != nil {
+			return fmt.Errorf("error gen eth packet")
+		}
+		jsonData, err := json.Marshal(packet)
+		if err != nil {
+			return fmt.Errorf("error encoding JSON")
+		}
+		fmt.Println(string(jsonData))
 	default:
 		return fmt.Errorf("unsupported protocol: %s", protocol)
 	}

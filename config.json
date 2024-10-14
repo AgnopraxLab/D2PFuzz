@@ -1,6 +1,0 @@
-{
-  "protocolFlag": "eth",
-  "targetFlag": "/Users/fudong/code/golang/D2PFuzz/test/enode.txt",
-  "engineFlag": false,
-  "chainFlag": "/Users/fudong/code/golang/D2PFuzz/test/ethdata"
-}
