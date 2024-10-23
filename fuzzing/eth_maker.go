@@ -125,13 +125,13 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 			}
 			// First round: sending testSeq packets
 			for i, packetType := range m.testSeq {
-				req, _ := m.suiteList[i].GenPacket(&m.filler, packetType)
+				req, _ := target.GenPacket(&m.filler, packetType)
 				m.handlePacket(req, m.suiteList[i], traceOutput)
 				logger.Printf("Sent test packet to target: %s, packet: %v", target.DestList.String(), req.Kind())
 			}
 			// Round 2: sending stateSeq packets
 			for i, packetType := range m.stateSeq {
-				req, _ := m.suiteList[i].GenPacket(&m.filler, packetType)
+				req, _ := target.GenPacket(&m.filler, packetType)
 				m.handlePacket(req, m.suiteList[i], traceOutput)
 				logger.Printf("Sent state packet to target: %s, packet: %v, using suite: %d", target.DestList.String(), req.Kind(), i)
 			}

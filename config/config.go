@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 )
 
@@ -27,7 +28,6 @@ const (
 	SequenceLength = 100
 )
 
-// Config 结构体
 type Config struct {
 	ProtocolFlag string `json:"protocolFlag"`
 	TargetFlag   string `json:"targetFlag"`
@@ -35,11 +35,25 @@ type Config struct {
 	ChainEnvFlag string `json:"chainFlag"`
 }
 
+// getConfigFilePath returns the correct path to the config file depending on where the program is run
 func getConfigFilePath() (string, error) {
-	return filepath.Abs("./config.json")
+	// Get current working directory
+	workingDir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("could not get current working directory: %v", err)
+	}
+
+	// Assuming `main.go` and `fuzzer.go` are in different directories, handle both cases
+	if filepath.Base(workingDir) == "fuzzer" {
+		// If running from the fuzzer directory, assume the config.json is in the parent directory
+		return filepath.Abs("../config.json")
+	} else {
+		// Otherwise assume the config.json is in the current directory
+		return filepath.Abs("./config.json")
+	}
 }
 
-// ReadConfig
+// ReadConfig reads the configuration from the config file
 func ReadConfig() (*Config, error) {
 	config := &Config{}
 	configFileName, err := getConfigFilePath()
@@ -58,7 +72,7 @@ func ReadConfig() (*Config, error) {
 	return config, nil
 }
 
-// WriteConfig
+// WriteConfig writes the configuration to the config file
 func WriteConfig(config *Config) error {
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
