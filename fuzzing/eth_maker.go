@@ -53,7 +53,7 @@ type EthMaker struct {
 	logs common.Hash
 }
 
-type ethresult struct {
+type ethSnapshot struct {
 	result1 *eth.StatusPacket
 	result2 *eth.ReceiptsPacket
 	n       *enode.Node
@@ -106,7 +106,7 @@ func (m *EthMaker) ToSubTest() *stJSON {
 func (m *EthMaker) Start(traceOutput io.Writer) error {
 	var (
 		wg       sync.WaitGroup
-		resultCh = make(chan *ethresult, len(m.suiteList))
+		resultCh = make(chan *ethSnapshot, len(m.suiteList))
 		errorCh  = make(chan error, len(m.suiteList))
 		logger   *log.Logger
 	)
@@ -120,7 +120,7 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 		wg.Add(1)
 		go func(target *eth.Suite) {
 			defer wg.Done()
-			result := &ethresult{
+			result := &ethSnapshot{
 				n: target.DestList,
 			}
 			// First round: sending testSeq packets
@@ -150,11 +150,11 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 		}
 	}
 	// TODO: Need deal result
-	var allResults []*ethresult
-	for result := range resultCh {
-		allResults = append(allResults, result)
+	var allSnapshot []*ethSnapshot
+	for snapshot := range resultCh {
+		allSnapshot = append(allSnapshot, snapshot)
 	}
-	// fmt.Printf("All results: %v\n", allResults)
+	// fmt.Printf("All results: %v\n", allSnapshot)
 
 	return nil
 }
