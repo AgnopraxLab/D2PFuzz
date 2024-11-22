@@ -52,6 +52,13 @@ type V4Maker struct {
 	logs common.Hash
 }
 
+type packetTestResult struct {
+	RequestType string
+	Success     bool
+	Response    discv4.Packet
+	Error       error
+}
+
 type v4result struct {
 	result_1 *discv4.Pong
 	result_2 *discv4.Neighbors
@@ -98,6 +105,67 @@ func (m *V4Maker) ToSubTest() *stJSON {
 		st.Post = postState
 	}
 	return st
+}
+
+// PacketStart executes fuzzing by sending single packets in multiple goroutines and collecting feedback
+func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
+	var (
+		wg      sync.WaitGroup
+		logger  *log.Logger
+		mu      sync.Mutex
+		results []packetTestResult
+	)
+
+	if traceOutput != nil {
+		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
+	}
+	target := m.targetList[0]
+	// mutator := NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
+
+	ping := m.client.GenPacket(&m.filler, "ping", target)
+	err := m.client.Send(target, ping)
+	if err != nil {
+		logger.Printf("Failed to send initial ping: %v", err)
+	}
+
+	req := m.client.GenPacket(&m.filler, "random", target)
+
+	// Iterate over each target object
+	for i := 0; i < config.MutateCount; i++ {
+		wg.Add(1)
+
+		// check req
+
+		go func(iteration int, currentReq discv4.Packet) {
+			defer wg.Done()
+
+			if !checkRequestSemantics(currentReq, logger) {
+				if logger != nil {
+					logger.Printf("Invalid request semantics in iteration %d", iteration)
+				}
+				return
+			}
+
+			// Sending a single packet and waiting for feedback
+			result := sendAndWaitResponse(m, target, currentReq, logger)
+
+			// 记录结果
+			mu.Lock()
+			results = append(results, result)
+			mu.Unlock()
+
+		}(i, req)
+
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	wg.Wait()
+
+	// Process results
+
+	// fmt.Printf("All results: %v\n", allResults)
+
+	return nil
 }
 
 func (m *V4Maker) Start(traceOutput io.Writer) error {
@@ -234,4 +302,131 @@ func generateV4TestSeq() []string {
 	}
 
 	return seq
+}
+
+func checkRequestSemantics(req discv4.Packet, logger *log.Logger) bool {
+	switch p := req.(type) {
+	case *discv4.Ping:
+		return checkPingSemantics(p, logger)
+	case *discv4.Findnode:
+		return checkFindnodeSemantics(p, logger)
+	case *discv4.ENRRequest:
+		return checkENRRequestSemantics(p, logger)
+	default:
+		if logger != nil {
+			logger.Printf("Unknown packet type: %T", req)
+		}
+		return false
+	}
+}
+
+func checkPingSemantics(p *discv4.Ping, logger *log.Logger) bool {
+	// 检查过期时间是否合理
+	// if p.Expiration <= uint64(time.Now().Unix()) {
+	// 	if logger != nil {
+	// 		logger.Printf("Invalid expiration time in Ping")
+	// 	}
+	// 	return false
+	// }
+	// if !isValidEndpoint(p.From) || !isValidEndpoint(p.To) {
+	// 	if logger != nil {
+	// 		logger.Printf("Invalid endpoint in Ping")
+	// 	}
+	// 	return false
+	// }
+
+	return true
+}
+
+// checkFindnodeSemantics 检查Findnode请求的语义正确性
+func checkFindnodeSemantics(f *discv4.Findnode, logger *log.Logger) bool {
+	return false
+}
+
+// checkENRRequestSemantics 检查ENRRequest请求的语义正确性
+func checkENRRequestSemantics(e *discv4.ENRRequest, logger *log.Logger) bool {
+	// 检查过期时间
+	if e.Expiration <= uint64(time.Now().Unix()) {
+		if logger != nil {
+			logger.Printf("Invalid expiration time in ENRRequest")
+		}
+		return false
+	}
+
+	return true
+}
+
+// sendAndWaitResponse 发送请求并等待响应
+func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logger *log.Logger) packetTestResult {
+	result := packetTestResult{
+		RequestType: req.Name(),
+	}
+
+	// 发送请求
+	_ = m.client.Send(target, req)
+	if logger != nil {
+		logger.Printf("Sent packet to target: %s, type: %s", target.String(), req.Name())
+	}
+
+	// 等待响应
+	rm := m.client.Pending(target.ID(), target.IP(), processPacket(req), func(p discv4.Packet) (matched bool, requestDone bool) {
+		if logger != nil {
+			logger.Printf("Received packet of type: %T", p)
+		}
+
+		result.Response = p
+
+		switch p.(type) {
+		case *discv4.Pong:
+			return true, true
+		case *discv4.Neighbors:
+			return true, true
+		case *discv4.ENRResponse:
+			return true, true
+		}
+		return false, false
+	})
+
+	if err := rm.WaitForResponse(1 * time.Second); err != nil {
+		if logger != nil {
+			logger.Printf("Timeout waiting for response")
+		}
+		result.Error = err
+		return result
+	}
+
+	result.Success = true
+	return result
+}
+
+func analyzeResults(results []packetTestResult, logger *log.Logger) {
+	if logger == nil {
+		return
+	}
+
+	var (
+		totalTests   = len(results)
+		successCount = 0
+		failureCount = 0
+		timeoutCount = 0
+	)
+
+	for _, result := range results {
+		if result.Success {
+			successCount++
+		} else if result.Error != nil {
+			if result.Error.Error() == "timeout" {
+				timeoutCount++
+			} else {
+				failureCount++
+			}
+		}
+	}
+
+	// stastic
+	logger.Printf("Test Summary:")
+	logger.Printf("Total Tests: %d", totalTests)
+	logger.Printf("Successful: %d (%.2f%%)", successCount, float64(successCount)/float64(totalTests)*100)
+	logger.Printf("Failed: %d (%.2f%%)", failureCount, float64(failureCount)/float64(totalTests)*100)
+	logger.Printf("Timeouts: %d (%.2f%%)", timeoutCount, float64(timeoutCount)/float64(totalTests)*100)
 }

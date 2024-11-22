@@ -99,7 +99,13 @@ func discv4Fuzzer(data []byte, engine bool, target string) int {
 		traceFile = setupTrace(finalName)
 		defer traceFile.Close()
 	}
-	if err := testMaker.Start(traceFile); err != nil {
+	var err error
+	if engine {
+		err = testMaker.Start(traceFile)
+	} else {
+		err = testMaker.PacketStart(traceFile)
+	}
+	if err != nil {
 		panic(err)
 	}
 	// Save the test
