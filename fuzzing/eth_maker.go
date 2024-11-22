@@ -24,10 +24,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/p2p/enode"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 
 	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
@@ -54,8 +53,8 @@ type EthMaker struct {
 }
 
 type ethSnapshot struct {
-	result1 *eth.StatusPacket
-	result2 *eth.ReceiptsPacket
+	state_1 *eth.StatusPacket
+	state_2 *eth.ReceiptsPacket
 	n       *enode.Node
 }
 
@@ -126,13 +125,13 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 			// First round: sending testSeq packets
 			for i, packetType := range m.testSeq {
 				req, _ := target.GenPacket(&m.filler, packetType)
-				m.handlePacket(req, m.suiteList[i], traceOutput)
-				logger.Printf("Sent test packet to target: %s, packet: %v", target.DestList.String(), req.Kind())
+				m.handlePacket(req, target, traceOutput)
+				logger.Printf("Sent test packet to target: %s, packet: %v, using suite: %d", target.DestList.String(), req.Kind(), i)
 			}
 			// Round 2: sending stateSeq packets
 			for i, packetType := range m.stateSeq {
 				req, _ := target.GenPacket(&m.filler, packetType)
-				m.handlePacket(req, m.suiteList[i], traceOutput)
+				m.handlePacket(req, target, traceOutput)
 				logger.Printf("Sent state packet to target: %s, packet: %v, using suite: %d", target.DestList.String(), req.Kind(), i)
 			}
 			resultCh <- result

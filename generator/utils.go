@@ -55,9 +55,6 @@ func getList(fName string) ([]*enode.Node, error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		node := enode.MustParse(line)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse enode: %v", err)
-		}
 		nodeList = append(nodeList, node)
 	}
 

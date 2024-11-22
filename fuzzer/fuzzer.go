@@ -33,7 +33,7 @@ import (
 var (
 	outputDir   = "out"
 	EnvKey      = "FUZZYDIR"
-	shouldTrace = false
+	shouldTrace = true
 )
 
 // SetFuzzyVMDir sets the output directory for FuzzyVM

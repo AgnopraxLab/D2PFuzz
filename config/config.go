@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	SequenceLength = 100
+	SequenceLength = 10
 )
 
 type Config struct {
