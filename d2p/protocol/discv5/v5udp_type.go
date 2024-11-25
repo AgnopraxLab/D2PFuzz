@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/mclock"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p"
-	"github.com/AgnopraxLab/D2PFuzz/filler"
 )
 
 const (
@@ -180,74 +180,199 @@ func (t *UDPv5) Decode(input []byte, fromAddr string) (Packet, Nonce, error) {
 	return p, Nonce{}, err // 注意：这里nonce可能需要进一步处理
 }
 
-func (t *UDPv5) GenPacket(f *filler.Filler, packetType string, n *enode.Node) Packet {
+func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 	var (
-		// addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
+		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
 		packetTypes = []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"}
 	)
+
 	switch packetType {
 	case "ping":
 		pingPacket := &Ping{
-			ReqID:  f.FillReqID(),
-			ENRSeq: f.FillENRSeq(),
+			//ENRSeq: t.localNode.Node().Seq(),
+			ReqID:  []byte("reqid"), // 使用固定的 ReqID 用于测试
+			ENRSeq: 5,
 		}
+		reqID := make([]byte, 8)
+		crand.Read(reqID)
+		pingPacket.SetRequestID(reqID)
 		return pingPacket
+
 	case "pong":
 		pongPacket := &Pong{
-			ReqID:  f.FillReqID(),
-			ENRSeq: f.FillENRSeq(),
-			ToIP:   f.FillIP(),
-			ToPort: uint16(f.FillPort()),
+			ENRSeq: t.localNode.Seq(),
+			ToIP:   addr.IP,
+			ToPort: uint16(addr.Port),
 		}
+		reqID := make([]byte, 8)
+		crand.Read(reqID)
+		pongPacket.SetRequestID(reqID)
 		return pongPacket
+
 	case "findnode":
 		findnodePacket := &Findnode{
-			ReqID:     f.FillReqID(),
-			Distances: f.FillDistances(),
+			Distances: []uint{256, 255, 254}, // 示例距离
 		}
+		reqID := make([]byte, 8)
+		crand.Read(reqID)
+		findnodePacket.SetRequestID(reqID)
 		return findnodePacket
+
 	case "nodes":
-		records := f.FillENRRecords(3)
+		key, _ := crypto.GenerateKey()
+		var r enr.Record
+		r.Set(enr.IP(net.IP{127, 0, 0, 1}))
+		r.Set(enr.UDP(30303))
+		r.Set(enr.TCP(30303))
+		r.Set(enode.Secp256k1(key.PublicKey))
+		r.SetSeq(1)
+		enode.SignV4(&r, key)
+
+		var records []*enr.Record
+		for i := 0; i < 3; i++ {
+			records = append(records, &r)
+		}
+
 		nodesPacket := &Nodes{
-			ReqID:     f.FillReqID(),
 			RespCount: uint8(len(records)),
 			Nodes:     records,
 		}
+		reqID := make([]byte, 8)
+		crand.Read(reqID)
+		nodesPacket.SetRequestID(reqID)
 		return nodesPacket
+
 	case "talkrequest":
 		talkReqPacket := &TalkRequest{
-			ReqID:    f.FillReqID(),
-			Protocol: "discv5",
-			Message:  f.FillMessage(),
+			Protocol: "example-protocol",
+			Message:  []byte("Hello, world!"),
 		}
+		reqID := make([]byte, 8)
+		crand.Read(reqID)
+		talkReqPacket.SetRequestID(reqID)
 		return talkReqPacket
+
 	case "talkresponse":
 		talkRespPacket := &TalkResponse{
-			ReqID:   f.FillReqID(),
-			Message: f.FillMessage(),
+			Message: []byte("Response received"),
 		}
+		reqID := make([]byte, 8)
+		crand.Read(reqID)
+		talkRespPacket.SetRequestID(reqID)
 		return talkRespPacket
+	/*case "whoareyou":
+	whoareyouPacket := &Whoareyou{
+		ChallengeData: make([]byte, 32),
+		RecordSeq:     1721275104493,
+		Node:          t.localNode.Node(),
+	}
+	crand.Read(whoareyouPacket.IDNonce[:])
+	crand.Read(whoareyouPacket.Nonce[:])
+	whoareyouPacket.sent = t.clock.Now()
+	return whoareyouPacket*/
 	case "whoareyou":
+		// 创建一个新的 enr.Record
+		r := enr.Record{}
+		r.Set(enr.UDP(30303))   // 设置 UDP 端口
+		r.SetSeq(1721275398453) // 设置序列号
+
+		// 创建一个新的 enode.Node
+		id := enode.HexID("6516a94edcc63ec65b32ab7ea215e45fdce8ded08dccc8878c9d1642fd3eba85")
+		remoteNode := enode.SignNull(&r, id)
+
 		whoareyouPacket := &Whoareyou{
-			ChallengeData: f.FillChallengeData(),
-			RecordSeq:     f.FillENRSeq(),
-			Node:          f.FillNode(),
+			ChallengeData: make([]byte, 32),
+			RecordSeq:     1721275398453, // 使用打印出的 RecordSeq
+			Node:          remoteNode,    // 使用新创建的 Node
 		}
+		crand.Read(whoareyouPacket.IDNonce[:])
+		crand.Read(whoareyouPacket.Nonce[:])
 		whoareyouPacket.sent = t.clock.Now()
 		return whoareyouPacket
 	case "unknown":
 		unknownPacket := &Unknown{
-			Nonce: Nonce(f.FillNonce()),
+			Nonce: Nonce{}, // 创建一个空的 Nonce
 		}
+		crand.Read(unknownPacket.Nonce[:])
 		return unknownPacket
 	case "random":
 		randomIndex := cryptoRandIntn(len(packetTypes))
 		randomType := packetTypes[randomIndex]
-		return t.GenPacket(f, randomType, n)
+		return t.GenPacket(randomType, n)
 	default:
 		return nil
 	}
 }
+
+// Filler version
+// func (t *UDPv5) GenPacket(f *filler.Filler, packetType string, n *enode.Node) Packet {
+// 	var (
+// 		// addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
+// 		packetTypes = []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"}
+// 	)
+// 	switch packetType {
+// 	case "ping":
+// 		pingPacket := &Ping{
+// 			ReqID:  f.FillReqID(),
+// 			ENRSeq: f.FillENRSeq(),
+// 		}
+// 		return pingPacket
+// 	case "pong":
+// 		pongPacket := &Pong{
+// 			ReqID:  f.FillReqID(),
+// 			ENRSeq: f.FillENRSeq(),
+// 			ToIP:   f.FillIP(),
+// 			ToPort: uint16(f.FillPort()),
+// 		}
+// 		return pongPacket
+// 	case "findnode":
+// 		findnodePacket := &Findnode{
+// 			ReqID:     f.FillReqID(),
+// 			Distances: f.FillDistances(),
+// 		}
+// 		return findnodePacket
+// 	case "nodes":
+// 		records := f.FillENRRecords(3)
+// 		nodesPacket := &Nodes{
+// 			ReqID:     f.FillReqID(),
+// 			RespCount: uint8(len(records)),
+// 			Nodes:     records,
+// 		}
+// 		return nodesPacket
+// 	case "talkrequest":
+// 		talkReqPacket := &TalkRequest{
+// 			ReqID:    f.FillReqID(),
+// 			Protocol: "discv5",
+// 			Message:  f.FillMessage(),
+// 		}
+// 		return talkReqPacket
+// 	case "talkresponse":
+// 		talkRespPacket := &TalkResponse{
+// 			ReqID:   f.FillReqID(),
+// 			Message: f.FillMessage(),
+// 		}
+// 		return talkRespPacket
+// 	case "whoareyou":
+// 		whoareyouPacket := &Whoareyou{
+// 			ChallengeData: f.FillChallengeData(),
+// 			RecordSeq:     f.FillENRSeq(),
+// 			Node:          f.FillNode(),
+// 		}
+// 		whoareyouPacket.sent = t.clock.Now()
+// 		return whoareyouPacket
+// 	case "unknown":
+// 		unknownPacket := &Unknown{
+// 			Nonce: Nonce(f.FillNonce()),
+// 		}
+// 		return unknownPacket
+// 	case "random":
+// 		randomIndex := cryptoRandIntn(len(packetTypes))
+// 		randomType := packetTypes[randomIndex]
+// 		return t.GenPacket(f, randomType, n)
+// 	default:
+// 		return nil
+// 	}
+// }
 
 func cryptoRandIntn(n int) int {
 	b := make([]byte, 4)

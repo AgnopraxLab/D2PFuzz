@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the D2PFuzz library. If not, see <http://www.gnu.org/licenses/>.
 
-package fuzzing
+package fuzzer
 
 import (
 	"fmt"
@@ -30,7 +30,6 @@ import (
 
 	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
-	"github.com/AgnopraxLab/D2PFuzz/filler"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
 
@@ -40,7 +39,6 @@ var (
 
 type EthMaker struct {
 	suiteList []*eth.Suite
-	filler    filler.Filler
 
 	testSeq  []int // testcase sequence
 	stateSeq []int // steate sequence
@@ -58,7 +56,7 @@ type ethSnapshot struct {
 	n       *enode.Node
 }
 
-func NewEthMaker(f *filler.Filler, targetDir string, chain string) *EthMaker {
+func NewEthMaker(targetDir string, chain string) *EthMaker {
 	var suiteList []*eth.Suite
 
 	nodeList, _ := getList(targetDir)
@@ -124,13 +122,13 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 			}
 			// First round: sending testSeq packets
 			for i, packetType := range m.testSeq {
-				req, _ := target.GenPacket(&m.filler, packetType)
+				req, _ := target.GenPacket(packetType)
 				m.handlePacket(req, target, traceOutput)
 				logger.Printf("Sent test packet to target: %s, packet: %v, using suite: %d", target.DestList.String(), req.Kind(), i)
 			}
 			// Round 2: sending stateSeq packets
 			for i, packetType := range m.stateSeq {
-				req, _ := target.GenPacket(&m.filler, packetType)
+				req, _ := target.GenPacket(packetType)
 				m.handlePacket(req, target, traceOutput)
 				logger.Printf("Sent state packet to target: %s, packet: %v, using suite: %d", target.DestList.String(), req.Kind(), i)
 			}

@@ -26,8 +26,6 @@ import (
 	"golang.org/x/crypto/sha3"
 
 	"github.com/AgnopraxLab/D2PFuzz/config"
-	"github.com/AgnopraxLab/D2PFuzz/filler"
-	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 )
 
 var (
@@ -85,8 +83,7 @@ func discv4Fuzzer(data []byte, engine bool, target string) int {
 	if len(data) < 32 {
 		return -1
 	}
-	f := filler.NewFiller(data)
-	testMaker := fuzzing.NewV4Maker(f, target)
+	testMaker := NewV4Maker(target)
 
 	// Ensure resources are released after testMaker usage
 	defer testMaker.Close()
@@ -118,8 +115,7 @@ func discv5Fuzzer(data []byte, engine bool, target string) int {
 	if len(data) < 32 {
 		return -1
 	}
-	f := filler.NewFiller(data)
-	testMaker := fuzzing.NewV5Maker(f, target)
+	testMaker := NewV5Maker(target)
 
 	// Ensure resources are released after testMaker usage
 	defer testMaker.Close()
@@ -145,8 +141,7 @@ func ethFuzzer(data []byte, engine bool, target, chain string) int {
 	if len(data) < 32 {
 		return -1
 	}
-	f := filler.NewFiller(data)
-	testMaker := fuzzing.NewEthMaker(f, target, chain)
+	testMaker := NewEthMaker(target, chain)
 
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
@@ -164,7 +159,7 @@ func ethFuzzer(data []byte, engine bool, target, chain string) int {
 	return -1
 }
 
-func hash(test *fuzzing.GeneralStateTest) []byte {
+func hash(test *GeneralStateTest) []byte {
 	h := sha3.New256()
 	encoder := json.NewEncoder(h)
 	if err := encoder.Encode(test); err != nil {

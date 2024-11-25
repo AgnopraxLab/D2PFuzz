@@ -35,7 +35,6 @@ import (
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv4"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv5"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
-	"github.com/AgnopraxLab/D2PFuzz/filler"
 )
 
 func InitDiscv4() *discv4.UDPv4 {
@@ -122,7 +121,6 @@ func RunGenerate(protocol, targetDir, chainDir, ptype string) error {
 	node := nodeList[0]
 	bytes := make([]byte, 1000)
 	crand.Read(bytes)
-	f := filler.NewFiller(bytes)
 	options := []int{
 		eth.StatusMsg, eth.NewBlockHashesMsg, eth.TransactionsMsg, eth.GetBlockHeadersMsg,
 		eth.BlockHeadersMsg, eth.GetBlockBodiesMsg, eth.BlockBodiesMsg, eth.NewBlockMsg,
@@ -133,7 +131,7 @@ func RunGenerate(protocol, targetDir, chainDir, ptype string) error {
 	switch protocol {
 	case "discv4":
 		client := InitDiscv4()
-		packet := client.GenPacket(f, ptype, node)
+		packet := client.GenPacket(ptype, node)
 		jsonData, err := json.Marshal(packet)
 		if err != nil {
 			return fmt.Errorf("error encoding JSON")
@@ -141,7 +139,7 @@ func RunGenerate(protocol, targetDir, chainDir, ptype string) error {
 		fmt.Println(string(jsonData))
 	case "discv5":
 		client := InitDiscv5()
-		packet := client.GenPacket(f, ptype, node)
+		packet := client.GenPacket(ptype, node)
 		jsonData, err := json.Marshal(packet)
 		if err != nil {
 			return fmt.Errorf("error encoding JSON")
@@ -152,7 +150,7 @@ func RunGenerate(protocol, targetDir, chainDir, ptype string) error {
 		if err != nil {
 			return fmt.Errorf("error init eth client")
 		}
-		packet, err := client.GenPacket(f, options[rand.Intn(len(options))])
+		packet, err := client.GenPacket(options[rand.Intn(len(options))])
 		if err != nil {
 			return fmt.Errorf("error gen eth packet")
 		}

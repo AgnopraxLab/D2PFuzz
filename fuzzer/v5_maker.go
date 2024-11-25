@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the D2PFuzz library. If not, see <http://www.gnu.org/licenses/>.
 
-package fuzzing
+package fuzzer
 
 import (
 	"fmt"
@@ -29,7 +29,6 @@ import (
 
 	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv5"
-	"github.com/AgnopraxLab/D2PFuzz/filler"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
 
@@ -40,7 +39,6 @@ var (
 type V5Maker struct {
 	client     *discv5.UDPv5
 	targetList []*enode.Node
-	filler     filler.Filler
 
 	testSeq  []string // testcase sequence
 	stateSeq []string // steate sequence
@@ -58,7 +56,7 @@ type v5result struct {
 	n        *enode.Node
 }
 
-func NewV5Maker(f *filler.Filler, targetDir string) *V5Maker {
+func NewV5Maker(targetDir string) *V5Maker {
 	var (
 		cli      *discv5.UDPv5
 		nodeList []*enode.Node
@@ -121,7 +119,7 @@ func (m *V5Maker) Start(traceOutput io.Writer) error {
 			}
 			// First round: sending testSeq packets
 			for _, packetType := range m.testSeq {
-				req := m.client.GenPacket(&m.filler, packetType, target)
+				req := m.client.GenPacket(packetType, target)
 				nonce, err := m.sendAndReceive(target, req, traceOutput)
 				if err != nil {
 					fmt.Errorf("failed to send and receive packet")
@@ -134,7 +132,7 @@ func (m *V5Maker) Start(traceOutput io.Writer) error {
 
 			// Round 2: sending stateSeq packets
 			for _, packetType := range m.stateSeq {
-				req := m.client.GenPacket(&m.filler, packetType, target)
+				req := m.client.GenPacket(packetType, target)
 				// Set the expected response type based on the packet type
 				nonce, err := m.sendAndReceive(target, req, traceOutput)
 				if err != nil {

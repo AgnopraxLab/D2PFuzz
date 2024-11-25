@@ -17,7 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p"
-	"github.com/AgnopraxLab/D2PFuzz/filler"
+	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 )
 
 // UDPv4 implements the v4 wire protocol.
@@ -173,69 +173,7 @@ func (t *UDPv4) Send(n *enode.Node, req Packet) []byte {
 	return hash
 }
 
-//func (t *UDPv4) GenPacket(packetType string, n *enode.Node) Packet {
-//	var (
-//		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
-//		packetTypes = []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
-//	)
-//
-//	switch packetType {
-//	case "ping":
-//		return &Ping{
-//			Version:    4,
-//			From:       t.ourEndpoint(),
-//			To:         NewEndpoint(addr, 0),
-//			Expiration: uint64(time.Now().Add(expiration).Unix()),
-//			ENRSeq:     t.localNode.Node().Seq(),
-//		}
-//	//case "ping":
-//	//	return t.makePing(addr)
-//	case "pong":
-//		return &Pong{
-//			To:         NewEndpoint(addr, 0),
-//			ReplyTok:   []byte(fuzzing.RandHex(64)),
-//			Expiration: uint64(time.Now().Add(expiration).Unix()),
-//			ENRSeq:     t.localNode.Node().Seq(),
-//		}
-//	case "findnode":
-//		req := &Findnode{Expiration: uint64(time.Now().Add(expiration).Unix())}
-//		rand.Read(req.Target[:])
-//		return req
-//	case "neighbors":
-//		// 创建一个自定义的节点记录
-//		key, _ := crypto.GenerateKey()
-//		// 创建一个新的 enode.Node
-//		ip := net.IP{127, 0, 0, 1}
-//		customNode := enode.NewV4(&key.PublicKey, ip, 30303, 30303)
-//		// 将自定义节点作为最接近的节点
-//		closest := []*node{wrapNode(customNode)}
-//		// 创建 Neighbors 结构
-//		neighbors := &Neighbors{
-//			Expiration: uint64(time.Now().Add(expiration).Unix()),
-//		}
-//		// 将 closest 中的节点转换为 Neighbors 结构中的格式
-//		for _, n := range closest {
-//			neighbors.Nodes = append(neighbors.Nodes, nodeToRPC(n))
-//		}
-//		return neighbors
-//	case "ENRRequest":
-//		return &ENRRequest{
-//			Expiration: uint64(time.Now().Add(expiration).Unix()),
-//		}
-//	case "ENRResponse":
-//		return &ENRResponse{
-//			ReplyTok: []byte(fuzzing.RandHex(64)),
-//			Record:   *t.localNode.Node().Record(),
-//		}
-//	case "random":
-//		randomType := packetTypes[rand.Intn(len(packetTypes))]
-//		return t.GenPacket(randomType, n)
-//	default:
-//		return nil
-//	}
-//}
-
-func (t *UDPv4) GenPacket(f *filler.Filler, packetType string, n *enode.Node) Packet {
+func (t *UDPv4) GenPacket(packetType string, n *enode.Node) Packet {
 	var (
 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
 		packetTypes = []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
@@ -247,57 +185,119 @@ func (t *UDPv4) GenPacket(f *filler.Filler, packetType string, n *enode.Node) Pa
 			Version:    4,
 			From:       t.ourEndpoint(),
 			To:         NewEndpoint(addr, 0),
-			Expiration: f.FillExpiration(),
+			Expiration: uint64(time.Now().Add(expiration).Unix()),
 			ENRSeq:     t.localNode.Node().Seq(),
-			Rest:       f.FillRest(), // 随机填充 Rest 字段
 		}
+	//case "ping":
+	//	return t.makePing(addr)
 	case "pong":
 		return &Pong{
 			To:         NewEndpoint(addr, 0),
-			ReplyTok:   f.FillReplyToken(),
-			Expiration: f.FillExpiration(),
+			ReplyTok:   []byte(fuzzing.RandHex(64)),
+			Expiration: uint64(time.Now().Add(expiration).Unix()),
 			ENRSeq:     t.localNode.Node().Seq(),
-			Rest:       f.FillRest(), // 随机填充 Rest 字段
 		}
 	case "findnode":
-		req := &Findnode{
-			Target:     Pubkey(f.FillPubkey()), // 使用随机生成的 Pubkey
-			Expiration: f.FillExpiration(),
-			Rest:       f.FillRest(), // 随机填充 Rest 字段
-		}
+		req := &Findnode{Expiration: uint64(time.Now().Add(expiration).Unix())}
+		rand.Read(req.Target[:])
 		return req
 	case "neighbors":
 		// 创建一个自定义的节点记录
 		key, _ := crypto.GenerateKey()
-		ip := f.FillIP() // 随机生成 IP 地址
+		// 创建一个新的 enode.Node
+		ip := net.IP{127, 0, 0, 1}
 		customNode := enode.NewV4(&key.PublicKey, ip, 30303, 30303)
+		// 将自定义节点作为最接近的节点
 		closest := []*node{wrapNode(customNode)}
+		// 创建 Neighbors 结构
 		neighbors := &Neighbors{
-			Expiration: f.FillExpiration(),
-			Rest:       f.FillRest(), // 随机填充 Rest 字段
+			Expiration: uint64(time.Now().Add(expiration).Unix()),
 		}
+		// 将 closest 中的节点转换为 Neighbors 结构中的格式
 		for _, n := range closest {
 			neighbors.Nodes = append(neighbors.Nodes, nodeToRPC(n))
 		}
 		return neighbors
 	case "ENRRequest":
 		return &ENRRequest{
-			Expiration: f.FillExpiration(),
-			Rest:       f.FillRest(), // 随机填充 Rest 字段
+			Expiration: uint64(time.Now().Add(expiration).Unix()),
 		}
 	case "ENRResponse":
 		return &ENRResponse{
-			ReplyTok: f.FillReplyToken(), // 随机生成的回复令牌
+			ReplyTok: []byte(fuzzing.RandHex(64)),
 			Record:   *t.localNode.Node().Record(),
-			Rest:     f.FillRest(), // 随机填充 Rest 字段
 		}
 	case "random":
 		randomType := packetTypes[rand.Intn(len(packetTypes))]
-		return t.GenPacket(f, randomType, n)
+		return t.GenPacket(randomType, n)
 	default:
 		return nil
 	}
 }
+
+// func (t *UDPv4) GenPacket(f *filler.Filler, packetType string, n *enode.Node) Packet {
+// 	var (
+// 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
+// 		packetTypes = []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
+// 	)
+
+// 	switch packetType {
+// 	case "ping":
+// 		return &Ping{
+// 			Version:    4,
+// 			From:       t.ourEndpoint(),
+// 			To:         NewEndpoint(addr, 0),
+// 			Expiration: f.FillExpiration(),
+// 			ENRSeq:     t.localNode.Node().Seq(),
+// 			Rest:       f.FillRest(), // 随机填充 Rest 字段
+// 		}
+// 	case "pong":
+// 		return &Pong{
+// 			To:         NewEndpoint(addr, 0),
+// 			ReplyTok:   f.FillReplyToken(),
+// 			Expiration: f.FillExpiration(),
+// 			ENRSeq:     t.localNode.Node().Seq(),
+// 			Rest:       f.FillRest(), // 随机填充 Rest 字段
+// 		}
+// 	case "findnode":
+// 		req := &Findnode{
+// 			Target:     Pubkey(f.FillPubkey()), // 使用随机生成的 Pubkey
+// 			Expiration: f.FillExpiration(),
+// 			Rest:       f.FillRest(), // 随机填充 Rest 字段
+// 		}
+// 		return req
+// 	case "neighbors":
+// 		// 创建一个自定义的节点记录
+// 		key, _ := crypto.GenerateKey()
+// 		ip := f.FillIP() // 随机生成 IP 地址
+// 		customNode := enode.NewV4(&key.PublicKey, ip, 30303, 30303)
+// 		closest := []*node{wrapNode(customNode)}
+// 		neighbors := &Neighbors{
+// 			Expiration: f.FillExpiration(),
+// 			Rest:       f.FillRest(), // 随机填充 Rest 字段
+// 		}
+// 		for _, n := range closest {
+// 			neighbors.Nodes = append(neighbors.Nodes, nodeToRPC(n))
+// 		}
+// 		return neighbors
+// 	case "ENRRequest":
+// 		return &ENRRequest{
+// 			Expiration: f.FillExpiration(),
+// 			Rest:       f.FillRest(), // 随机填充 Rest 字段
+// 		}
+// 	case "ENRResponse":
+// 		return &ENRResponse{
+// 			ReplyTok: f.FillReplyToken(), // 随机生成的回复令牌
+// 			Record:   *t.localNode.Node().Record(),
+// 			Rest:     f.FillRest(), // 随机填充 Rest 字段
+// 		}
+// 	case "random":
+// 		randomType := packetTypes[rand.Intn(len(packetTypes))]
+// 		return t.GenPacket(f, randomType, n)
+// 	default:
+// 		return nil
+// 	}
+// }
 
 //func (t *UDPv4) CreateSeed(node *enode.Node) (*V4Seed, error) {
 //	var packets []Packet

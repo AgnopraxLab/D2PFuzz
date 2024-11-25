@@ -23,7 +23,7 @@ import (
 	"golang.org/x/exp/rand"
 
 	"github.com/AgnopraxLab/D2PFuzz/filler"
-	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
+	"github.com/AgnopraxLab/D2PFuzz/fuzzer"
 )
 
 // RunFullBench runs a full benchmark with N runs.
@@ -52,22 +52,18 @@ func newFiller() (*filler.Filler, error) {
 
 // testExcution excution a fuzzer.
 func testExcution(prot, target, chainDir string, N int) (time.Duration, error) {
-	f, err := newFiller()
-	if err != nil {
-		return time.Nanosecond, err
-	}
 	// var traceFile *os.File
 	start := time.Now()
 	for i := 0; i < N; i++ {
 		switch prot {
 		case "discv4":
-			testMaker := fuzzing.NewV4Maker(f, target)
+			testMaker := fuzzer.NewV4Maker(target)
 			testMaker.Start(os.Stdout)
 		case "discv5":
-			testMaker := fuzzing.NewV5Maker(f, target)
+			testMaker := fuzzer.NewV5Maker(target)
 			testMaker.Start(os.Stdout)
 		case "eth":
-			testMaker := fuzzing.NewEthMaker(f, target, chainDir)
+			testMaker := fuzzer.NewEthMaker(target, chainDir)
 			testMaker.Start(os.Stdout)
 		}
 	}

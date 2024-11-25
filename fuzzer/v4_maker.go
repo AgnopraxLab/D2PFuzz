@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the D2PFuzz library. If not, see <http://www.gnu.org/licenses/>.
 
-package fuzzing
+package fuzzer
 
 import (
 	"fmt"
@@ -29,7 +29,6 @@ import (
 
 	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv4"
-	"github.com/AgnopraxLab/D2PFuzz/filler"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
 
@@ -40,7 +39,6 @@ var (
 type V4Maker struct {
 	client     *discv4.UDPv4
 	targetList []*enode.Node
-	filler     filler.Filler
 
 	testSeq  []string // testcase sequence
 	stateSeq []string // steate sequence
@@ -65,7 +63,7 @@ type v4result struct {
 	n        *enode.Node
 }
 
-func NewV4Maker(f *filler.Filler, targetDir string) *V4Maker {
+func NewV4Maker(targetDir string) *V4Maker {
 	var (
 		cli      *discv4.UDPv4
 		nodeList []*enode.Node
@@ -122,13 +120,13 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 	target := m.targetList[0]
 	// mutator := NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
 
-	ping := m.client.GenPacket(&m.filler, "ping", target)
+	ping := m.client.GenPacket("ping", target)
 	err := m.client.Send(target, ping)
 	if err != nil {
 		logger.Printf("Failed to send initial ping: %v", err)
 	}
 
-	req := m.client.GenPacket(&m.filler, "random", target)
+	req := m.client.GenPacket("random", target)
 
 	// Iterate over each target object
 	for i := 0; i < config.MutateCount; i++ {
@@ -190,14 +188,14 @@ func (m *V4Maker) Start(traceOutput io.Writer) error {
 			}
 			// First round: sending testSeq packets
 			for _, packetType := range m.testSeq {
-				req := m.client.GenPacket(&m.filler, packetType, target)
+				req := m.client.GenPacket(packetType, target)
 				m.client.Send(target, req)
 				logger.Printf("Sent test packet to target: %s, packet: %v", target.String(), req.Kind())
 			}
 
 			// Round 2: sending stateSeq packets
 			for _, packetType := range m.stateSeq {
-				req := m.client.GenPacket(&m.filler, packetType, target)
+				req := m.client.GenPacket(packetType, target)
 				// Set the expected response type based on the packet type
 				rm := m.client.Pending(target.ID(), target.IP(), processPacket(req), func(p discv4.Packet) (matched bool, requestDone bool) {
 					logger.Printf("Received packet of type: %T\n", p)
