@@ -17,10 +17,14 @@
 package fuzzer
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -48,6 +52,14 @@ type V5Maker struct {
 
 	root common.Hash
 	logs common.Hash
+}
+
+type v5packetTestResult struct {
+	RequestType string
+	Check       bool
+	Success     bool
+	Response    discv5.Packet
+	Error       error
 }
 
 type v5result struct {
@@ -95,6 +107,69 @@ func (m *V5Maker) ToSubTest() *stJSON {
 		st.Post = postState
 	}
 	return st
+}
+
+func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
+	var (
+		wg      sync.WaitGroup
+		logger  *log.Logger
+		mu      sync.Mutex
+		results []v5packetTestResult
+	)
+
+	if traceOutput != nil {
+		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
+	}
+	target := m.targetList[0]
+
+	// 发送初始ping包建立连接
+	ping := m.client.GenPacket("ping", target)
+	nonce, err := m.sendAndReceive(target, ping, traceOutput)
+	if err != nil {
+		if logger != nil {
+			logger.Printf("Failed to send initial ping: %v", err)
+		}
+	}
+	if logger != nil {
+		logger.Printf("Initial ping sent, nonce: %x", nonce)
+	}
+
+	req := m.client.GenPacket("random", target)
+
+	for i := 0; i < config.MutateCount; i++ {
+		wg.Add(1)
+
+		go func(iteration int, currentReq discv5.Packet) {
+			defer wg.Done()
+
+			result := v5packetTestResult{
+				RequestType: currentReq.Name(),
+			}
+
+			_, err := m.sendAndReceive(target, currentReq, traceOutput)
+			if err != nil {
+				result.Error = err
+				result.Success = false
+			} else {
+				result.Success = true
+			}
+
+			result.Check = checkRequestSemanticsV5(currentReq)
+
+			mu.Lock()
+			results = append(results, result)
+			mu.Unlock()
+
+		}(i, req)
+
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	wg.Wait()
+
+	// 分析结果
+	analyzeResultsV5(results, logger, config.SaveFlag, config.OutputDir)
+	return nil
 }
 
 func (m *V5Maker) Start(traceOutput io.Writer) error {
@@ -256,4 +331,102 @@ func generateV5TestSeq() []string {
 	}
 
 	return seq
+}
+
+func checkRequestSemanticsV5(req discv5.Packet) bool {
+	switch p := req.(type) {
+	case *discv5.Ping:
+		return checkPingSemanticsV5(p)
+	case *discv5.Findnode:
+		return checkFindnodeSemanticsV5(p)
+	case *discv5.TalkRequest:
+		return checkTalkRequestSemanticsV5(p)
+	default:
+		return false
+	}
+}
+
+func checkPingSemanticsV5(p *discv5.Ping) bool {
+	if p.ReqID == nil {
+		return false
+	}
+	return true
+}
+
+func checkFindnodeSemanticsV5(f *discv5.Findnode) bool {
+	if f.ReqID == nil {
+		return false
+	}
+	if len(f.Distances) == 0 {
+		return false
+	}
+	return true
+}
+
+func checkTalkRequestSemanticsV5(t *discv5.TalkRequest) bool {
+	if t.ReqID == nil {
+		return false
+	}
+	if len(t.Protocol) == 0 {
+		return false
+	}
+	return true
+}
+
+func analyzeResultsV5(results []v5packetTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
+	// 分类结果
+	checkTrueSuccessTrue := make([]v5packetTestResult, 0)
+	checkFalseSuccessTrue := make([]v5packetTestResult, 0)
+	checkTrueSuccessFalse := make([]v5packetTestResult, 0)
+
+	for _, result := range results {
+		switch {
+		case result.Check && result.Success:
+			checkTrueSuccessTrue = append(checkTrueSuccessTrue, result)
+		case !result.Check && result.Success:
+			checkFalseSuccessTrue = append(checkFalseSuccessTrue, result)
+		case result.Check && !result.Success:
+			checkTrueSuccessFalse = append(checkTrueSuccessFalse, result)
+		}
+	}
+
+	if saveToFile {
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return fmt.Errorf("failed to create output directory: %v", err)
+		}
+
+		outputResult := struct {
+			CheckTrueSuccessTrue  []v5packetTestResult `json:"check_true_success_true"`
+			CheckFalseSuccessTrue []v5packetTestResult `json:"check_false_success_true"`
+			CheckTrueSuccessFalse []v5packetTestResult `json:"check_true_success_false"`
+			Timestamp             string               `json:"timestamp"`
+		}{
+			CheckTrueSuccessTrue:  checkTrueSuccessTrue,
+			CheckFalseSuccessTrue: checkFalseSuccessTrue,
+			CheckTrueSuccessFalse: checkTrueSuccessFalse,
+			Timestamp:             time.Now().Format("2006-01-02_15-04-05"),
+		}
+
+		filename := filepath.Join(outputDir, "/discv5", fmt.Sprintf("analysis_results_%s.json", outputResult.Timestamp))
+		data, err := json.MarshalIndent(outputResult, "", "    ")
+		if err != nil {
+			return fmt.Errorf("JSON serialization failed: %v", err)
+		}
+
+		if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+			return fmt.Errorf("failed to write to file: %v", err)
+		}
+
+		if logger != nil {
+			logger.Printf("Results saved to file: %s\n", filename)
+		}
+	} else {
+		if logger != nil {
+			logger.Printf("Number of results with Check=true, Success=true: %d\n", len(checkTrueSuccessTrue))
+			logger.Printf("Number of results with Check=false, Success=true: %d\n", len(checkFalseSuccessTrue))
+			logger.Printf("Number of results with Check=true, Success=false: %d\n", len(checkTrueSuccessFalse))
+		}
+	}
+
+	return nil
 }

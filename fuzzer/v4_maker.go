@@ -17,10 +17,14 @@
 package fuzzer
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -50,8 +54,9 @@ type V4Maker struct {
 	logs common.Hash
 }
 
-type packetTestResult struct {
+type v4packetTestResult struct {
 	RequestType string
+	Check       bool
 	Success     bool
 	Response    discv4.Packet
 	Error       error
@@ -111,14 +116,14 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 		wg      sync.WaitGroup
 		logger  *log.Logger
 		mu      sync.Mutex
-		results []packetTestResult
+		results []v4packetTestResult
 	)
 
 	if traceOutput != nil {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 	target := m.targetList[0]
-	// mutator := NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
+	// mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
 
 	ping := m.client.GenPacket("ping", target)
 	err := m.client.Send(target, ping)
@@ -132,21 +137,12 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 	for i := 0; i < config.MutateCount; i++ {
 		wg.Add(1)
 
-		// check req
-
 		go func(iteration int, currentReq discv4.Packet) {
 			defer wg.Done()
 
-			if !checkRequestSemantics(currentReq, logger) {
-				if logger != nil {
-					logger.Printf("Invalid request semantics in iteration %d", iteration)
-				}
-				return
-			}
-
 			// Sending a single packet and waiting for feedback
 			result := sendAndWaitResponse(m, target, currentReq, logger)
-
+			result.Check = checkRequestSemantics(currentReq)
 			// 记录结果
 			mu.Lock()
 			results = append(results, result)
@@ -154,13 +150,16 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 
 		}(i, req)
 
+		// mutate req
+		//req = mutator.Mutate(req)
+
 		time.Sleep(50 * time.Millisecond)
 	}
 
 	wg.Wait()
 
 	// Process results
-
+	analyzeResults(results, logger, config.SaveFlag, config.OutputDir)
 	// fmt.Printf("All results: %v\n", allResults)
 
 	return nil
@@ -302,23 +301,20 @@ func generateV4TestSeq() []string {
 	return seq
 }
 
-func checkRequestSemantics(req discv4.Packet, logger *log.Logger) bool {
+func checkRequestSemantics(req discv4.Packet) bool {
 	switch p := req.(type) {
 	case *discv4.Ping:
-		return checkPingSemantics(p, logger)
+		return checkPingSemantics(p)
 	case *discv4.Findnode:
-		return checkFindnodeSemantics(p, logger)
+		return checkFindnodeSemantics(p)
 	case *discv4.ENRRequest:
-		return checkENRRequestSemantics(p, logger)
+		return checkENRRequestSemantics(p)
 	default:
-		if logger != nil {
-			logger.Printf("Unknown packet type: %T", req)
-		}
 		return false
 	}
 }
 
-func checkPingSemantics(p *discv4.Ping, logger *log.Logger) bool {
+func checkPingSemantics(p *discv4.Ping) bool {
 	// 检查过期时间是否合理
 	// if p.Expiration <= uint64(time.Now().Unix()) {
 	// 	if logger != nil {
@@ -336,27 +332,22 @@ func checkPingSemantics(p *discv4.Ping, logger *log.Logger) bool {
 	return true
 }
 
-// checkFindnodeSemantics 检查Findnode请求的语义正确性
-func checkFindnodeSemantics(f *discv4.Findnode, logger *log.Logger) bool {
+// checkFindnodeSemantics checks the semantic correctness of Findnode request
+func checkFindnodeSemantics(f *discv4.Findnode) bool {
 	return false
 }
 
-// checkENRRequestSemantics 检查ENRRequest请求的语义正确性
-func checkENRRequestSemantics(e *discv4.ENRRequest, logger *log.Logger) bool {
-	// 检查过期时间
+// checkENRRequestSemantics checks the semantic correctness of ENRRequest request
+func checkENRRequestSemantics(e *discv4.ENRRequest) bool {
 	if e.Expiration <= uint64(time.Now().Unix()) {
-		if logger != nil {
-			logger.Printf("Invalid expiration time in ENRRequest")
-		}
 		return false
 	}
-
 	return true
 }
 
-// sendAndWaitResponse 发送请求并等待响应
-func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logger *log.Logger) packetTestResult {
-	result := packetTestResult{
+// sendAndWaitResponse sends a request and waits for response
+func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logger *log.Logger) v4packetTestResult {
+	result := v4packetTestResult{
 		RequestType: req.Name(),
 	}
 
@@ -397,34 +388,82 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 	return result
 }
 
-func analyzeResults(results []packetTestResult, logger *log.Logger) {
-	if logger == nil {
-		return
-	}
+func analyzeResults(results []v4packetTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
+	// Define slices for three scenarios
+	checkTrueSuccessTrue := make([]v4packetTestResult, 0)
+	checkFalseSuccessTrue := make([]v4packetTestResult, 0)
+	checkTrueSuccessFalse := make([]v4packetTestResult, 0)
 
-	var (
-		totalTests   = len(results)
-		successCount = 0
-		failureCount = 0
-		timeoutCount = 0
-	)
-
+	// Iterate through results and categorize
 	for _, result := range results {
-		if result.Success {
-			successCount++
-		} else if result.Error != nil {
-			if result.Error.Error() == "timeout" {
-				timeoutCount++
-			} else {
-				failureCount++
-			}
+		switch {
+		case result.Check && result.Success:
+			checkTrueSuccessTrue = append(checkTrueSuccessTrue, result)
+		case !result.Check && result.Success:
+			checkFalseSuccessTrue = append(checkFalseSuccessTrue, result)
+		case result.Check && !result.Success:
+			checkTrueSuccessFalse = append(checkTrueSuccessFalse, result)
 		}
 	}
 
-	// stastic
-	logger.Printf("Test Summary:")
-	logger.Printf("Total Tests: %d", totalTests)
-	logger.Printf("Successful: %d (%.2f%%)", successCount, float64(successCount)/float64(totalTests)*100)
-	logger.Printf("Failed: %d (%.2f%%)", failureCount, float64(failureCount)/float64(totalTests)*100)
-	logger.Printf("Timeouts: %d (%.2f%%)", timeoutCount, float64(timeoutCount)/float64(totalTests)*100)
+	if saveToFile {
+		// Create output directory if it doesn't exist
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return fmt.Errorf("failed to create output directory: %v", err)
+		}
+
+		// Construct output result structure
+		outputResult := struct {
+			CheckTrueSuccessTrue  []v4packetTestResult `json:"check_true_success_true"`
+			CheckFalseSuccessTrue []v4packetTestResult `json:"check_false_success_true"`
+			CheckTrueSuccessFalse []v4packetTestResult `json:"check_true_success_false"`
+			Timestamp             string               `json:"timestamp"`
+		}{
+			CheckTrueSuccessTrue:  checkTrueSuccessTrue,
+			CheckFalseSuccessTrue: checkFalseSuccessTrue,
+			CheckTrueSuccessFalse: checkTrueSuccessFalse,
+			Timestamp:             time.Now().Format("2006-01-02_15-04-05"),
+		}
+
+		// Generate filename (using timestamp)
+		filename := filepath.Join(outputDir, "/discv4", fmt.Sprintf("analysis_results_%s.json", outputResult.Timestamp))
+
+		// Save to file
+		data, err := json.MarshalIndent(outputResult, "", "    ")
+		if err != nil {
+			return fmt.Errorf("JSON serialization failed: %v", err)
+		}
+
+		if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+			return fmt.Errorf("failed to write to file: %v", err)
+		}
+
+		logger.Printf("Results saved to file: %s\n", filename)
+	} else {
+		// Output to log
+		logger.Printf("Number of results with Check=true, Success=true: %d\n", len(checkTrueSuccessTrue))
+		for _, r := range checkTrueSuccessTrue {
+			logger.Printf("Result details: %+v\n", r)
+		}
+
+		logger.Printf("Number of results with Check=false, Success=true: %d\n", len(checkFalseSuccessTrue))
+		for _, r := range checkFalseSuccessTrue {
+			logger.Printf("Result details: %+v\n", r)
+		}
+
+		logger.Printf("Number of results with Check=true, Success=false: %d\n", len(checkTrueSuccessFalse))
+		for _, r := range checkTrueSuccessFalse {
+			logger.Printf("Result details: %+v\n", r)
+		}
+	}
+
+	return nil
+}
+
+func saveResultsToFile(results []v4packetTestResult, filename string) error {
+	data, err := json.MarshalIndent(results, "", "    ")
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(filename, data, 0644)
 }

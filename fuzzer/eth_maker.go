@@ -17,10 +17,14 @@
 package fuzzer
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -54,6 +58,14 @@ type ethSnapshot struct {
 	state_1 *eth.StatusPacket
 	state_2 *eth.ReceiptsPacket
 	n       *enode.Node
+}
+
+type ethPacketTestResult struct {
+	RequestType string
+	Check       bool
+	Success     bool
+	Response    eth.Packet
+	Error       error
 }
 
 func NewEthMaker(targetDir string, chain string) *EthMaker {
@@ -98,6 +110,68 @@ func (m *EthMaker) ToSubTest() *stJSON {
 		st.Post = postState
 	}
 	return st
+}
+
+func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
+	var (
+		wg      sync.WaitGroup
+		logger  *log.Logger
+		mu      sync.Mutex
+		results []ethPacketTestResult
+	)
+
+	if traceOutput != nil {
+		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
+	}
+
+	target := m.suiteList[0]
+
+	// 初始化连接
+	if err := target.InitializeAndConnect(); err != nil {
+		if logger != nil {
+			logger.Printf("Failed to initialize connection: %v", err)
+		}
+		return err
+	}
+
+	// 生成随机请求包
+	req, _ := target.GenPacket(eth.StatusMsg)
+
+	for i := 0; i < config.MutateCount; i++ {
+		wg.Add(1)
+
+		go func(iteration int, currentReq eth.Packet) {
+			defer wg.Done()
+
+			result := ethPacketTestResult{
+				RequestType: fmt.Sprintf("%d", currentReq.Kind()),
+			}
+
+			// 发送并等待响应
+			err := m.handlePacketWithResponse(currentReq, target, traceOutput)
+			if err != nil {
+				result.Error = err
+				result.Success = false
+			} else {
+				result.Success = true
+			}
+
+			result.Check = checkEthRequestSemantics(currentReq)
+
+			mu.Lock()
+			results = append(results, result)
+			mu.Unlock()
+
+		}(i, req)
+
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	wg.Wait()
+
+	// 分析结果
+	analyzeEthResults(results, logger, config.SaveFlag, config.OutputDir)
+	return nil
 }
 
 func (m *EthMaker) Start(traceOutput io.Writer) error {
@@ -443,4 +517,124 @@ func generateEthTestSeq() []int {
 	}
 
 	return seq
+}
+
+// packet test deal data
+func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, traceOutput io.Writer) error {
+	switch p := req.(type) {
+	case *eth.StatusPacket:
+		return suite.InitializeAndConnect()
+	case *eth.TransactionsPacket:
+		if err := suite.SendForkchoiceUpdated(); err != nil {
+			return fmt.Errorf("failed to send forkchoice update: %v", err)
+		}
+		return m.handleTransactionPacket(p, suite, traceOutput)
+	case *eth.GetBlockHeadersPacket:
+		return m.handleGetBlockHeadersPacket(p, suite, traceOutput)
+	case *eth.GetBlockBodiesPacket:
+		return m.handleGetBlockBodiesPacket(p, suite, traceOutput)
+	case *eth.GetPooledTransactionsPacket:
+		return m.handleGetPooledTransactionsPacket(p, suite, traceOutput)
+	case *eth.GetReceiptsPacket:
+		return m.handleGetReceiptsPacket(p, suite, traceOutput)
+	default:
+		return m.handleSendOnlyPacket(p, suite, traceOutput)
+	}
+}
+
+func checkEthRequestSemantics(req eth.Packet) bool {
+	switch p := req.(type) {
+	case *eth.StatusPacket:
+		return checkStatusSemantics(p)
+	case *eth.GetBlockHeadersPacket:
+		return checkGetBlockHeadersSemantics(p)
+	case *eth.GetBlockBodiesPacket:
+		return checkGetBlockBodiesSemantics(p)
+	case *eth.GetPooledTransactionsPacket:
+		return checkGetPooledTransactionsSemantics(p)
+	default:
+		return false
+	}
+}
+
+func checkStatusSemantics(p *eth.StatusPacket) bool {
+	if p.ProtocolVersion == 0 {
+		return false
+	}
+	if p.NetworkID == 0 {
+		return false
+	}
+	return true
+}
+
+func checkGetBlockHeadersSemantics(p *eth.GetBlockHeadersPacket) bool {
+	if p.Amount == 0 {
+		return false
+	}
+	return true
+}
+
+func checkGetBlockBodiesSemantics(p *eth.GetBlockBodiesPacket) bool {
+	return len(p.GetBlockBodiesRequest) > 0
+}
+
+func checkGetPooledTransactionsSemantics(p *eth.GetPooledTransactionsPacket) bool {
+	return len(p.GetPooledTransactionsRequest) > 0
+}
+
+func analyzeEthResults(results []ethPacketTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
+	checkTrueSuccessTrue := make([]ethPacketTestResult, 0)
+	checkFalseSuccessTrue := make([]ethPacketTestResult, 0)
+	checkTrueSuccessFalse := make([]ethPacketTestResult, 0)
+
+	for _, result := range results {
+		switch {
+		case result.Check && result.Success:
+			checkTrueSuccessTrue = append(checkTrueSuccessTrue, result)
+		case !result.Check && result.Success:
+			checkFalseSuccessTrue = append(checkFalseSuccessTrue, result)
+		case result.Check && !result.Success:
+			checkTrueSuccessFalse = append(checkTrueSuccessFalse, result)
+		}
+	}
+
+	if saveToFile {
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return fmt.Errorf("failed to create output directory: %v", err)
+		}
+
+		outputResult := struct {
+			CheckTrueSuccessTrue  []ethPacketTestResult `json:"check_true_success_true"`
+			CheckFalseSuccessTrue []ethPacketTestResult `json:"check_false_success_true"`
+			CheckTrueSuccessFalse []ethPacketTestResult `json:"check_true_success_false"`
+			Timestamp             string                `json:"timestamp"`
+		}{
+			CheckTrueSuccessTrue:  checkTrueSuccessTrue,
+			CheckFalseSuccessTrue: checkFalseSuccessTrue,
+			CheckTrueSuccessFalse: checkTrueSuccessFalse,
+			Timestamp:             time.Now().Format("2006-01-02_15-04-05"),
+		}
+
+		filename := filepath.Join(outputDir, "/eth", fmt.Sprintf("analysis_results_%s.json", outputResult.Timestamp))
+		data, err := json.MarshalIndent(outputResult, "", "    ")
+		if err != nil {
+			return fmt.Errorf("JSON serialization failed: %v", err)
+		}
+
+		if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+			return fmt.Errorf("failed to write to file: %v", err)
+		}
+
+		if logger != nil {
+			logger.Printf("Results saved to file: %s\n", filename)
+		}
+	} else {
+		if logger != nil {
+			logger.Printf("Number of results with Check=true, Success=true: %d\n", len(checkTrueSuccessTrue))
+			logger.Printf("Number of results with Check=false, Success=true: %d\n", len(checkFalseSuccessTrue))
+			logger.Printf("Number of results with Check=true, Success=false: %d\n", len(checkTrueSuccessFalse))
+		}
+	}
+
+	return nil
 }

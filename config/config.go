@@ -27,6 +27,8 @@ import (
 const (
 	SequenceLength = 10
 	MutateCount    = 1000
+	OutputDir      = "./output"
+	SaveFlag       = false
 )
 
 type Config struct {
