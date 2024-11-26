@@ -31,8 +31,10 @@ go build
 ./D2PFuzz setenv
 # Run the generator
 ./D2PFuzz generator
+# Run the bench
+./D2PFuzz bench
 # Run the fuzzer
-./FuzzyVM run
+./D2PFuzz run
 ```
 # Setenv
 Configure Fuzz's runtime environment and related configurations

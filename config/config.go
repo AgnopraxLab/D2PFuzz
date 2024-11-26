@@ -16,78 +16,9 @@
 
 package config
 
-import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-)
-
 const (
 	SequenceLength = 10
 	MutateCount    = 1000
 	OutputDir      = "./output"
 	SaveFlag       = false
 )
-
-type Config struct {
-	ProtocolFlag string `json:"protocolFlag"`
-	TargetFlag   string `json:"targetFlag"`
-	EngineFlag   bool   `json:"engineFlag"`
-	ChainEnvFlag string `json:"chainFlag"`
-}
-
-// getConfigFilePath returns the correct path to the config file depending on where the program is run
-func getConfigFilePath() (string, error) {
-	// Get current working directory
-	workingDir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("could not get current working directory: %v", err)
-	}
-
-	// Assuming `main.go` and `fuzzer.go` are in different directories, handle both cases
-	if filepath.Base(workingDir) == "fuzzer" {
-		// If running from the fuzzer directory, assume the config.json is in the parent directory
-		return filepath.Abs("../config.json")
-	} else {
-		// Otherwise assume the config.json is in the current directory
-		return filepath.Abs("./config.json")
-	}
-}
-
-// ReadConfig reads the configuration from the config file
-func ReadConfig() (*Config, error) {
-	config := &Config{}
-	configFileName, err := getConfigFilePath()
-	if err != nil {
-		return nil, fmt.Errorf("could not get config file path: %v", err)
-	}
-
-	data, err := ioutil.ReadFile(configFileName)
-	if err != nil {
-		return nil, fmt.Errorf("could not read config file: %v", err)
-	}
-	err = json.Unmarshal(data, config)
-	if err != nil {
-		return nil, fmt.Errorf("could not unmarshal config data: %v", err)
-	}
-	return config, nil
-}
-
-// WriteConfig writes the configuration to the config file
-func WriteConfig(config *Config) error {
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return fmt.Errorf("could not marshal config data: %v", err)
-	}
-	configFileName, err := getConfigFilePath()
-	if err != nil {
-		return fmt.Errorf("could not get config file path: %v", err)
-	}
-	err = ioutil.WriteFile(configFileName, data, 0644)
-	if err != nil {
-		return fmt.Errorf("could not write config file: %v", err)
-	}
-	return nil
-}

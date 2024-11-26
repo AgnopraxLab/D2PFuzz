@@ -24,8 +24,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"golang.org/x/crypto/sha3"
-
-	"github.com/AgnopraxLab/D2PFuzz/config"
 )
 
 var (
@@ -45,27 +43,18 @@ func SetFuzzyVMDir() {
 	}
 }
 
-// Fuzz is the entry point for go-fuzz
-func Fuzz(data []byte) int {
-	// Too little data destroys our performance and makes it hard for the generator
-	if len(data) < 32 {
-		return -1
-	}
-	conf, err := config.ReadConfig()
-	if err != nil {
-		fmt.Printf("Error reading config: %v\n", err)
-		return -1
-	}
-	switch conf.ProtocolFlag {
+// Fuzz
+func RunFuzzer(protocol, target, chainDir string, engine bool, threads int) error {
+	switch protocol {
 	case "discv4":
-		return discv4Fuzzer(data, conf.EngineFlag, conf.TargetFlag)
+		return discv4Fuzzer(engine, target)
 	case "discv5":
-		return discv5Fuzzer(data, conf.EngineFlag, conf.TargetFlag)
+		return discv5Fuzzer(engine, target)
 	case "eth":
-		return ethFuzzer(data, conf.EngineFlag, conf.TargetFlag, conf.ChainEnvFlag)
+		return ethFuzzer(engine, target, chainDir)
 	default:
-		fmt.Printf("Error config: %v\n", err)
-		return -1
+		fmt.Printf("Error start Fuzzer: %v\n", protocol)
+		return nil
 	}
 }
 
@@ -78,11 +67,7 @@ func setupTrace(name string) *os.File {
 	return traceFile
 }
 
-func discv4Fuzzer(data []byte, engine bool, target string) int {
-	// Too little data destroys our performance and makes it hard for the generator
-	if len(data) < 32 {
-		return -1
-	}
+func discv4Fuzzer(engine bool, target string) error {
 	testMaker := NewV4Maker(target)
 
 	// Ensure resources are released after testMaker usage
@@ -107,14 +92,10 @@ func discv4Fuzzer(data []byte, engine bool, target string) int {
 	}
 	// Save the test
 
-	return -1
+	return nil
 }
 
-func discv5Fuzzer(data []byte, engine bool, target string) int {
-	// Too little data destroys our performance and makes it hard for the generator
-	if len(data) < 32 {
-		return -1
-	}
+func discv5Fuzzer(engine bool, target string) error {
 	testMaker := NewV5Maker(target)
 
 	// Ensure resources are released after testMaker usage
@@ -133,14 +114,10 @@ func discv5Fuzzer(data []byte, engine bool, target string) int {
 	}
 	// Save the test
 
-	return -1
+	return nil
 }
 
-func ethFuzzer(data []byte, engine bool, target, chain string) int {
-	// Too little data destroys our performance and makes it hard for the generator
-	if len(data) < 32 {
-		return -1
-	}
+func ethFuzzer(engine bool, target, chain string) error {
 	testMaker := NewEthMaker(target, chain)
 
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
@@ -156,7 +133,7 @@ func ethFuzzer(data []byte, engine bool, target, chain string) int {
 	}
 	// Save the test
 
-	return -1
+	return nil
 }
 
 func hash(test *GeneralStateTest) []byte {

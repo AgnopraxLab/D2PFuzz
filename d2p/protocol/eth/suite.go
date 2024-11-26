@@ -9,14 +9,14 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
-	"github.com/ethereum/go-ethereum/eth/protocols/eth"
-	"github.com/ethereum/go-ethereum/rlp"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/rlp"
+
+	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 )
 
 type Suite struct {

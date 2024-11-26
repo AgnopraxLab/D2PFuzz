@@ -151,7 +151,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 		}(i, req)
 
 		// mutate req
-		//req = mutator.Mutate(req)
+		// req = mutator.Mutate(req)
 
 		time.Sleep(50 * time.Millisecond)
 	}

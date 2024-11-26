@@ -20,29 +20,13 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/urfave/cli/v2"
 
 	"github.com/AgnopraxLab/D2PFuzz/benchmark"
-	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/fuzzer"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
-
-var setenvCommand = &cli.Command{
-	Name:   "setenv",
-	Usage:  "Setting up the Fuzz runtime environment",
-	Action: setenv,
-	Flags: []cli.Flag{
-		protocolFlag,
-		targetFlag,
-		engineFlag,
-		chainEnvDirFlag,
-	},
-}
 
 var benchCommand = &cli.Command{
 	Name:   "bench",
@@ -50,6 +34,10 @@ var benchCommand = &cli.Command{
 	Action: bench,
 	Flags: []cli.Flag{
 		countFlag,
+		protocolFlag,
+		targetFlag,
+		engineFlag,
+		chainEnvDirFlag,
 	},
 }
 
@@ -59,6 +47,10 @@ var runCommand = &cli.Command{
 	Action: run,
 	Flags: []cli.Flag{
 		threadsFlag,
+		protocolFlag,
+		targetFlag,
+		engineFlag,
+		chainEnvDirFlag,
 	},
 }
 
@@ -74,17 +66,11 @@ var genCommand = &cli.Command{
 	},
 }
 
-const (
-	outputRootDir = "out"
-	crashesDir    = "crashes"
-)
-
 func initApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "D2PFuzz"
 	app.Usage = "Generator for Ethereum DevP2P protocol tests"
 	app.Commands = []*cli.Command{
-		setenvCommand,
 		benchCommand,
 		runCommand,
 		genCommand,
@@ -102,94 +88,24 @@ func main() {
 }
 
 func bench(c *cli.Context) error {
-	conf, err := config.ReadConfig()
-	if err != nil {
-		fmt.Printf("Error reading config: %v\n", err)
-		return err
-	}
-	benchmark.RunFullBench(conf.ProtocolFlag, conf.TargetFlag, conf.ChainEnvFlag, c.Int(countFlag.Name))
+	protocol := c.String("protocol")
+	target := c.String("target")
+	chainDir := c.String("chain")
+	count := c.Int("count")
+	engine := c.Bool("engine")
+
+	benchmark.RunFullBench(protocol, target, chainDir, count, engine)
 	return nil
 }
 
 func run(c *cli.Context) error {
-	directories := []string{
-		outputRootDir,
-		crashesDir,
-	}
-	for i := 0; i < 256; i++ {
-		directories = append(directories, fmt.Sprintf("%v/%v", outputRootDir, common.Bytes2Hex([]byte{byte(i)})))
-	}
-	ensureDirs(directories...)
-	genThreads := c.Int(threadsFlag.Name)
-	cmd := startGenerator(genThreads)
-	return cmd.Wait()
-}
+	protocol := c.String("protocol")
+	target := c.String("target")
+	chainDir := c.String("chain")
+	engine := c.Bool("engine")
+	threads := c.Int("threads")
 
-func startGenerator(genThreads int) *exec.Cmd {
-	var (
-		cmdName = "go"
-		target  = "FuzzD2P"
-		dir     = "./fuzzer/..."
-	)
-	cmd := exec.Command(cmdName, "test", "--fuzz", target, "--parallel", fmt.Sprint(genThreads), dir)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	// Set the output directory
-	path, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-	directory := filepath.Join(path, outputRootDir)
-	env := append(os.Environ(), fmt.Sprintf("%v=%v", fuzzer.EnvKey, directory))
-	cmd.Env = env
-	if err := cmd.Start(); err != nil {
-		panic(err)
-	}
-	return cmd
-}
-
-func ensureDirs(dirs ...string) {
-	for _, dir := range dirs {
-		_, err := os.Stat(dir)
-		if err != nil {
-			if os.IsNotExist(err) {
-				fmt.Printf("Creating directory: %v\n", dir)
-				if err = os.Mkdir(dir, 0777); err != nil {
-					fmt.Printf("Error while making the dir %q: %v\n", dir, err)
-					return
-				}
-			} else {
-				fmt.Printf("Error while using os.Stat dir %q: %v\n", dir, err)
-			}
-		}
-	}
-}
-
-func setenv(c *cli.Context) error {
-	targetPath, err := filepath.Abs(c.String("target"))
-	if err != nil {
-		return fmt.Errorf("could not get absolute path for target: %v", err)
-	}
-
-	chainPath, err := filepath.Abs(c.String("chain"))
-	if err != nil {
-		return fmt.Errorf("could not get absolute path for chain: %v", err)
-	}
-
-	conf := &config.Config{
-		ProtocolFlag: c.String("protocol"),
-		TargetFlag:   targetPath,
-		EngineFlag:   c.Bool("engine"),
-		ChainEnvFlag: chainPath,
-	}
-
-	err = config.WriteConfig(conf)
-	if err != nil {
-		return fmt.Errorf("could not write config: %v", err)
-	}
-
-	fmt.Println("Config has been set.")
-	return nil
+	return fuzzer.RunFuzzer(protocol, target, chainDir, engine, threads)
 }
 
 func generate(c *cli.Context) error {

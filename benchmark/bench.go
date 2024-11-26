@@ -20,14 +20,11 @@ import (
 	"os"
 	"time"
 
-	"golang.org/x/exp/rand"
-
-	"github.com/AgnopraxLab/D2PFuzz/filler"
 	"github.com/AgnopraxLab/D2PFuzz/fuzzer"
 )
 
 // RunFullBench runs a full benchmark with N runs.
-func RunFullBench(prot, target, chainDir string, N int) {
+func RunFullBench(prot, target, chainDir string, N int, engine bool) {
 	time, err := testExcution(prot, target, chainDir, N)
 	// Basic building blocks
 	printResult("BenchmarkTestGeneration", time, err)
@@ -39,15 +36,6 @@ func printResult(name string, time time.Duration, err error) {
 		return
 	}
 	fmt.Printf("Benchmark %v took %v \n", name, time.String())
-}
-
-func newFiller() (*filler.Filler, error) {
-	rand.Seed(12345)
-	rnd := make([]byte, 4000)
-	if _, err := rand.Read(rnd); err != nil {
-		return nil, err
-	}
-	return filler.NewFiller(rnd), nil
 }
 
 // testExcution excution a fuzzer.
