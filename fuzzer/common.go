@@ -66,3 +66,12 @@ func getList(fName string) ([]*enode.Node, error) {
 
 	return nodeList, nil
 }
+
+func allTrue(results []bool) bool {
+	for _, result := range results {
+		if !result {
+			return false
+		}
+	}
+	return true
+}

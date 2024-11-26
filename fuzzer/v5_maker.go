@@ -338,8 +338,8 @@ func (m *V5Maker) checkRequestSemanticsV5(req discv5.Packet) []bool {
 	switch p := req.(type) {
 	case *discv5.Ping:
 		return m.checkPingSemanticsV5(p)
-	//case *discv5.Findnode:
-	//	return checkFindnodeSemanticsV5(p)
+	case *discv5.Findnode:
+		return m.checkFindnodeSemanticsV5(p)
 	case *discv5.TalkRequest:
 		return m.checkTalkRequestSemanticsV5(p)
 	case *discv5.Whoareyou:
@@ -362,18 +362,10 @@ func (m *V5Maker) checkPingSemanticsV5(p *discv5.Ping) []bool {
 	return results
 }
 
-//func (m *V5Maker) checkFindnodeSemanticsV5(f *discv5.Findnode) []bool {
-//	var results []bool
-//
-//	// 1. Check if the expiration time is valid
-//	if p.ENRSeq != m.client.Self().Seq() {
-//		fmt.Println("Ping ENRSeq does not match the client's ENRSeq")
-//		results = append(results, false) // Mark expiration check as failed
-//	} else {
-//		results = append(results, true) // Mark expiration check as success
-//	}
-//	return results
-//}
+func (m *V5Maker) checkFindnodeSemanticsV5(f *discv5.Findnode) []bool {
+
+	return []bool{true}
+}
 
 func (m *V5Maker) checkTalkRequestSemanticsV5(t *discv5.TalkRequest) []bool {
 	var results []bool
@@ -415,12 +407,7 @@ func analyzeResultsV5(results []v5packetTestResult, logger *log.Logger, saveToFi
 
 	// Iterate through results and categorize
 	for _, result := range results {
-		switch {
-		case result.Check && result.Success:
-			resultWanted = append(resultWanted, result)
-		case !result.Check && result.Success:
-			resultWanted = append(resultWanted, result)
-		case result.Check && !result.Success:
+		if result.Check || result.Success {
 			resultWanted = append(resultWanted, result)
 		}
 	}

@@ -2,12 +2,13 @@ package fuzzer
 
 import (
 	"bytes"
+	"net"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"net"
-	"testing"
 )
 
 // mockNode 创建一个测试用的 enode 节点

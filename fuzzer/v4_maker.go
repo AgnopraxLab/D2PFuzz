@@ -55,11 +55,12 @@ type V4Maker struct {
 }
 
 type v4packetTestResult struct {
-	RequestType string
-	Check       bool
-	Success     bool
-	Response    discv4.Packet
-	Error       error
+	RequestType  string
+	Check        bool
+	CheckResults []bool
+	Success      bool
+	Response     discv4.Packet
+	Error        error
 }
 
 type v4result struct {
@@ -142,8 +143,9 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 
 			// Sending a single packet and waiting for feedback
 			result := sendAndWaitResponse(m, target, currentReq, logger)
-			result.Check = checkRequestSemantics(currentReq)
-			// Record results
+			result.CheckResults = m.checkRequestSemantics(currentReq)
+			result.Check = allTrue(result.CheckResults)
+			// 记录结果
 			mu.Lock()
 			results = append(results, result)
 			mu.Unlock()
@@ -151,7 +153,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 		}(i, req)
 
 		// mutate req
-		// req = mutator.Mutate(req)
+		//req = mutator.Mutate(req)
 
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -301,48 +303,88 @@ func generateV4TestSeq() []string {
 	return seq
 }
 
-func checkRequestSemantics(req discv4.Packet) bool {
+func (m *V4Maker) checkRequestSemantics(req discv4.Packet) []bool {
 	switch p := req.(type) {
 	case *discv4.Ping:
-		return checkPingSemantics(p)
+		return m.checkPingSemantics(p)
 	case *discv4.Findnode:
-		return checkFindnodeSemantics(p)
+		return m.checkFindnodeSemantics(p)
 	case *discv4.ENRRequest:
-		return checkENRRequestSemantics(p)
+		return m.checkENRRequestSemantics(p)
 	default:
-		return false
+		// Return an empty []bool or a slice indicating failure
+		return []bool{false} // Example: single `false` to indicate unsupported packet type
 	}
 }
 
-func checkPingSemantics(p *discv4.Ping) bool {
-	// 检查过期时间是否合理
-	// if p.Expiration <= uint64(time.Now().Unix()) {
-	// 	if logger != nil {
-	// 		logger.Printf("Invalid expiration time in Ping")
-	// 	}
-	// 	return false
-	// }
-	// if !isValidEndpoint(p.From) || !isValidEndpoint(p.To) {
-	// 	if logger != nil {
-	// 		logger.Printf("Invalid endpoint in Ping")
-	// 	}
-	// 	return false
-	// }
+func (m *V4Maker) checkPingSemantics(p *discv4.Ping) []bool {
+	var results []bool
 
-	return true
+	// 1. Check if the version is 4
+	if p.Version != 4 {
+		results = append(results, false) // Mark version check as failed
+	} else {
+		results = append(results, true) // Mark version check as success
+	}
+
+	// 2. Check if the source IP matches the client's own IP
+	if !p.From.IP.Equal(m.client.Self().IP()) {
+		results = append(results, false) // Mark source IP check as failed
+	} else {
+		results = append(results, true) // Mark source IP check as success
+	}
+
+	// 3. Check if the target IP matches the first target in the list
+	if !p.To.IP.Equal(m.targetList[0].IP()) {
+		results = append(results, false) // Mark target IP check as failed
+	} else {
+		results = append(results, true) // Mark target IP check as success
+	}
+
+	// 4. Check if the expiration time is valid
+	if p.ENRSeq != m.client.Self().Seq() {
+		fmt.Println("Ping ENRSeq does not match the client's ENRSeq")
+		results = append(results, false) // Mark expiration check as failed
+	} else {
+		results = append(results, true) // Mark expiration check as success
+	}
+
+	// 5. Check if the ENRSeq matches the client's ENRSeq
+	if p.Expiration <= uint64(time.Now().Unix()) {
+		results = append(results, false) // Mark ENRSeq check as failed
+	} else {
+		results = append(results, true) // Mark ENRSeq check as success
+	}
+
+	return results
 }
 
-// checkFindnodeSemantics checks the semantic correctness of Findnode request
-func checkFindnodeSemantics(f *discv4.Findnode) bool {
-	return false
+// checkFindnodeSemantics checks the semantic correctness of a Findnode request
+func (m *V4Maker) checkFindnodeSemantics(f *discv4.Findnode) []bool {
+	var results []bool
+
+	// 1. Check if the expiration time is valid
+	if f.Expiration <= uint64(time.Now().Unix()) {
+		results = append(results, false) // Mark ENRSeq check as failed
+	} else {
+		results = append(results, true) // Mark ENRSeq check as success
+	}
+
+	return results
 }
 
-// checkENRRequestSemantics checks the semantic correctness of ENRRequest request
-func checkENRRequestSemantics(e *discv4.ENRRequest) bool {
+// checkENRRequestSemantics checks the semantic correctness of an ENRRequest
+func (m *V4Maker) checkENRRequestSemantics(e *discv4.ENRRequest) []bool {
+	var results []bool
+
+	// 1. Check if the expiration time is valid
 	if e.Expiration <= uint64(time.Now().Unix()) {
-		return false
+		results = append(results, false) // Mark ENRSeq check as failed
+	} else {
+		results = append(results, true) // Mark ENRSeq check as success
 	}
-	return true
+
+	return results
 }
 
 // sendAndWaitResponse sends a request and waits for response
@@ -394,12 +436,7 @@ func analyzeResults(results []v4packetTestResult, logger *log.Logger, saveToFile
 
 	// Iterate through results and categorize
 	for _, result := range results {
-		switch {
-		case result.Check && result.Success:
-			resultWanted = append(resultWanted, result)
-		case !result.Check && result.Success:
-			resultWanted = append(resultWanted, result)
-		case result.Check && !result.Success:
+		if result.Check || result.Success {
 			resultWanted = append(resultWanted, result)
 		}
 	}
