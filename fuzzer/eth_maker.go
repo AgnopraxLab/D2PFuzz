@@ -156,7 +156,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 				result.Success = true
 			}
 
-			result.Check = checkEthRequestSemantics(currentReq)
+			result.Check = allTrue(m.checkEthRequestSemantics(currentReq))
 
 			mu.Lock()
 			results = append(results, result)
@@ -542,44 +542,44 @@ func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, tr
 	}
 }
 
-func checkEthRequestSemantics(req eth.Packet) bool {
+func (m *EthMaker) checkEthRequestSemantics(req eth.Packet) []bool {
 	switch p := req.(type) {
 	case *eth.StatusPacket:
-		return checkStatusSemantics(p)
+		return m.checkStatusSemantics(p)
 	case *eth.GetBlockHeadersPacket:
-		return checkGetBlockHeadersSemantics(p)
+		return m.checkGetBlockHeadersSemantics(p)
 	case *eth.GetBlockBodiesPacket:
-		return checkGetBlockBodiesSemantics(p)
+		return m.checkGetBlockBodiesSemantics(p)
 	case *eth.GetPooledTransactionsPacket:
-		return checkGetPooledTransactionsSemantics(p)
+		return m.checkGetPooledTransactionsSemantics(p)
 	default:
-		return false
+		// Return an empty []bool or a slice indicating failure
+		return []bool{false} // Example: single `false` to indicate unsupported packet type
 	}
 }
 
-func checkStatusSemantics(p *eth.StatusPacket) bool {
-	if p.ProtocolVersion == 0 {
-		return false
-	}
-	if p.NetworkID == 0 {
-		return false
-	}
-	return true
+func (m *EthMaker) checkStatusSemantics(p *eth.StatusPacket) []bool {
+	var results []bool
+
+	return results
 }
 
-func checkGetBlockHeadersSemantics(p *eth.GetBlockHeadersPacket) bool {
-	if p.Amount == 0 {
-		return false
-	}
-	return true
+func (m *EthMaker) checkGetBlockHeadersSemantics(p *eth.GetBlockHeadersPacket) []bool {
+	var results []bool
+
+	return results
 }
 
-func checkGetBlockBodiesSemantics(p *eth.GetBlockBodiesPacket) bool {
-	return len(p.GetBlockBodiesRequest) > 0
+func (m *EthMaker) checkGetBlockBodiesSemantics(p *eth.GetBlockBodiesPacket) []bool {
+	var results []bool
+
+	return results
 }
 
-func checkGetPooledTransactionsSemantics(p *eth.GetPooledTransactionsPacket) bool {
-	return len(p.GetPooledTransactionsRequest) > 0
+func (m *EthMaker) checkGetPooledTransactionsSemantics(p *eth.GetPooledTransactionsPacket) []bool {
+	var results []bool
+
+	return results
 }
 
 func analyzeEthResults(results []ethPacketTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {

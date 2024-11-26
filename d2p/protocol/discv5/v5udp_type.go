@@ -271,19 +271,10 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 	whoareyouPacket.sent = t.clock.Now()
 	return whoareyouPacket*/
 	case "whoareyou":
-		// 创建一个新的 enr.Record
-		r := enr.Record{}
-		r.Set(enr.UDP(30303))   // 设置 UDP 端口
-		r.SetSeq(1721275398453) // 设置序列号
-
-		// 创建一个新的 enode.Node
-		id := enode.HexID("6516a94edcc63ec65b32ab7ea215e45fdce8ded08dccc8878c9d1642fd3eba85")
-		remoteNode := enode.SignNull(&r, id)
-
 		whoareyouPacket := &Whoareyou{
 			ChallengeData: make([]byte, 32),
-			RecordSeq:     1721275398453, // 使用打印出的 RecordSeq
-			Node:          remoteNode,    // 使用新创建的 Node
+			RecordSeq:     n.Seq(),
+			Node:          n,
 		}
 		crand.Read(whoareyouPacket.IDNonce[:])
 		crand.Read(whoareyouPacket.Nonce[:])

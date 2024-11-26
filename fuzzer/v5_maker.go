@@ -154,7 +154,7 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 				result.Success = true
 			}
 
-			result.Check = checkRequestSemanticsV5(currentReq)
+			result.Check = allTrue(m.checkRequestSemanticsV5(currentReq))
 
 			mu.Lock()
 			results = append(results, result)
@@ -241,9 +241,9 @@ func (m *V5Maker) Start(traceOutput io.Writer) error {
 	return nil
 }
 
-func (v *V5Maker) Close() {
-	if v.client != nil {
-		v.client.Close()
+func (m *V5Maker) Close() {
+	if m.client != nil {
+		m.client.Close()
 	}
 }
 
@@ -333,44 +333,79 @@ func generateV5TestSeq() []string {
 	return seq
 }
 
-func checkRequestSemanticsV5(req discv5.Packet) bool {
+func (m *V5Maker) checkRequestSemanticsV5(req discv5.Packet) []bool {
 	switch p := req.(type) {
 	case *discv5.Ping:
-		return checkPingSemanticsV5(p)
-	case *discv5.Findnode:
-		return checkFindnodeSemanticsV5(p)
+		return m.checkPingSemanticsV5(p)
+	//case *discv5.Findnode:
+	//	return checkFindnodeSemanticsV5(p)
 	case *discv5.TalkRequest:
-		return checkTalkRequestSemanticsV5(p)
+		return m.checkTalkRequestSemanticsV5(p)
+	case *discv5.Whoareyou:
+		return m.checkWhoareyouSemantics(p)
 	default:
-		return false
+		// Return an empty []bool or a slice indicating failure
+		return []bool{false} // Example: single `false` to indicate unsupported packet type
 	}
 }
 
-func checkPingSemanticsV5(p *discv5.Ping) bool {
-	if p.ReqID == nil {
-		return false
+func (m *V5Maker) checkPingSemanticsV5(p *discv5.Ping) []bool {
+	var results []bool
+
+	// 1. Check if the ENRSeq is valid
+	if p.ENRSeq != m.client.Self().Seq() {
+		results = append(results, false) // Mark expiration check as failed
+	} else {
+		results = append(results, true) // Mark expiration check as success
 	}
-	return true
+	return results
 }
 
-func checkFindnodeSemanticsV5(f *discv5.Findnode) bool {
-	if f.ReqID == nil {
-		return false
+//func (m *V5Maker) checkFindnodeSemanticsV5(f *discv5.Findnode) []bool {
+//	var results []bool
+//
+//	// 1. Check if the expiration time is valid
+//	if p.ENRSeq != m.client.Self().Seq() {
+//		fmt.Println("Ping ENRSeq does not match the client's ENRSeq")
+//		results = append(results, false) // Mark expiration check as failed
+//	} else {
+//		results = append(results, true) // Mark expiration check as success
+//	}
+//	return results
+//}
+
+func (m *V5Maker) checkTalkRequestSemanticsV5(t *discv5.TalkRequest) []bool {
+	var results []bool
+
+	// 1. Check if the Protocol is valid
+	if t.Protocol == "test" {
+		results = append(results, true) // Mark protocol check as success
+	} else {
+		results = append(results, false) // Mark protocol check as failed
 	}
-	if len(f.Distances) == 0 {
-		return false
-	}
-	return true
+
+	return results
 }
 
-func checkTalkRequestSemanticsV5(t *discv5.TalkRequest) bool {
-	if t.ReqID == nil {
-		return false
+func (m *V5Maker) checkWhoareyouSemantics(w *discv5.Whoareyou) []bool {
+	var results []bool
+
+	// 1. Check if RecordSeq matches the client's current sequence
+	if w.RecordSeq != m.targetList[0].Seq() {
+		results = append(results, false)
+	} else {
+		results = append(results, true)
 	}
-	if len(t.Protocol) == 0 {
-		return false
+
+	// 2. Check if the Node matches the client's local node
+	if w.Node != m.targetList[0] {
+		results = append(results, false)
+	} else {
+		fmt.Println("Node is invalid")
+		results = append(results, true)
 	}
-	return true
+
+	return results
 }
 
 func analyzeResultsV5(results []v5packetTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
