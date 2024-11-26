@@ -62,7 +62,6 @@ type ethSnapshot struct {
 
 type ethPacketTestResult struct {
 	RequestType string
-	Check       bool
 	Success     bool
 	Response    eth.Packet
 	Error       error
@@ -155,8 +154,6 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 			} else {
 				result.Success = true
 			}
-
-			result.Check = checkEthRequestSemantics(currentReq)
 
 			mu.Lock()
 			results = append(results, result)
@@ -542,81 +539,18 @@ func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, tr
 	}
 }
 
-func checkEthRequestSemantics(req eth.Packet) bool {
-	switch p := req.(type) {
-	case *eth.StatusPacket:
-		return checkStatusSemantics(p)
-	case *eth.GetBlockHeadersPacket:
-		return checkGetBlockHeadersSemantics(p)
-	case *eth.GetBlockBodiesPacket:
-		return checkGetBlockBodiesSemantics(p)
-	case *eth.GetPooledTransactionsPacket:
-		return checkGetPooledTransactionsSemantics(p)
-	default:
-		return false
-	}
-}
-
-func checkStatusSemantics(p *eth.StatusPacket) bool {
-	if p.ProtocolVersion == 0 {
-		return false
-	}
-	if p.NetworkID == 0 {
-		return false
-	}
-	return true
-}
-
-func checkGetBlockHeadersSemantics(p *eth.GetBlockHeadersPacket) bool {
-	if p.Amount == 0 {
-		return false
-	}
-	return true
-}
-
-func checkGetBlockBodiesSemantics(p *eth.GetBlockBodiesPacket) bool {
-	return len(p.GetBlockBodiesRequest) > 0
-}
-
-func checkGetPooledTransactionsSemantics(p *eth.GetPooledTransactionsPacket) bool {
-	return len(p.GetPooledTransactionsRequest) > 0
-}
-
 func analyzeEthResults(results []ethPacketTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
-	checkTrueSuccessTrue := make([]ethPacketTestResult, 0)
-	checkFalseSuccessTrue := make([]ethPacketTestResult, 0)
-	checkTrueSuccessFalse := make([]ethPacketTestResult, 0)
-
-	for _, result := range results {
-		switch {
-		case result.Check && result.Success:
-			checkTrueSuccessTrue = append(checkTrueSuccessTrue, result)
-		case !result.Check && result.Success:
-			checkFalseSuccessTrue = append(checkFalseSuccessTrue, result)
-		case result.Check && !result.Success:
-			checkTrueSuccessFalse = append(checkTrueSuccessFalse, result)
-		}
-	}
-
 	if saveToFile {
+		// Create output directory if it doesn't exist
 		if err := os.MkdirAll(outputDir, 0755); err != nil {
 			return fmt.Errorf("failed to create output directory: %v", err)
 		}
 
-		outputResult := struct {
-			CheckTrueSuccessTrue  []ethPacketTestResult `json:"check_true_success_true"`
-			CheckFalseSuccessTrue []ethPacketTestResult `json:"check_false_success_true"`
-			CheckTrueSuccessFalse []ethPacketTestResult `json:"check_true_success_false"`
-			Timestamp             string                `json:"timestamp"`
-		}{
-			CheckTrueSuccessTrue:  checkTrueSuccessTrue,
-			CheckFalseSuccessTrue: checkFalseSuccessTrue,
-			CheckTrueSuccessFalse: checkTrueSuccessFalse,
-			Timestamp:             time.Now().Format("2006-01-02_15-04-05"),
-		}
+		// Generate filename (using timestamp)
+		filename := filepath.Join(outputDir, "/eth", fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
 
-		filename := filepath.Join(outputDir, "/eth", fmt.Sprintf("analysis_results_%s.json", outputResult.Timestamp))
-		data, err := json.MarshalIndent(outputResult, "", "    ")
+		// Save to file
+		data, err := json.MarshalIndent(results, "", "    ")
 		if err != nil {
 			return fmt.Errorf("JSON serialization failed: %v", err)
 		}
@@ -625,15 +559,10 @@ func analyzeEthResults(results []ethPacketTestResult, logger *log.Logger, saveTo
 			return fmt.Errorf("failed to write to file: %v", err)
 		}
 
-		if logger != nil {
-			logger.Printf("Results saved to file: %s\n", filename)
-		}
+		logger.Printf("Results saved to file: %s\n", filename)
 	} else {
-		if logger != nil {
-			logger.Printf("Number of results with Check=true, Success=true: %d\n", len(checkTrueSuccessTrue))
-			logger.Printf("Number of results with Check=false, Success=true: %d\n", len(checkFalseSuccessTrue))
-			logger.Printf("Number of results with Check=true, Success=false: %d\n", len(checkTrueSuccessFalse))
-		}
+		// Output to log
+		logger.Printf("Number of results with: %d\n", len(results))
 	}
 
 	return nil

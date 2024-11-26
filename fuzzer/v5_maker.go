@@ -374,41 +374,32 @@ func checkTalkRequestSemanticsV5(t *discv5.TalkRequest) bool {
 }
 
 func analyzeResultsV5(results []v5packetTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
-	// Classify results
-	checkTrueSuccessTrue := make([]v5packetTestResult, 0)
-	checkFalseSuccessTrue := make([]v5packetTestResult, 0)
-	checkTrueSuccessFalse := make([]v5packetTestResult, 0)
+	// Define slices for three scenarios
+	resultWanted := make([]v5packetTestResult, 0)
 
+	// Iterate through results and categorize
 	for _, result := range results {
 		switch {
 		case result.Check && result.Success:
-			checkTrueSuccessTrue = append(checkTrueSuccessTrue, result)
+			resultWanted = append(resultWanted, result)
 		case !result.Check && result.Success:
-			checkFalseSuccessTrue = append(checkFalseSuccessTrue, result)
+			resultWanted = append(resultWanted, result)
 		case result.Check && !result.Success:
-			checkTrueSuccessFalse = append(checkTrueSuccessFalse, result)
+			resultWanted = append(resultWanted, result)
 		}
 	}
 
 	if saveToFile {
+		// Create output directory if it doesn't exist
 		if err := os.MkdirAll(outputDir, 0755); err != nil {
 			return fmt.Errorf("failed to create output directory: %v", err)
 		}
 
-		outputResult := struct {
-			CheckTrueSuccessTrue  []v5packetTestResult `json:"check_true_success_true"`
-			CheckFalseSuccessTrue []v5packetTestResult `json:"check_false_success_true"`
-			CheckTrueSuccessFalse []v5packetTestResult `json:"check_true_success_false"`
-			Timestamp             string               `json:"timestamp"`
-		}{
-			CheckTrueSuccessTrue:  checkTrueSuccessTrue,
-			CheckFalseSuccessTrue: checkFalseSuccessTrue,
-			CheckTrueSuccessFalse: checkTrueSuccessFalse,
-			Timestamp:             time.Now().Format("2006-01-02_15-04-05"),
-		}
+		// Generate filename (using timestamp)
+		filename := filepath.Join(outputDir, "/discv5", fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
 
-		filename := filepath.Join(outputDir, "/discv5", fmt.Sprintf("analysis_results_%s.json", outputResult.Timestamp))
-		data, err := json.MarshalIndent(outputResult, "", "    ")
+		// Save to file
+		data, err := json.MarshalIndent(resultWanted, "", "    ")
 		if err != nil {
 			return fmt.Errorf("JSON serialization failed: %v", err)
 		}
@@ -417,15 +408,10 @@ func analyzeResultsV5(results []v5packetTestResult, logger *log.Logger, saveToFi
 			return fmt.Errorf("failed to write to file: %v", err)
 		}
 
-		if logger != nil {
-			logger.Printf("Results saved to file: %s\n", filename)
-		}
+		logger.Printf("Results saved to file: %s\n", filename)
 	} else {
-		if logger != nil {
-			logger.Printf("Number of results with Check=true, Success=true: %d\n", len(checkTrueSuccessTrue))
-			logger.Printf("Number of results with Check=false, Success=true: %d\n", len(checkFalseSuccessTrue))
-			logger.Printf("Number of results with Check=true, Success=false: %d\n", len(checkTrueSuccessFalse))
-		}
+		// Output to log
+		logger.Printf("Number of results with: %d\n", len(resultWanted))
 	}
 
 	return nil
