@@ -62,6 +62,7 @@ type ethSnapshot struct {
 
 type ethPacketTestResult struct {
 	RequestType string
+	Check       bool
 	Success     bool
 	Response    eth.Packet
 	Error       error
@@ -125,7 +126,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 
 	target := m.suiteList[0]
 
-	// Initialize connection
+	// 初始化连接
 	if err := target.InitializeAndConnect(); err != nil {
 		if logger != nil {
 			logger.Printf("Failed to initialize connection: %v", err)
@@ -133,7 +134,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 		return err
 	}
 
-	// Generate random request packet
+	// 生成随机请求包
 	req, _ := target.GenPacket(eth.StatusMsg)
 
 	for i := 0; i < config.MutateCount; i++ {
@@ -146,7 +147,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 				RequestType: fmt.Sprintf("%d", currentReq.Kind()),
 			}
 
-			// Send and wait for response
+			// 发送并等待响应
 			err := m.handlePacketWithResponse(currentReq, target, traceOutput)
 			if err != nil {
 				result.Error = err
@@ -154,6 +155,8 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 			} else {
 				result.Success = true
 			}
+
+			result.Check = allTrue(m.checkEthRequestSemantics(currentReq))
 
 			mu.Lock()
 			results = append(results, result)
@@ -166,7 +169,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 
 	wg.Wait()
 
-	// Analyze results
+	// 分析结果
 	analyzeEthResults(results, logger, config.SaveFlag, config.OutputDir)
 	return nil
 }
@@ -539,18 +542,81 @@ func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, tr
 	}
 }
 
+func (m *EthMaker) checkEthRequestSemantics(req eth.Packet) []bool {
+	switch p := req.(type) {
+	case *eth.StatusPacket:
+		return m.checkStatusSemantics(p)
+	case *eth.GetBlockHeadersPacket:
+		return m.checkGetBlockHeadersSemantics(p)
+	case *eth.GetBlockBodiesPacket:
+		return m.checkGetBlockBodiesSemantics(p)
+	case *eth.GetPooledTransactionsPacket:
+		return m.checkGetPooledTransactionsSemantics(p)
+	default:
+		// Return an empty []bool or a slice indicating failure
+		return []bool{false} // Example: single `false` to indicate unsupported packet type
+	}
+}
+
+func (m *EthMaker) checkStatusSemantics(p *eth.StatusPacket) []bool {
+	var results []bool
+
+	return results
+}
+
+func (m *EthMaker) checkGetBlockHeadersSemantics(p *eth.GetBlockHeadersPacket) []bool {
+	var results []bool
+
+	return results
+}
+
+func (m *EthMaker) checkGetBlockBodiesSemantics(p *eth.GetBlockBodiesPacket) []bool {
+	var results []bool
+
+	return results
+}
+
+func (m *EthMaker) checkGetPooledTransactionsSemantics(p *eth.GetPooledTransactionsPacket) []bool {
+	var results []bool
+
+	return results
+}
+
 func analyzeEthResults(results []ethPacketTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
+	checkTrueSuccessTrue := make([]ethPacketTestResult, 0)
+	checkFalseSuccessTrue := make([]ethPacketTestResult, 0)
+	checkTrueSuccessFalse := make([]ethPacketTestResult, 0)
+
+	for _, result := range results {
+		switch {
+		case result.Check && result.Success:
+			checkTrueSuccessTrue = append(checkTrueSuccessTrue, result)
+		case !result.Check && result.Success:
+			checkFalseSuccessTrue = append(checkFalseSuccessTrue, result)
+		case result.Check && !result.Success:
+			checkTrueSuccessFalse = append(checkTrueSuccessFalse, result)
+		}
+	}
+
 	if saveToFile {
-		// Create output directory if it doesn't exist
 		if err := os.MkdirAll(outputDir, 0755); err != nil {
 			return fmt.Errorf("failed to create output directory: %v", err)
 		}
 
-		// Generate filename (using timestamp)
-		filename := filepath.Join(outputDir, "/eth", fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
+		outputResult := struct {
+			CheckTrueSuccessTrue  []ethPacketTestResult `json:"check_true_success_true"`
+			CheckFalseSuccessTrue []ethPacketTestResult `json:"check_false_success_true"`
+			CheckTrueSuccessFalse []ethPacketTestResult `json:"check_true_success_false"`
+			Timestamp             string                `json:"timestamp"`
+		}{
+			CheckTrueSuccessTrue:  checkTrueSuccessTrue,
+			CheckFalseSuccessTrue: checkFalseSuccessTrue,
+			CheckTrueSuccessFalse: checkTrueSuccessFalse,
+			Timestamp:             time.Now().Format("2006-01-02_15-04-05"),
+		}
 
-		// Save to file
-		data, err := json.MarshalIndent(results, "", "    ")
+		filename := filepath.Join(outputDir, "/eth", fmt.Sprintf("analysis_results_%s.json", outputResult.Timestamp))
+		data, err := json.MarshalIndent(outputResult, "", "    ")
 		if err != nil {
 			return fmt.Errorf("JSON serialization failed: %v", err)
 		}
@@ -559,10 +625,15 @@ func analyzeEthResults(results []ethPacketTestResult, logger *log.Logger, saveTo
 			return fmt.Errorf("failed to write to file: %v", err)
 		}
 
-		logger.Printf("Results saved to file: %s\n", filename)
+		if logger != nil {
+			logger.Printf("Results saved to file: %s\n", filename)
+		}
 	} else {
-		// Output to log
-		logger.Printf("Number of results with: %d\n", len(results))
+		if logger != nil {
+			logger.Printf("Number of results with Check=true, Success=true: %d\n", len(checkTrueSuccessTrue))
+			logger.Printf("Number of results with Check=false, Success=true: %d\n", len(checkFalseSuccessTrue))
+			logger.Printf("Number of results with Check=true, Success=false: %d\n", len(checkTrueSuccessFalse))
+		}
 	}
 
 	return nil
