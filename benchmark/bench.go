@@ -25,7 +25,7 @@ import (
 
 // RunFullBench runs a full benchmark with N runs.
 func RunFullBench(prot, target, chainDir string, N int, engine bool) {
-	time, err := testExcution(prot, target, chainDir, N)
+	time, err := testExcution(prot, target, chainDir, N, engine)
 	// Basic building blocks
 	printResult("BenchmarkTestGeneration", time, err)
 }
@@ -39,20 +39,32 @@ func printResult(name string, time time.Duration, err error) {
 }
 
 // testExcution excution a fuzzer.
-func testExcution(prot, target, chainDir string, N int) (time.Duration, error) {
+func testExcution(prot, target, chainDir string, N int, engine bool) (time.Duration, error) {
 	// var traceFile *os.File
 	start := time.Now()
 	for i := 0; i < N; i++ {
 		switch prot {
 		case "discv4":
 			testMaker := fuzzer.NewV4Maker(target)
-			testMaker.Start(os.Stdout)
+			if engine {
+				testMaker.Start(os.Stdout)
+			} else {
+				testMaker.PacketStart(os.Stdout)
+			}
 		case "discv5":
 			testMaker := fuzzer.NewV5Maker(target)
-			testMaker.Start(os.Stdout)
+			if engine {
+				testMaker.Start(os.Stdout)
+			} else {
+				testMaker.PacketStart(os.Stdout)
+			}
 		case "eth":
 			testMaker := fuzzer.NewEthMaker(target, chainDir)
-			testMaker.Start(os.Stdout)
+			if engine {
+				testMaker.Start(os.Stdout)
+			} else {
+				testMaker.PacketStart(os.Stdout)
+			}
 		}
 	}
 	return time.Since(start), nil
