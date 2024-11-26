@@ -27,8 +27,6 @@ git clone git@github.com:AgnopraxLab/D2PFuzz.git
 cd D2PFuzz
 # Build the binary
 go build
-# Setting environment
-./D2PFuzz setenv
 # Run the generator
 ./D2PFuzz generator
 # Run the bench
@@ -36,7 +34,9 @@ go build
 # Run the fuzzer
 ./D2PFuzz run
 ```
-# Setenv
-Configure Fuzz's runtime environment and related configurations
 # Generator
 Package generation tests can be performed with this tool
+# Run
+Start Fuzzer for DevP2P
+# Bench
+Start Benchmarking for DevP2P

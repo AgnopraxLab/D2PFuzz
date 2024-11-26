@@ -122,7 +122,7 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 	}
 	target := m.targetList[0]
 
-	// 发送初始ping包建立连接
+	// Send initial ping packet to establish connection
 	ping := m.client.GenPacket("ping", target)
 	nonce, err := m.sendAndReceive(target, ping, traceOutput)
 	if err != nil {
@@ -167,7 +167,7 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 
 	wg.Wait()
 
-	// 分析结果
+	// Analyze results
 	analyzeResultsV5(results, logger, config.SaveFlag, config.OutputDir)
 	return nil
 }
@@ -374,7 +374,7 @@ func checkTalkRequestSemanticsV5(t *discv5.TalkRequest) bool {
 }
 
 func analyzeResultsV5(results []v5packetTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
-	// 分类结果
+	// Classify results
 	checkTrueSuccessTrue := make([]v5packetTestResult, 0)
 	checkFalseSuccessTrue := make([]v5packetTestResult, 0)
 	checkTrueSuccessFalse := make([]v5packetTestResult, 0)

@@ -126,7 +126,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 
 	target := m.suiteList[0]
 
-	// 初始化连接
+	// Initialize connection
 	if err := target.InitializeAndConnect(); err != nil {
 		if logger != nil {
 			logger.Printf("Failed to initialize connection: %v", err)
@@ -134,7 +134,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 		return err
 	}
 
-	// 生成随机请求包
+	// Generate random request packet
 	req, _ := target.GenPacket(eth.StatusMsg)
 
 	for i := 0; i < config.MutateCount; i++ {
@@ -147,7 +147,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 				RequestType: fmt.Sprintf("%d", currentReq.Kind()),
 			}
 
-			// 发送并等待响应
+			// Send and wait for response
 			err := m.handlePacketWithResponse(currentReq, target, traceOutput)
 			if err != nil {
 				result.Error = err
@@ -169,7 +169,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 
 	wg.Wait()
 
-	// 分析结果
+	// Analyze results
 	analyzeEthResults(results, logger, config.SaveFlag, config.OutputDir)
 	return nil
 }

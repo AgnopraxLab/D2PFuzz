@@ -143,7 +143,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 			// Sending a single packet and waiting for feedback
 			result := sendAndWaitResponse(m, target, currentReq, logger)
 			result.Check = checkRequestSemantics(currentReq)
-			// 记录结果
+			// Record results
 			mu.Lock()
 			results = append(results, result)
 			mu.Unlock()

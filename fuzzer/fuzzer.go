@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"golang.org/x/crypto/sha3"
@@ -29,7 +30,7 @@ import (
 var (
 	outputDir   = "out"
 	EnvKey      = "FUZZYDIR"
-	shouldTrace = true
+	shouldTrace = false
 )
 
 // SetFuzzyVMDir sets the output directory for FuzzyVM
@@ -45,17 +46,58 @@ func SetFuzzyVMDir() {
 
 // Fuzz
 func RunFuzzer(protocol, target, chainDir string, engine bool, threads int) error {
-	switch protocol {
-	case "discv4":
-		return discv4Fuzzer(engine, target)
-	case "discv5":
-		return discv5Fuzzer(engine, target)
-	case "eth":
-		return ethFuzzer(engine, target, chainDir)
-	default:
-		fmt.Printf("Error start Fuzzer: %v\n", protocol)
-		return nil
+	var (
+		wg      sync.WaitGroup
+		errChan = make(chan error, threads)
+	)
+
+	// Ensure at least one thread
+	if threads < 1 {
+		threads = 1
 	}
+
+	// Launch specified number of goroutines
+	for i := 0; i < threads; i++ {
+		wg.Add(1)
+		go func(threadID int) {
+			defer wg.Done()
+
+			var err error
+			switch protocol {
+			case "discv4":
+				err = discv4Fuzzer(engine, target)
+			case "discv5":
+				err = discv5Fuzzer(engine, target)
+			case "eth":
+				err = ethFuzzer(engine, target, chainDir)
+			default:
+				err = fmt.Errorf("unsupported protocol: %v", protocol)
+			}
+
+			if err != nil {
+				errChan <- fmt.Errorf("thread %d error: %v", threadID, err)
+			}
+		}(i)
+	}
+
+	// Wait for all goroutines to complete
+	go func() {
+		wg.Wait()
+		close(errChan)
+	}()
+
+	// Collect errors
+	var errors []error
+	for err := range errChan {
+		errors = append(errors, err)
+	}
+
+	// If any errors occurred, return the first one
+	if len(errors) > 0 {
+		return errors[0]
+	}
+
+	return nil
 }
 
 func setupTrace(name string) *os.File {
@@ -109,7 +151,13 @@ func discv5Fuzzer(engine bool, target string) error {
 		traceFile = setupTrace(finalName)
 		defer traceFile.Close()
 	}
-	if err := testMaker.Start(traceFile); err != nil {
+	var err error
+	if engine {
+		err = testMaker.Start(traceFile)
+	} else {
+		err = testMaker.PacketStart(traceFile)
+	}
+	if err != nil {
 		panic(err)
 	}
 	// Save the test
@@ -128,7 +176,13 @@ func ethFuzzer(engine bool, target, chain string) error {
 		traceFile = setupTrace(finalName)
 		defer traceFile.Close()
 	}
-	if err := testMaker.Start(traceFile); err != nil {
+	var err error
+	if engine {
+		err = testMaker.Start(traceFile)
+	} else {
+		err = testMaker.PacketStart(traceFile)
+	}
+	if err != nil {
 		panic(err)
 	}
 	// Save the test
