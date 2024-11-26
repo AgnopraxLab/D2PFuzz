@@ -55,11 +55,12 @@ type V4Maker struct {
 }
 
 type v4packetTestResult struct {
-	RequestType string
-	Check       bool
-	Success     bool
-	Response    discv4.Packet
-	Error       error
+	RequestType  string
+	Check        bool
+	CheckResults []bool
+	Success      bool
+	Response     discv4.Packet
+	Error        error
 }
 
 type v4result struct {
@@ -142,7 +143,8 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 
 			// Sending a single packet and waiting for feedback
 			result := sendAndWaitResponse(m, target, currentReq, logger)
-			result.Check = allTrue(m.checkRequestSemantics(currentReq))
+			result.CheckResults = m.checkRequestSemantics(currentReq)
+			result.Check = allTrue(result.CheckResults)
 			// 记录结果
 			mu.Lock()
 			results = append(results, result)
@@ -439,19 +441,17 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 
 func analyzeResults(results []v4packetTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
 	// Define slices for three scenarios
-	checkTrueSuccessTrue := make([]v4packetTestResult, 0)
-	checkFalseSuccessTrue := make([]v4packetTestResult, 0)
-	checkTrueSuccessFalse := make([]v4packetTestResult, 0)
+	resultWanted := make([]v4packetTestResult, 0)
 
 	// Iterate through results and categorize
 	for _, result := range results {
 		switch {
 		case result.Check && result.Success:
-			checkTrueSuccessTrue = append(checkTrueSuccessTrue, result)
+			resultWanted = append(resultWanted, result)
 		case !result.Check && result.Success:
-			checkFalseSuccessTrue = append(checkFalseSuccessTrue, result)
+			resultWanted = append(resultWanted, result)
 		case result.Check && !result.Success:
-			checkTrueSuccessFalse = append(checkTrueSuccessFalse, result)
+			resultWanted = append(resultWanted, result)
 		}
 	}
 
@@ -460,25 +460,11 @@ func analyzeResults(results []v4packetTestResult, logger *log.Logger, saveToFile
 		if err := os.MkdirAll(outputDir, 0755); err != nil {
 			return fmt.Errorf("failed to create output directory: %v", err)
 		}
-
-		// Construct output result structure
-		outputResult := struct {
-			CheckTrueSuccessTrue  []v4packetTestResult `json:"check_true_success_true"`
-			CheckFalseSuccessTrue []v4packetTestResult `json:"check_false_success_true"`
-			CheckTrueSuccessFalse []v4packetTestResult `json:"check_true_success_false"`
-			Timestamp             string               `json:"timestamp"`
-		}{
-			CheckTrueSuccessTrue:  checkTrueSuccessTrue,
-			CheckFalseSuccessTrue: checkFalseSuccessTrue,
-			CheckTrueSuccessFalse: checkTrueSuccessFalse,
-			Timestamp:             time.Now().Format("2006-01-02_15-04-05"),
-		}
-
 		// Generate filename (using timestamp)
-		filename := filepath.Join(outputDir, "/discv4", fmt.Sprintf("analysis_results_%s.json", outputResult.Timestamp))
+		filename := filepath.Join(outputDir, "/discv4", fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
 
 		// Save to file
-		data, err := json.MarshalIndent(outputResult, "", "    ")
+		data, err := json.MarshalIndent(resultWanted, "", "    ")
 		if err != nil {
 			return fmt.Errorf("JSON serialization failed: %v", err)
 		}
@@ -490,20 +476,7 @@ func analyzeResults(results []v4packetTestResult, logger *log.Logger, saveToFile
 		logger.Printf("Results saved to file: %s\n", filename)
 	} else {
 		// Output to log
-		logger.Printf("Number of results with Check=true, Success=true: %d\n", len(checkTrueSuccessTrue))
-		for _, r := range checkTrueSuccessTrue {
-			logger.Printf("Result details: %+v\n", r)
-		}
-
-		logger.Printf("Number of results with Check=false, Success=true: %d\n", len(checkFalseSuccessTrue))
-		for _, r := range checkFalseSuccessTrue {
-			logger.Printf("Result details: %+v\n", r)
-		}
-
-		logger.Printf("Number of results with Check=true, Success=false: %d\n", len(checkTrueSuccessFalse))
-		for _, r := range checkTrueSuccessFalse {
-			logger.Printf("Result details: %+v\n", r)
-		}
+		logger.Printf("Number of results with Check=true, Success=true: %d\n", len(resultWanted))
 	}
 
 	return nil

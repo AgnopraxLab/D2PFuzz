@@ -55,11 +55,12 @@ type V5Maker struct {
 }
 
 type v5packetTestResult struct {
-	RequestType string
-	Check       bool
-	Success     bool
-	Response    discv5.Packet
-	Error       error
+	RequestType  string
+	CheckResults []bool
+	Check        bool
+	Success      bool
+	Response     discv5.Packet
+	Error        error
 }
 
 type v5result struct {
@@ -153,8 +154,8 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 			} else {
 				result.Success = true
 			}
-
-			result.Check = allTrue(m.checkRequestSemanticsV5(currentReq))
+			result.CheckResults = m.checkRequestSemanticsV5(currentReq)
+			result.Check = allTrue(result.CheckResults)
 
 			mu.Lock()
 			results = append(results, result)
