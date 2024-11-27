@@ -125,7 +125,7 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 
 	// Send initial ping packet to establish connection
 	ping := m.client.GenPacket("ping", target)
-	nonce, err := m.sendAndReceive(target, ping, traceOutput)
+	nonce, err := m.sendAndReceive(target, ping, traceOutput, logger)
 	if err != nil {
 		if logger != nil {
 			logger.Printf("Failed to send initial ping: %v", err)
@@ -147,7 +147,7 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 				RequestType: currentReq.Name(),
 			}
 
-			_, err := m.sendAndReceive(target, currentReq, traceOutput)
+			_, err := m.sendAndReceive(target, currentReq, traceOutput, logger)
 			if err != nil {
 				result.Error = err
 				result.Success = false
@@ -196,7 +196,7 @@ func (m *V5Maker) Start(traceOutput io.Writer) error {
 			// First round: sending testSeq packets
 			for _, packetType := range m.testSeq {
 				req := m.client.GenPacket(packetType, target)
-				nonce, err := m.sendAndReceive(target, req, traceOutput)
+				nonce, err := m.sendAndReceive(target, req, traceOutput, logger)
 				if err != nil {
 					fmt.Errorf("failed to send and receive packet")
 				}
@@ -210,7 +210,7 @@ func (m *V5Maker) Start(traceOutput io.Writer) error {
 			for _, packetType := range m.stateSeq {
 				req := m.client.GenPacket(packetType, target)
 				// Set the expected response type based on the packet type
-				nonce, err := m.sendAndReceive(target, req, traceOutput)
+				nonce, err := m.sendAndReceive(target, req, traceOutput, logger)
 				if err != nil {
 					fmt.Errorf("failed to send and receive packet")
 				}
@@ -248,7 +248,7 @@ func (m *V5Maker) Close() {
 	}
 }
 
-func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOutput io.Writer) (discv5.Nonce, error) {
+func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOutput io.Writer, logger *log.Logger) (discv5.Nonce, error) {
 	const waitTime = 5 * time.Second
 
 	nonce, err := m.client.Send(target, req, nil)
@@ -271,8 +271,8 @@ func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOut
 	if traceOutput != nil {
 		m.logPacketInfo(packet, traceOutput)
 	}
-
 	if whoareyou, ok := packet.(*discv5.Whoareyou); ok {
+		logger.Printf("Received Whoareyou response: %+v\n", whoareyou)
 		if whoareyou.Nonce != nonce {
 			return nonce, fmt.Errorf("wrong nonce in WHOAREYOU")
 		}
@@ -285,9 +285,17 @@ func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOut
 		if err != nil {
 			return nonce, fmt.Errorf("failed to send handshake: %v", err)
 		}
-		return m.sendAndReceive(target, req, traceOutput)
+		return m.sendAndReceive(target, req, traceOutput, logger)
 	}
-
+	if pong, ok := packet.(*discv5.Pong); ok {
+		logger.Printf("Received Pong response: %+v\n", pong)
+	}
+	if nodes, ok := packet.(*discv5.Nodes); ok {
+		logger.Printf("Received Nodes response: %+v\n", nodes)
+	}
+	if talkresponse, ok := packet.(*discv5.TalkResponse); ok {
+		logger.Printf("Received Nodes response: %+v\n", talkresponse)
+	}
 	return nonce, nil
 }
 
@@ -351,15 +359,15 @@ func (m *V5Maker) checkRequestSemanticsV5(req discv5.Packet) []bool {
 }
 
 func (m *V5Maker) checkPingSemanticsV5(p *discv5.Ping) []bool {
-	var results []bool
+	var validityResults []bool
 
 	// 1. Check if the ENRSeq is valid
 	if p.ENRSeq != m.client.Self().Seq() {
-		results = append(results, false) // Mark expiration check as failed
+		validityResults = append(validityResults, false) // Mark expiration check as failed
 	} else {
-		results = append(results, true) // Mark expiration check as success
+		validityResults = append(validityResults, true) // Mark expiration check as success
 	}
-	return results
+	return validityResults
 }
 
 func (m *V5Maker) checkFindnodeSemanticsV5(f *discv5.Findnode) []bool {
@@ -368,37 +376,37 @@ func (m *V5Maker) checkFindnodeSemanticsV5(f *discv5.Findnode) []bool {
 }
 
 func (m *V5Maker) checkTalkRequestSemanticsV5(t *discv5.TalkRequest) []bool {
-	var results []bool
+	var validityResults []bool
 
 	// 1. Check if the Protocol is valid
-	if t.Protocol == "test" {
-		results = append(results, true) // Mark protocol check as success
+	if t.Protocol == "test-protocol" {
+		validityResults = append(validityResults, true) // Mark protocol check as success
 	} else {
-		results = append(results, false) // Mark protocol check as failed
+		validityResults = append(validityResults, false) // Mark protocol check as failed
 	}
 
-	return results
+	return validityResults
 }
 
 func (m *V5Maker) checkWhoareyouSemantics(w *discv5.Whoareyou) []bool {
-	var results []bool
+	var validityResults []bool
 
 	// 1. Check if RecordSeq matches the client's current sequence
 	if w.RecordSeq != m.targetList[0].Seq() {
-		results = append(results, false)
+		validityResults = append(validityResults, false)
 	} else {
-		results = append(results, true)
+		validityResults = append(validityResults, true)
 	}
 
 	// 2. Check if the Node matches the client's local node
 	if w.Node != m.targetList[0] {
-		results = append(results, false)
+		validityResults = append(validityResults, false)
 	} else {
 		fmt.Println("Node is invalid")
-		results = append(results, true)
+		validityResults = append(validityResults, true)
 	}
 
-	return results
+	return validityResults
 }
 
 func analyzeResultsV5(results []v5packetTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {

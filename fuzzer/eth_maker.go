@@ -360,6 +360,10 @@ func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, sui
 		return fmt.Errorf("error reading BlockHeadersMsg: %v", err)
 	}
 
+	if traceOutput != nil {
+		fmt.Fprintf(traceOutput, "Received BlockHeaders packet: %+v\n", headers)
+	}
+
 	if got, want := headers.RequestId, p.RequestId; got != want {
 		return fmt.Errorf("unexpected request id: got %d, want %d", headers.RequestId, p.RequestId)
 	}
@@ -394,6 +398,10 @@ func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, suite
 		return fmt.Errorf("error reading BlockBodiesMsg: %v", err)
 	}
 
+	if traceOutput != nil {
+		fmt.Fprintf(traceOutput, "Received BlockBodies packet: %+v\n", resp)
+	}
+
 	if got, want := resp.RequestId, p.RequestId; got != want {
 		return fmt.Errorf("unexpected request id in response: got %d, want %d", got, want)
 	}
@@ -424,6 +432,10 @@ func (m *EthMaker) handlePooledTransactionHashesPacket(p *eth.NewPooledTransacti
 		return fmt.Errorf("error reading BlockBodiesMsg: %v", err)
 	}
 
+	if traceOutput != nil {
+		fmt.Fprintf(traceOutput, "Received GetPooledTransactions packet: %+v\n", resp)
+	}
+
 	if got, want := len(resp.GetPooledTransactionsRequest), len(p.Hashes); got != want {
 		return fmt.Errorf("unexpected number of txs requested: got %d, want %d", got, want)
 	}
@@ -446,6 +458,10 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 	resp := new(eth.PooledTransactionsPacket)
 	if err := suite.ReadMsg(eth.EthProto, eth.PooledTransactionsMsg, resp); err != nil {
 		return fmt.Errorf("error reading BlockBodiesMsg: %v", err)
+	}
+
+	if traceOutput != nil {
+		fmt.Fprintf(traceOutput, "Received GetPooledTransactions packet: %+v\n", resp)
 	}
 
 	if got, want := resp.RequestId, p.RequestId; got != want {
@@ -476,6 +492,10 @@ func (m *EthMaker) handleGetReceiptsPacket(p *eth.GetReceiptsPacket, suite *eth.
 	resp := new(eth.ReceiptsPacket)
 	if err := suite.ReadMsg(eth.EthProto, eth.ReceiptsMsg, resp); err != nil {
 		return fmt.Errorf("error reading BlockBodiesMsg: %v", err)
+	}
+
+	if traceOutput != nil {
+		fmt.Fprintf(traceOutput, "Received Receipts packet: %+v\n", resp)
 	}
 
 	if got, want := resp.RequestId, p.RequestId; got != want {
