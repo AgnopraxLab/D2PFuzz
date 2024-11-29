@@ -244,7 +244,7 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 
 	case "talkrequest":
 		talkReqPacket := &TalkRequest{
-			Protocol: "example-protocol",
+			Protocol: "test-protocol",
 			Message:  []byte("Hello, world!"),
 		}
 		reqID := make([]byte, 8)

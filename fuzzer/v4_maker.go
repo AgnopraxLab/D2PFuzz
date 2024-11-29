@@ -213,11 +213,8 @@ func (m *V4Maker) Start(traceOutput io.Writer) error {
 					}
 					return false, false
 				})
-				if err := m.client.Send(target, req); err != nil {
-					if logger != nil {
-						logger.Printf("Failed to send packet: %v", err)
-					}
-				}
+				_ = m.client.Send(target, req)
+
 				// Record send log info
 				if logger != nil {
 					logger.Printf("Sent state packet to target: %s, packet: %v", target.String(), req.Kind())
@@ -253,9 +250,9 @@ func (m *V4Maker) Start(traceOutput io.Writer) error {
 	return nil
 }
 
-func (v *V4Maker) Close() {
-	if v.client != nil {
-		v.client.Close()
+func (m *V4Maker) Close() {
+	if m.client != nil {
+		m.client.Close()
 	}
 }
 
@@ -319,73 +316,73 @@ func (m *V4Maker) checkRequestSemantics(req discv4.Packet) []bool {
 }
 
 func (m *V4Maker) checkPingSemantics(p *discv4.Ping) []bool {
-	var results []bool
+	var validityResults []bool
 
 	// 1. Check if the version is 4
 	if p.Version != 4 {
-		results = append(results, false) // Mark version check as failed
+		validityResults = append(validityResults, false) // Mark version check as failed
 	} else {
-		results = append(results, true) // Mark version check as success
+		validityResults = append(validityResults, true) // Mark version check as success
 	}
 
 	// 2. Check if the source IP matches the client's own IP
 	if !p.From.IP.Equal(m.client.Self().IP()) {
-		results = append(results, false) // Mark source IP check as failed
+		validityResults = append(validityResults, false) // Mark source IP check as failed
 	} else {
-		results = append(results, true) // Mark source IP check as success
+		validityResults = append(validityResults, true) // Mark source IP check as success
 	}
 
 	// 3. Check if the target IP matches the first target in the list
 	if !p.To.IP.Equal(m.targetList[0].IP()) {
-		results = append(results, false) // Mark target IP check as failed
+		validityResults = append(validityResults, false) // Mark target IP check as failed
 	} else {
-		results = append(results, true) // Mark target IP check as success
+		validityResults = append(validityResults, true) // Mark target IP check as success
 	}
 
 	// 4. Check if the expiration time is valid
 	if p.ENRSeq != m.client.Self().Seq() {
 		fmt.Println("Ping ENRSeq does not match the client's ENRSeq")
-		results = append(results, false) // Mark expiration check as failed
+		validityResults = append(validityResults, false) // Mark expiration check as failed
 	} else {
-		results = append(results, true) // Mark expiration check as success
+		validityResults = append(validityResults, true) // Mark expiration check as success
 	}
 
 	// 5. Check if the ENRSeq matches the client's ENRSeq
 	if p.Expiration <= uint64(time.Now().Unix()) {
-		results = append(results, false) // Mark ENRSeq check as failed
+		validityResults = append(validityResults, false) // Mark ENRSeq check as failed
 	} else {
-		results = append(results, true) // Mark ENRSeq check as success
+		validityResults = append(validityResults, true) // Mark ENRSeq check as success
 	}
 
-	return results
+	return validityResults
 }
 
 // checkFindnodeSemantics checks the semantic correctness of a Findnode request
 func (m *V4Maker) checkFindnodeSemantics(f *discv4.Findnode) []bool {
-	var results []bool
+	var validityResults []bool
 
 	// 1. Check if the expiration time is valid
 	if f.Expiration <= uint64(time.Now().Unix()) {
-		results = append(results, false) // Mark ENRSeq check as failed
+		validityResults = append(validityResults, false) // Mark ENRSeq check as failed
 	} else {
-		results = append(results, true) // Mark ENRSeq check as success
+		validityResults = append(validityResults, true) // Mark ENRSeq check as success
 	}
 
-	return results
+	return validityResults
 }
 
 // checkENRRequestSemantics checks the semantic correctness of an ENRRequest
 func (m *V4Maker) checkENRRequestSemantics(e *discv4.ENRRequest) []bool {
-	var results []bool
+	var validityResults []bool
 
 	// 1. Check if the expiration time is valid
 	if e.Expiration <= uint64(time.Now().Unix()) {
-		results = append(results, false) // Mark ENRSeq check as failed
+		validityResults = append(validityResults, false) // Mark ENRSeq check as failed
 	} else {
-		results = append(results, true) // Mark ENRSeq check as success
+		validityResults = append(validityResults, true) // Mark ENRSeq check as success
 	}
 
-	return results
+	return validityResults
 }
 
 // sendAndWaitResponse sends a request and waits for response
@@ -417,11 +414,8 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 		}
 		return false, false
 	})
-	if err := m.client.Send(target, req); err != nil {
-		if logger != nil {
-			logger.Printf("Failed to send packet: %v", err)
-		}
-	}
+
+	_ = m.client.Send(target, req)
 	// Record send log info
 	if logger != nil {
 		logger.Printf("Sent state packet to target: %s, packet: %v", target.String(), req.Kind())
@@ -431,8 +425,6 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 		if logger != nil {
 			logger.Printf("Timeout waiting for response")
 		}
-		result.Error = err
-		return result
 	}
 
 	return result
