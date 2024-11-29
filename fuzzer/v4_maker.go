@@ -124,12 +124,13 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 	target := m.targetList[0]
+	fmt.Println("target: ", target.String())
 	// mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
 
 	ping := m.client.GenPacket("ping", target)
-	err := m.client.Send(target, ping)
-	if err != nil {
-		logger.Printf("Failed to send initial ping: %v", err)
+	sendHash := m.client.Send(target, ping)
+	if sendHash != nil {
+		logger.Printf("Send initial ping: %v", sendHash)
 	}
 
 	req := m.client.GenPacket("random", target)
@@ -155,7 +156,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 		// mutate req
 		//req = mutator.Mutate(req)
 
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(config.PacketSleepTime)
 	}
 
 	wg.Wait()
@@ -393,31 +394,39 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 		RequestType: req.Name(),
 	}
 
-	// 发送请求
-	_ = m.client.Send(target, req)
-	if logger != nil {
-		logger.Printf("Sent packet to target: %s, type: %s", target.String(), req.Name())
-	}
-
-	// 等待响应
+	// Set the expected response type based on the packet type
 	rm := m.client.Pending(target.ID(), target.IP(), processPacket(req), func(p discv4.Packet) (matched bool, requestDone bool) {
-		if logger != nil {
-			logger.Printf("Received packet of type: %T", p)
+		logger.Printf("Received packet of type: %T\n", p)
+		if pong, ok := p.(*discv4.Pong); ok {
+			logger.Printf("Received Pong response: %+v\n", pong)
+			result.Response = p.(*discv4.Pong)
+			result.Success = true
+			return true, true
 		}
-
-		result.Response = p
-
-		switch p.(type) {
-		case *discv4.Pong:
+		if neighbors, ok := p.(*discv4.Neighbors); ok {
+			logger.Printf("Received Neighbors response: %+v\n", neighbors)
+			result.Response = p.(*discv4.Neighbors)
+			result.Success = true
 			return true, true
-		case *discv4.Neighbors:
-			return true, true
-		case *discv4.ENRResponse:
+		}
+		if enrResponse, ok := p.(*discv4.ENRResponse); ok {
+			logger.Printf("Received ENRResponse response: %+v\n", enrResponse)
+			result.Response = p.(*discv4.ENRResponse)
+			result.Success = true
 			return true, true
 		}
 		return false, false
 	})
-
+	if err := m.client.Send(target, req); err != nil {
+		if logger != nil {
+			logger.Printf("Failed to send packet: %v", err)
+		}
+	}
+	// Record send log info
+	if logger != nil {
+		logger.Printf("Sent state packet to target: %s, packet: %v", target.String(), req.Kind())
+	}
+	// Waiting for a response with the new WaitForResponse method
 	if err := rm.WaitForResponse(1 * time.Second); err != nil {
 		if logger != nil {
 			logger.Printf("Timeout waiting for response")
@@ -426,7 +435,6 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 		return result
 	}
 
-	result.Success = true
 	return result
 }
 
@@ -447,8 +455,13 @@ func analyzeResults(results []v4packetTestResult, logger *log.Logger, saveToFile
 			return fmt.Errorf("failed to create output directory: %v", err)
 		}
 
-		// Generate filename (using timestamp)
-		filename := filepath.Join(outputDir, "/discv4", fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
+		// 需要创建完整的目录路径
+		fullPath := filepath.Join(outputDir, "discv4")
+		if err := os.MkdirAll(fullPath, 0755); err != nil {
+			return fmt.Errorf("failed to create discv4 directory: %v", err)
+		}
+
+		filename := filepath.Join(fullPath, fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
 
 		// Save to file
 		data, err := json.MarshalIndent(resultWanted, "", "    ")

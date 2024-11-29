@@ -16,9 +16,14 @@
 
 package config
 
+import (
+	"time"
+)
+
 const (
-	SequenceLength = 10
-	MutateCount    = 1000
-	OutputDir      = "./output"
-	SaveFlag       = false
+	SequenceLength  = 10
+	MutateCount     = 100
+	OutputDir       = "./output"
+	SaveFlag        = true
+	PacketSleepTime = 50 * time.Millisecond // Single packet send and waiting time
 )

@@ -46,6 +46,7 @@ func testExcution(prot, target, chainDir string, N int, engine bool) (time.Durat
 		switch prot {
 		case "discv4":
 			testMaker := fuzzer.NewV4Maker(target)
+			defer testMaker.Close()
 			if engine {
 				testMaker.Start(os.Stdout)
 			} else {
@@ -53,6 +54,7 @@ func testExcution(prot, target, chainDir string, N int, engine bool) (time.Durat
 			}
 		case "discv5":
 			testMaker := fuzzer.NewV5Maker(target)
+			defer testMaker.Close()
 			if engine {
 				testMaker.Start(os.Stdout)
 			} else {
