@@ -28,9 +28,8 @@ import (
 )
 
 var (
-	outputDir   = "out"
-	EnvKey      = "FUZZYDIR"
-	shouldTrace = false
+	outputDir = "TraceOut"
+	EnvKey    = "FUZZYDIR"
 )
 
 // SetFuzzyVMDir sets the output directory for FuzzyVM
@@ -119,7 +118,7 @@ func discv4Fuzzer(engine bool, target string) error {
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
 	// Execute the test and write out the resulting trace
 	var traceFile *os.File
-	if shouldTrace {
+	if ShouldTrace {
 		traceFile = setupTrace(finalName)
 		defer traceFile.Close()
 	}
@@ -147,7 +146,7 @@ func discv5Fuzzer(engine bool, target string) error {
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
 	// Execute the test and write out the resulting trace
 	var traceFile *os.File
-	if shouldTrace {
+	if ShouldTrace {
 		traceFile = setupTrace(finalName)
 		defer traceFile.Close()
 	}
@@ -172,7 +171,7 @@ func ethFuzzer(engine bool, target, chain string) error {
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
 	// Execute the test and write out the resulting trace
 	var traceFile *os.File
-	if shouldTrace {
+	if ShouldTrace {
 		traceFile = setupTrace(finalName)
 		defer traceFile.Close()
 	}

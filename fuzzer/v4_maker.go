@@ -31,7 +31,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
-	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv4"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
@@ -128,10 +127,8 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 	// mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
 
 	ping := m.client.GenPacket("ping", target)
-	logger.Printf("第一次生成包ping完成\n")
 	// Add the sendAndWaitResponse call
 	result := sendAndWaitResponse(m, target, ping, logger)
-	logger.Printf("第一次生成包ping发送并等待回复\n")
 	if !result.Success {
 		// 处理请求失败的情况
 		if logger != nil {
@@ -146,8 +143,8 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 	req := m.client.GenPacket("random", target)
 
 	//Iterate over each target object
-	//config.MutateCount
-	for i := 0; i < 0; i++ {
+	//MutateCount
+	for i := 0; i < 10; i++ {
 		wg.Add(1)
 
 		go func(iteration int, currentReq discv4.Packet) {
@@ -167,13 +164,13 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 		// mutate req
 		//req = mutator.Mutate(req)
 
-		time.Sleep(config.PacketSleepTime)
+		time.Sleep(PacketSleepTime)
 	}
 
 	wg.Wait()
 
 	// Process results
-	analyzeResults(results, logger, config.SaveFlag, config.OutputDir)
+	analyzeResults(results, logger, SaveFlag, OutputDir)
 	// fmt.Printf("All results: %v\n", allResults)
 
 	return nil
@@ -300,12 +297,12 @@ func processPacket(packet discv4.Packet) byte {
 
 func generateV4TestSeq() []string {
 	options := []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
-	seq := make([]string, config.SequenceLength)
+	seq := make([]string, SequenceLength)
 
 	seq[0] = "ping"
 
 	rand.Seed(time.Now().UnixNano())
-	for i := 1; i < config.SequenceLength; i++ {
+	for i := 1; i < SequenceLength; i++ {
 		seq[i] = options[rand.Intn(len(options))]
 	}
 
