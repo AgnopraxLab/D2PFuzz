@@ -139,19 +139,29 @@ func (t *UDPv4) loop() {
 
 		case r := <-t.gotreply:
 			var matched bool // whether any replyMatcher considered the reply acceptable.
+
 			for el := plist.Front(); el != nil; el = el.Next() {
 				p := el.Value.(*replyMatcher)
 				if p.from == r.from && p.ptype == r.data.Kind() && p.ip.Equal(r.ip) {
-					ok, requestDone := p.callback(r.data)
+					ok, requestDone, shouldComplete := p.callback(r.data)
 					matched = matched || ok
 					p.reply = r.data
+
 					// Remove the matcher if callback indicates that all replies have been received.
 					if requestDone {
+						if shouldComplete {
+							close(p.done)
+						}
 						p.errc <- nil
 						plist.Remove(el)
 					}
 					// Reset the continuous timeout counter (time drift detection)
 					contTimeouts = 0
+				} else {
+					fmt.Printf("Match failed: from=%v, type=%v, ip=%v\n",
+						p.from == r.from,
+						p.ptype == r.data.Kind(),
+						p.ip.Equal(r.ip))
 				}
 			}
 			r.matched <- matched

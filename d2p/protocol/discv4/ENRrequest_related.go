@@ -23,9 +23,9 @@ func (t *UDPv4) sendENRRequest(n *enode.Node) (*enode.Node, error) {
 
 	// Add a matcher for the reply to the pending reply queue. Responses are matched if
 	// they reference the request we're about to send.
-	rm := t.pending(n.ID(), addr.IP, ENRResponsePacket, func(r Packet) (matched bool, requestDone bool) {
+	rm := t.pending(n.ID(), addr.IP, ENRResponsePacket, func(r Packet) (matched bool, requestDone bool, shouldComplete bool) {
 		matched = bytes.Equal(r.(*ENRResponse).ReplyTok, hash)
-		return matched, matched
+		return matched, matched, matched
 	})
 	// Send the packet and wait for the reply.
 	if err := t.write(addr, n.ID(), req.Name(), packet); err != nil {
