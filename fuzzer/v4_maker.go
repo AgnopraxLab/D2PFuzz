@@ -124,19 +124,30 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 	target := m.targetList[0]
-	fmt.Println("target: ", target.String())
+	logger.Println("target: ", target.String())
 	// mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
 
 	ping := m.client.GenPacket("ping", target)
-	sendHash := m.client.Send(target, ping)
-	if sendHash != nil {
-		logger.Printf("Send initial ping: %v", sendHash)
+	logger.Printf("第一次生成包ping完成\n")
+	// Add the sendAndWaitResponse call
+	result := sendAndWaitResponse(m, target, ping, logger)
+	logger.Printf("第一次生成包ping发送并等待回复\n")
+	if !result.Success {
+		// 处理请求失败的情况
+		if logger != nil {
+			logger.Printf("First ping failed to send")
+		}
 	}
+	//sendHash := m.client.Send(target, ping)
+	//if sendHash != nil {
+	//	logger.Printf("Send initial ping: %v", sendHash)
+	//}
 
 	req := m.client.GenPacket("random", target)
 
-	// Iterate over each target object
-	for i := 0; i < config.MutateCount; i++ {
+	//Iterate over each target object
+	//config.MutateCount
+	for i := 0; i < 0; i++ {
 		wg.Add(1)
 
 		go func(iteration int, currentReq discv4.Packet) {
@@ -264,22 +275,22 @@ func (m *V4Maker) SetResult(root, logs common.Hash) {
 func processPacket(packet discv4.Packet) byte {
 	switch packet.Kind() {
 	case discv4.PingPacket:
-		fmt.Println("Received ping packet, expecting pong response")
+		fmt.Println("Send ping packet, expecting pong response")
 		return discv4.PongPacket
 	case discv4.FindnodePacket:
-		fmt.Println("Received findnode packet, expecting neighbors response")
+		fmt.Println("Send findnode packet, expecting neighbors response")
 		return discv4.NeighborsPacket
 	case discv4.ENRRequestPacket:
-		fmt.Println("Received ENR request packet, expecting ENR response")
+		fmt.Println("Send ENR request packet, expecting ENR response")
 		return discv4.ENRResponsePacket
 	case discv4.PongPacket:
-		fmt.Println("Received pong packet, no pending required")
+		fmt.Println("Send pong packet, no pending required")
 		return NoPendingRequired
 	case discv4.NeighborsPacket:
-		fmt.Println("Received neighbors packet, no pending required")
+		fmt.Println("Send neighbors packet, no pending required")
 		return NoPendingRequired
 	case discv4.ENRResponsePacket:
-		fmt.Println("Received ENR response, no pending required")
+		fmt.Println("Send ENR response, no pending required")
 		return NoPendingRequired
 	default:
 		fmt.Printf("Unknown packet type: %v\n", packet.Kind())
@@ -393,7 +404,7 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 
 	// Set the expected response type based on the packet type
 	rm := m.client.Pending(target.ID(), target.IP(), processPacket(req), func(p discv4.Packet) (matched bool, requestDone bool) {
-		logger.Printf("Received packet of type: %T\n", p)
+		//logger.Printf("Received packet of type: %T\n", p)
 		if pong, ok := p.(*discv4.Pong); ok {
 			logger.Printf("Received Pong response: %+v\n", pong)
 			result.Response = p.(*discv4.Pong)
@@ -418,7 +429,7 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 	_ = m.client.Send(target, req)
 	// Record send log info
 	if logger != nil {
-		logger.Printf("Sent state packet to target: %s, packet: %v", target.String(), req.Kind())
+		logger.Printf("Sent packet to target: %s, packet: %v", target.String(), req.Kind())
 	}
 	// Waiting for a response with the new WaitForResponse method
 	if err := rm.WaitForResponse(1 * time.Second); err != nil {

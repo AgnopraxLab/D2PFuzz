@@ -165,8 +165,9 @@ func (t *UDPv4) Send(n *enode.Node, req Packet) []byte {
 	if err != nil {
 		panic(fmt.Errorf("can't encode %v packet: %v", req.Name(), err))
 	}
-	fmt.Printf("Packet: %x\n", packet)
-	fmt.Printf("Hash: %x\n", hash)
+	//fmt.Printf("Packet: %x\n", packet)
+	//fmt.Printf("Hash: %x\n", hash)
+	fmt.Printf("Packet: %s, Hash: %x\n", req.Name(), hash)
 	if err := t.write(toaddr, toid, req.Name(), packet); err != nil {
 		panic(fmt.Errorf("can't send %v: %v", req.Name(), err))
 	}
@@ -202,22 +203,23 @@ func (t *UDPv4) GenPacket(packetType string, n *enode.Node) Packet {
 		rand.Read(req.Target[:])
 		return req
 	case "neighbors":
-		// 创建一个自定义的节点记录
+		// Create a custom node record
 		key, _ := crypto.GenerateKey()
-		// 创建一个新的 enode.Node
+		// Create a new enode.Node
 		ip := net.IP{127, 0, 0, 1}
 		customNode := enode.NewV4(&key.PublicKey, ip, 30303, 30303)
-		// 将自定义节点作为最接近的节点
+		// Set the custom node as the closest node
 		closest := []*node{wrapNode(customNode)}
-		// 创建 Neighbors 结构
+		// Create a Neighbors structure
 		neighbors := &Neighbors{
 			Expiration: uint64(time.Now().Add(expiration).Unix()),
 		}
-		// 将 closest 中的节点转换为 Neighbors 结构中的格式
+		// Convert nodes in `closest` to the format required by the Neighbors structure
 		for _, n := range closest {
 			neighbors.Nodes = append(neighbors.Nodes, nodeToRPC(n))
 		}
 		return neighbors
+
 	case "ENRRequest":
 		return &ENRRequest{
 			Expiration: uint64(time.Now().Add(expiration).Unix()),
