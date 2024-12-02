@@ -32,7 +32,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
-	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
@@ -136,7 +135,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 	// 生成随机请求包
 	req, _ := target.GenPacket(eth.StatusMsg)
 
-	for i := 0; i < config.MutateCount; i++ {
+	for i := 0; i < MutateCount; i++ {
 		wg.Add(1)
 
 		go func(iteration int, currentReq eth.Packet) {
@@ -167,7 +166,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 	wg.Wait()
 
 	// 分析结果
-	analyzeEthResults(results, logger, config.SaveFlag, config.OutputDir)
+	analyzeEthResults(results, logger, SaveFlag, OutputDir)
 	return nil
 }
 
@@ -526,10 +525,10 @@ func generateEthTestSeq() []int {
 		eth.NewPooledTransactionHashesMsg, eth.GetPooledTransactionsMsg, eth.PooledTransactionsMsg,
 		eth.GetReceiptsMsg, eth.ReceiptsMsg,
 	}
-	seq := make([]int, config.SequenceLength)
+	seq := make([]int, SequenceLength)
 
 	rand.Seed(time.Now().UnixNano())
-	for i := 0; i < config.SequenceLength; i++ {
+	for i := 0; i < SequenceLength; i++ {
 		seq[i] = options[rand.Intn(len(options))]
 	}
 

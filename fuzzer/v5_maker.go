@@ -31,7 +31,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
-	"github.com/AgnopraxLab/D2PFuzz/config"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv5"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
@@ -137,7 +136,7 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 
 	req := m.client.GenPacket("random", target)
 
-	for i := 0; i < config.MutateCount; i++ {
+	for i := 0; i < MutateCount; i++ {
 		wg.Add(1)
 
 		go func(iteration int, currentReq discv5.Packet) {
@@ -169,7 +168,7 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 	wg.Wait()
 
 	// Analyze results
-	analyzeResultsV5(results, logger, config.SaveFlag, config.OutputDir)
+	analyzeResultsV5(results, logger, SaveFlag, OutputDir)
 	return nil
 }
 
@@ -254,7 +253,7 @@ func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOut
 		return nonce, fmt.Errorf("failed to send packet: %v", err)
 	}
 
-	m.client.SetReadDeadline(time.Now().Add(config.PacketSleepTime))
+	m.client.SetReadDeadline(time.Now().Add(PacketSleepTime))
 	buf := make([]byte, 1280)
 	n, fromAddr, err := m.client.ReadFromUDP(buf)
 	if err != nil {
@@ -328,12 +327,12 @@ func (m *V5Maker) SetResult(root, logs common.Hash) {
 
 func generateV5TestSeq() []string {
 	options := []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"}
-	seq := make([]string, config.SequenceLength)
+	seq := make([]string, SequenceLength)
 
 	seq[0] = "ping"
 
 	rand.Seed(time.Now().UnixNano())
-	for i := 1; i < config.SequenceLength; i++ {
+	for i := 1; i < SequenceLength; i++ {
 		seq[i] = options[rand.Intn(len(options))]
 	}
 
