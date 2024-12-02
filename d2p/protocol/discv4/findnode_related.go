@@ -20,7 +20,7 @@ func (t *UDPv4) sendFindnode(toid enode.ID, toaddr *net.UDPAddr, target Pubkey) 
 	// active until enough nodes have been received.
 	nodes := make([]*node, 0, 16)
 	nreceived := 0
-	rm := t.pending(toid, toaddr.IP, NeighborsPacket, func(r Packet) (matched bool, requestDone bool) {
+	rm := t.pending(toid, toaddr.IP, NeighborsPacket, func(r Packet) (matched bool, requestDone bool, shouldComplete bool) {
 		reply := r.(*Neighbors)
 		for _, rn := range reply.Nodes {
 			nreceived++
@@ -31,7 +31,7 @@ func (t *UDPv4) sendFindnode(toid enode.ID, toaddr *net.UDPAddr, target Pubkey) 
 			}
 			nodes = append(nodes, n)
 		}
-		return true, nreceived >= 16
+		return true, nreceived >= 16, true
 	})
 	_, err := t.send(toaddr, toid, req)
 	if err != nil {

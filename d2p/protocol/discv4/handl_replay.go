@@ -2,8 +2,6 @@ package discv4
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/p2p/enr"
 	"log"
 	"net"
 
@@ -96,6 +94,8 @@ func (t *UDPv4) handlePing(h *packetHandlerV4, from *net.UDPAddr, fromID enode.I
 	// Reply with Pong.
 	if err := t.sendPong(fromID, from, req, mac); err != nil {
 		log.Printf("Error sending Pong: %v", err)
+	} else {
+		log.Printf("Successfully replied to peer's PING request")
 	}
 
 	// Ping back if our last pong on file is too far in the past.
@@ -171,44 +171,44 @@ func (t *UDPv4) handleFindnode(h *packetHandlerV4, from *net.UDPAddr, fromID eno
 	req := h.Packet.(*Findnode)
 	log.Printf("Findnode packet content: Target: %x", req.Target)
 
-	// 生成新的私钥
-	key, err := crypto.GenerateKey()
-	if err != nil {
-		log.Printf("Error generating key: %v", err)
-		return
-	}
-
-	// 创建一个新的 ENR
-	r := enr.Record{}
-
-	// 使用 Set 方法添加字段，这可能会 panic
-	r.Set(enr.IP(net.IP{127, 0, 0, 1}))
-	r.Set(enr.UDP(30303))
-	r.Set(enr.TCP(30303))
-	r.Set(enode.Secp256k1(key.PublicKey))
-
-	// 使用私钥签名 ENR
-	err = enode.SignV4(&r, key)
-	if err != nil {
-		log.Printf("Error signing ENR: %v", err)
-		return
-	}
-
-	// 使用节点记录创建一个新的 enode.Node 对象
-	customNode, err := enode.New(enode.V4ID{}, &r)
-	if err != nil {
-		log.Printf("Error creating custom node: %v", err)
-		return
-	}
-
-	log.Printf("Custom node created: %v", customNode.String())
-
-	// 将自定义节点作为最接近的节点
-	closest := []*node{wrapNode(customNode)}
-
-	// 发送 neighbors
-	t.sendNeighbors(from, fromID, closest)
-	log.Printf("Sent Neighbors response to %s", from.String())
+	//// 生成新的私钥
+	//key, err := crypto.GenerateKey()
+	//if err != nil {
+	//	log.Printf("Error generating key: %v", err)
+	//	return
+	//}
+	//
+	//// 创建一个新的 ENR
+	//r := enr.Record{}
+	//
+	//// 使用 Set 方法添加字段，这可能会 panic
+	//r.Set(enr.IP(net.IP{127, 0, 0, 1}))
+	//r.Set(enr.UDP(30303))
+	//r.Set(enr.TCP(30303))
+	//r.Set(enode.Secp256k1(key.PublicKey))
+	//
+	//// 使用私钥签名 ENR
+	//err = enode.SignV4(&r, key)
+	//if err != nil {
+	//	log.Printf("Error signing ENR: %v", err)
+	//	return
+	//}
+	//
+	//// 使用节点记录创建一个新的 enode.Node 对象
+	//customNode, err := enode.New(enode.V4ID{}, &r)
+	//if err != nil {
+	//	log.Printf("Error creating custom node: %v", err)
+	//	return
+	//}
+	//
+	//log.Printf("Custom node created: %v", customNode.String())
+	//
+	//// 将自定义节点作为最接近的节点
+	//closest := []*node{wrapNode(customNode)}
+	//
+	//// 发送 neighbors
+	//t.sendNeighbors(from, fromID, closest)
+	//log.Printf("Sent Neighbors response to %s", from.String())
 }
 
 // NEIGHBORS/v4
@@ -263,7 +263,7 @@ func (t *UDPv4) handleENRRequest(h *packetHandlerV4, from *net.UDPAddr, fromID e
 	req := h.Packet.(*ENRRequest)
 	log.Printf("ENRRequest packet content: %+v", req)
 
-	t.sendENRResponse(from, fromID, mac)
+	//t.sendENRResponse(from, fromID, mac)
 
 }
 

@@ -18,12 +18,12 @@ func (t *UDPv4) sendPing(n *enode.Node, callback func()) (seq uint64, err error)
 		return 0, err
 	}
 
-	rm := t.pending(toid, toaddr.IP, PongPacket, func(p Packet) (matched bool, requestDone bool) {
+	rm := t.pending(toid, toaddr.IP, PongPacket, func(p Packet) (matched bool, requestDone bool, shouldComplete bool) {
 		matched = bytes.Equal(p.(*Pong).ReplyTok, hash)
 		if matched && callback != nil {
 			callback()
 		}
-		return matched, matched
+		return matched, matched, matched
 	})
 
 	err = t.write(toaddr, toid, req.Name(), packet)

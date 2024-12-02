@@ -57,9 +57,11 @@ type replyMatcher struct {
 	errc chan error
 
 	reply Packet
+
+	done chan struct{}
 }
 
-type replyMatchFunc func(Packet) (matched bool, requestDone bool)
+type replyMatchFunc func(Packet) (matched bool, requestDone bool, shouldComplete bool)
 
 // reply is a reply packet from a certain node.
 type reply struct {
@@ -94,7 +96,16 @@ func (t *UDPv4) pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchF
 
 func (t *UDPv4) Pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchFunc) *replyMatcher {
 	ch := make(chan error, 1)
-	p := &replyMatcher{from: id, ip: ip, ptype: ptype, callback: callback, errc: ch}
+	done := make(chan struct{})
+	actualIP := getActualIP(ip)
+	p := &replyMatcher{
+		from:     id,
+		ip:       actualIP,
+		ptype:    ptype,
+		callback: callback,
+		errc:     ch,
+		done:     done,
+	}
 	select {
 	case t.addReplyMatcher <- p:
 		// loop will handle it
@@ -104,10 +115,39 @@ func (t *UDPv4) Pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchF
 	return p
 }
 
+// 新增：获取实际使用的IP
+func getActualIP(ip net.IP) net.IP {
+	// 如果是本地回环地址，尝试获取实际的网络接口IP
+	if ip.IsLoopback() {
+		// 获取所有网络接口
+		interfaces, err := net.Interfaces()
+		if err != nil {
+			return ip
+		}
+		// 查找合适的非本地IP
+		for _, i := range interfaces {
+			addrs, err := i.Addrs()
+			if err != nil {
+				continue
+			}
+			for _, addr := range addrs {
+				if ipnet, ok := addr.(*net.IPNet); ok {
+					if !ipnet.IP.IsLoopback() {
+						return ipnet.IP
+					}
+				}
+			}
+		}
+	}
+	return ip
+}
+
 func (rm *replyMatcher) WaitForResponse(timeout time.Duration) error {
 	select {
 	case err := <-rm.errc:
 		return err
+	case <-rm.done:
+		return nil
 	case <-time.After(timeout):
 		return errors.New("timeout waiting for response")
 	}
