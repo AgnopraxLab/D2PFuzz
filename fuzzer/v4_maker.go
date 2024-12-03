@@ -140,7 +140,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 	//Iterate over each target object
 	//MutateCount
 	// Iterate over each target object
-	for i := 0; i < 2; i++ {
+	for i := 0; i < MutateCount; i++ {
 		// Print divider line at the start of each iteration
 		logger.Printf("================================================= Starting iteration %d =================================================", i+1)
 
