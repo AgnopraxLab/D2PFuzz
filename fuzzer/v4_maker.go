@@ -142,7 +142,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 	// Iterate over each target object
 	for i := 0; i < 2; i++ {
 		// Print divider line at the start of each iteration
-		logger.Printf("================================================= Starting iteration %d =================================================", i+1)
+		logger.Printf("====================== Starting iteration %d ======================", i+1)
 
 		wg.Add(1)
 
@@ -165,7 +165,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 		time.Sleep(PacketSleepTime)
 
 		// Print divider line at the end of each iteration
-		logger.Printf("================================================= Completed iteration %d =================================================", i+1)
+		logger.Printf("====================== Completed iteration %d ======================", i+1)
 	}
 
 	wg.Wait()

@@ -1,0 +1,30 @@
+[
+    {
+        "RequestType": "ENRREQUEST/v4",
+        "Check": true,
+        "CheckResults": [
+            true
+        ],
+        "Success": true,
+        "Response": {
+            "ReplyTok": "AssfQM20870oFT0zLW27pJj91WnCSn+cfrbKUyuR0Z8=",
+            "Record": {},
+            "Rest": []
+        },
+        "Error": null
+    },
+    {
+        "RequestType": "ENRREQUEST/v4",
+        "Check": true,
+        "CheckResults": [
+            true
+        ],
+        "Success": true,
+        "Response": {
+            "ReplyTok": "AssfQM20870oFT0zLW27pJj91WnCSn+cfrbKUyuR0Z8=",
+            "Record": {},
+            "Rest": []
+        },
+        "Error": null
+    }
+]
