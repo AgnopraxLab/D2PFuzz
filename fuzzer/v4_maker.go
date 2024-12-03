@@ -135,7 +135,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 		}
 	}
 
-	req := m.client.GenPacket("random", target)
+	req := m.client.GenPacket("ENRRequest", target)
 
 	//Iterate over each target object
 	//MutateCount
