@@ -1,0 +1,50 @@
+[
+    {
+        "RequestType": "PING/v4",
+        "Check": true,
+        "CheckResults": [
+            true,
+            true,
+            true,
+            true,
+            true
+        ],
+        "Success": true,
+        "Response": {
+            "To": {
+                "IP": "10.193.223.28",
+                "UDP": 41395,
+                "TCP": 0
+            },
+            "ReplyTok": "9TSi+scrk/GeL/SIFBttuwGvv18yWYlM+Bcrc4HkCtc=",
+            "Expiration": 1733195552,
+            "ENRSeq": 1732517818278,
+            "Rest": []
+        },
+        "Error": null
+    },
+    {
+        "RequestType": "PING/v4",
+        "Check": true,
+        "CheckResults": [
+            true,
+            true,
+            true,
+            true,
+            true
+        ],
+        "Success": true,
+        "Response": {
+            "To": {
+                "IP": "10.193.223.28",
+                "UDP": 41395,
+                "TCP": 0
+            },
+            "ReplyTok": "9TSi+scrk/GeL/SIFBttuwGvv18yWYlM+Bcrc4HkCtc=",
+            "Expiration": 1733195553,
+            "ENRSeq": 1732517818278,
+            "Rest": []
+        },
+        "Error": null
+    }
+]
