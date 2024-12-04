@@ -54,12 +54,19 @@ func getList(fName string) ([]*enode.Node, error) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
+		fmt.Printf("\nParsing enode URL: %s\n", line)
+
 		node := enode.MustParse(line)
+		// 打印解析后的节点信息
+		fmt.Printf("Node ID immediately after parsing: %x\n", node.ID().Bytes())
+		// 将节点添加到列表前再次检查 ID
+		fmt.Printf("Node ID before adding to list: %x\n", node.ID().Bytes())
 		nodeList = append(nodeList, node)
 	}
 
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error reading file: %v", err)
+	// 检查第一个节点的 ID
+	if len(nodeList) > 0 {
+		fmt.Printf("First node ID in final list: %x\n", nodeList[0].ID().Bytes())
 	}
 
 	return nodeList, nil

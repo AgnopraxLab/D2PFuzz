@@ -20,8 +20,8 @@ func (t *UDPv5) makeUnknown() *Unknown {
 func (t *UDPv5) sendUnknown(n *enode.Node, callback func(*Whoareyou)) error {
 	req := t.makeUnknown()
 
-	resp := t.callToNode(n, WhoareyouPacket, req)
-	defer t.callDone(resp)
+	resp := t.CallToNode(n, WhoareyouPacket, req)
+	defer t.CallDone(resp)
 
 	select {
 	case whoareyou := <-resp.ch:
