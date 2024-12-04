@@ -20,6 +20,7 @@ package fuzzer
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"sync"
 
@@ -44,7 +45,7 @@ func SetFuzzyVMDir() {
 }
 
 // Fuzz
-func RunFuzzer(protocol, target, chainDir string, engine bool, threads int) error {
+func RunFuzzer(protocol, target, chainDir string, engine int, threads int) error {
 	var (
 		wg      sync.WaitGroup
 		errChan = make(chan error, threads)
@@ -108,7 +109,7 @@ func setupTrace(name string) *os.File {
 	return traceFile
 }
 
-func discv4Fuzzer(engine bool, target string) error {
+func discv4Fuzzer(engine int, target string) error {
 	testMaker := NewV4Maker(target)
 
 	// Ensure resources are released after testMaker usage
@@ -123,20 +124,38 @@ func discv4Fuzzer(engine bool, target string) error {
 		defer traceFile.Close()
 	}
 	var err error
-	if engine {
-		err = testMaker.Start(traceFile)
+
+	fmt.Println("Fuzzing start!!!")
+	if engine == 1 {
+		if err = testMaker.Start(traceFile); err != nil {
+			return err
+		}
 	} else {
-		err = testMaker.PacketStart(traceFile)
-	}
-	if err != nil {
-		panic(err)
+		// seed init
+		fmt.Println("Seed init...")
+		for _, packetType := range v4options {
+			req := testMaker.Client.GenPacket(packetType, testMaker.TargetList[0])
+			testMaker.PakcetSeed = append(testMaker.PakcetSeed, req)
+		}
+
+		// for seed
+		itration := 1
+		for {
+			randomIndex := rand.Intn(len(testMaker.PakcetSeed))
+			seed := testMaker.PakcetSeed[randomIndex]
+			fmt.Printf("Round %d of testing, seed queue: %d, now seed type: %s\n", itration, len(testMaker.PakcetSeed), seed.Name())
+			if err = testMaker.PacketStart(traceFile, seed); err != nil {
+				return err
+			}
+			itration = itration + 1
+		}
 	}
 	// Save the test
 
 	return nil
 }
 
-func discv5Fuzzer(engine bool, target string) error {
+func discv5Fuzzer(engine int, target string) error {
 	testMaker := NewV5Maker(target)
 
 	// Ensure resources are released after testMaker usage
@@ -151,20 +170,22 @@ func discv5Fuzzer(engine bool, target string) error {
 		defer traceFile.Close()
 	}
 	var err error
-	if engine {
-		err = testMaker.Start(traceFile)
+	if engine == 1 {
+		if err = testMaker.Start(traceFile); err != nil {
+			return err
+		}
 	} else {
-		err = testMaker.PacketStart(traceFile)
+		if err = testMaker.PacketStart(traceFile); err != nil {
+			return err
+		}
 	}
-	if err != nil {
-		panic(err)
-	}
+
 	// Save the test
 
 	return nil
 }
 
-func ethFuzzer(engine bool, target, chain string) error {
+func ethFuzzer(engine int, target, chain string) error {
 	testMaker := NewEthMaker(target, chain)
 
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
@@ -176,13 +197,14 @@ func ethFuzzer(engine bool, target, chain string) error {
 		defer traceFile.Close()
 	}
 	var err error
-	if engine {
-		err = testMaker.Start(traceFile)
+	if engine == 1 {
+		if err = testMaker.Start(traceFile); err != nil {
+			return err
+		}
 	} else {
-		err = testMaker.PacketStart(traceFile)
-	}
-	if err != nil {
-		panic(err)
+		if err = testMaker.PacketStart(traceFile); err != nil {
+			return err
+		}
 	}
 	// Save the test
 

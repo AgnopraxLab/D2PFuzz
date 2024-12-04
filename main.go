@@ -38,6 +38,7 @@ var benchCommand = &cli.Command{
 		targetFlag,
 		engineFlag,
 		chainEnvDirFlag,
+		packetTypeFlag,
 	},
 }
 
@@ -91,10 +92,11 @@ func bench(c *cli.Context) error {
 	protocol := c.String("protocol")
 	target := c.String("target")
 	chainDir := c.String("chain")
+	packetType := c.String("ptype")
 	count := c.Int("count")
-	engine := c.Bool("engine")
+	engine := c.Int("engine")
 
-	benchmark.RunFullBench(protocol, target, chainDir, count, engine)
+	benchmark.RunFullBench(protocol, target, chainDir, packetType, count, engine)
 	return nil
 }
 
@@ -102,7 +104,7 @@ func run(c *cli.Context) error {
 	protocol := c.String("protocol")
 	target := c.String("target")
 	chainDir := c.String("chain")
-	engine := c.Bool("engine")
+	engine := c.Int("engine")
 	threads := c.Int("threads")
 
 	return fuzzer.RunFuzzer(protocol, target, chainDir, engine, threads)
