@@ -77,7 +77,6 @@ func InitDiscv5() *discv5.UDPv5 {
 	}
 	ip := getLocalIP()
 	actualIP := discv4.GetActualIP(ip)
-	fmt.Printf("Using IP address: %s\n", actualIP.String())
 
 	if ip == nil {
 		fmt.Printf("failed to get local IP address for thread\n")
@@ -93,10 +92,6 @@ func InitDiscv5() *discv5.UDPv5 {
 	ln := enode.NewLocalNode(db, cfg.PrivateKey)
 	ln.Set(enr.IP(actualIP))
 	ln.Set(enr.UDP(uint16(port)))
-	// 验证设置是否生效
-	fmt.Printf("Node record IP: %s\n", ln.Node().IP())
-	fmt.Printf("Node record UDP port: %d\n", ln.Node().UDP())
-
 	client, _ := discv5.ListenV5(udpConn, ln, cfg)
 
 	return client

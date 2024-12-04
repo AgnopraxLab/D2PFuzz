@@ -114,7 +114,6 @@ func (t *UDPv5) dispatchReadPacket(from *net.UDPAddr, content []byte) bool {
 // handshake attempt per call.
 func (t *UDPv5) dispatch() {
 	defer t.wg.Done()
-	fmt.Println("\nStarting dispatch loop")
 
 	t.readNextCh <- struct{}{}
 
@@ -148,7 +147,7 @@ func (t *UDPv5) dispatch() {
 			t.send(r.destID, r.destAddr, r.msg, nil)
 
 		case p := <-t.packetInCh:
-			fmt.Printf("\nDispatch: Received incoming packet\n")
+			fmt.Printf("Dispatch: Received incoming packet\n")
 			t.handlePacket(p.Data, p.Addr)
 			t.readNextCh <- struct{}{}
 

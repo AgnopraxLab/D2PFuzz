@@ -52,39 +52,30 @@ func (t *UDPv5) sendWhoareyou(n *enode.Node, callback func()) error {
 
 // handleWhoareyou resends the active call as a handshake packet.
 func (t *UDPv5) handleWhoareyou(p *Whoareyou, fromID enode.ID, fromAddr *net.UDPAddr) {
-	fmt.Printf("Step 1: Starting handleWhoareyou for node %v\n", fromID)
-
 	c, err := t.matchWithCall(fromID, p.Nonce)
 	if err != nil {
-		fmt.Printf("Step 2: Failed to match call - Error: %v\n", err)
+		fmt.Printf("Failed to match call - Error: %v\n", err)
 		t.log.Debug("Invalid "+p.Name(), "addr", fromAddr, "err", err)
 		return
 	}
 
-	fmt.Printf("Step 2: Successfully matched call with nonce: %x\n", p.Nonce)
+	fmt.Printf("Successfully matched call with nonce: %x\n", p.Nonce)
 
 	if c.node == nil {
-		fmt.Printf("Step 3: Call has no ENR - cannot proceed with handshake\n")
-
 		// Can't perform handshake because we don't have the ENR.
 		t.log.Debug("Can't handle "+p.Name(), "addr", fromAddr, "err", "call has no ENR")
 		c.err <- errors.New("remote wants handshake, but call has no ENR")
 		return
 	}
 
-	fmt.Printf("Step 3: ENR check passed, proceeding with handshake\n")
-
 	// Resend the call that was answered by WHOAREYOU.
 	t.log.Trace("<< "+p.Name(), "id", c.node.ID(), "addr", fromAddr)
-	fmt.Printf("Step 4: Preparing to resend call\n")
 
 	c.handshakeCount++
 	c.challenge = p
 	p.Node = c.node
 
-	fmt.Printf("Step 5: Handshake count: %d, sending authenticated call\n", c.handshakeCount)
 	t.sendCall(c)
-	fmt.Printf("Step 6: Call sent, handleWhoareyou complete\n")
 }
 
 // matchWithCall checks whether a handshake attempt matches the active call.
