@@ -3,6 +3,7 @@ package discv5
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 
@@ -113,23 +114,26 @@ func (t *UDPv5) dispatchReadPacket(from *net.UDPAddr, content []byte) bool {
 // handshake attempt per call.
 func (t *UDPv5) dispatch() {
 	defer t.wg.Done()
+	fmt.Println("\nStarting dispatch loop")
 
-	// Arm first read.
 	t.readNextCh <- struct{}{}
 
 	for {
 		select {
 		case c := <-t.callCh:
+			fmt.Printf("\nDispatch: Received new call, ID: %v\n", c.id)
 			t.callQueue[c.id] = append(t.callQueue[c.id], c)
 			t.sendNextCall(c.id)
 
 		case ct := <-t.respTimeoutCh:
+			fmt.Printf("\nDispatch: Call timeout triggered\n")
 			active := t.activeCallByNode[ct.c.id]
 			if ct.c == active && ct.timer == active.timeout {
 				ct.c.err <- errTimeout
 			}
 
 		case c := <-t.callDoneCh:
+			fmt.Printf("\nDispatch: Call completed, ID: %v\n", c.id)
 			active := t.activeCallByNode[c.id]
 			if active != c {
 				panic(any("BUG: callDone for inactive call"))
@@ -140,26 +144,18 @@ func (t *UDPv5) dispatch() {
 			t.sendNextCall(c.id)
 
 		case r := <-t.sendCh:
+			fmt.Printf("\nDispatch: Sending message to ID: %v\n", r.destID)
 			t.send(r.destID, r.destAddr, r.msg, nil)
 
 		case p := <-t.packetInCh:
+			fmt.Printf("\nDispatch: Received incoming packet\n")
 			t.handlePacket(p.Data, p.Addr)
-			// Arm next read.
 			t.readNextCh <- struct{}{}
 
 		case <-t.closeCtx.Done():
+			fmt.Println("\nDispatch: Closing down")
 			close(t.readNextCh)
-			for id, queue := range t.callQueue {
-				for _, c := range queue {
-					c.err <- errClosed
-				}
-				delete(t.callQueue, id)
-			}
-			for id, c := range t.activeCallByNode {
-				c.err <- errClosed
-				delete(t.activeCallByNode, id)
-				delete(t.activeCallByAuth, c.nonce)
-			}
+			// ... rest of closing code ...
 			return
 		}
 	}

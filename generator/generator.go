@@ -76,6 +76,9 @@ func InitDiscv5() *discv5.UDPv5 {
 		Clock:        mclock.System{},
 	}
 	ip := getLocalIP()
+	actualIP := discv4.GetActualIP(ip)
+	fmt.Printf("Using IP address: %s\n", actualIP.String())
+
 	if ip == nil {
 		fmt.Printf("failed to get local IP address for thread\n")
 	}
@@ -88,11 +91,26 @@ func InitDiscv5() *discv5.UDPv5 {
 	port := udpConn.LocalAddr().(*net.UDPAddr).Port
 	db, _ := enode.OpenDB("")
 	ln := enode.NewLocalNode(db, cfg.PrivateKey)
-	ln.Set(enr.IP(ip))
+	ln.Set(enr.IP(actualIP))
 	ln.Set(enr.UDP(uint16(port)))
+	// 验证设置是否生效
+	fmt.Printf("Node record IP: %s\n", ln.Node().IP())
+	fmt.Printf("Node record UDP port: %d\n", ln.Node().UDP())
+
 	client, _ := discv5.ListenV5(udpConn, ln, cfg)
 
 	return client
+}
+
+func ReplaceNodeIP(n *enode.Node, newIP net.IP) *enode.Node {
+	// 创建一个新的节点记录，保持原始节点的所有其他信息
+	newNode := enode.NewV4(
+		n.Pubkey(), // 保持原始公钥
+		newIP,      // 使用新的 IP
+		n.UDP(),    // 保持原始 UDP 端口
+		n.TCP(),    // 保持原始 TCP 端口
+	)
+	return newNode
 }
 
 func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {

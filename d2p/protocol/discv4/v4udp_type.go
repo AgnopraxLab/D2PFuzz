@@ -97,7 +97,7 @@ func (t *UDPv4) pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchF
 func (t *UDPv4) Pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchFunc) *replyMatcher {
 	ch := make(chan error, 1)
 	done := make(chan struct{})
-	actualIP := getActualIP(ip)
+	actualIP := GetActualIP(ip)
 	p := &replyMatcher{
 		from:     id,
 		ip:       actualIP,
@@ -116,7 +116,7 @@ func (t *UDPv4) Pending(id enode.ID, ip net.IP, ptype byte, callback replyMatchF
 }
 
 // 新增：获取实际使用的IP
-func getActualIP(ip net.IP) net.IP {
+func GetActualIP(ip net.IP) net.IP {
 	// 如果是本地回环地址，尝试获取实际的网络接口IP
 	if ip.IsLoopback() {
 		// 获取所有网络接口

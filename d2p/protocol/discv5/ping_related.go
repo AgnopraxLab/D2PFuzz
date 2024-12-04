@@ -17,8 +17,8 @@ func (t *UDPv5) sendPing(n *enode.Node, callback func()) (uint64, error) {
 	toaddr := &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
 	req := t.makePing(toaddr)
 
-	resp := t.callToNode(n, PongMsg, req)
-	defer t.callDone(resp)
+	resp := t.CallToNode(n, PongMsg, req)
+	defer t.CallDone(resp)
 
 	var seq uint64
 	select {

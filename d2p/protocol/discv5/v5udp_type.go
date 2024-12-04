@@ -108,6 +108,24 @@ type callTimeout struct {
 	timer mclock.Timer
 }
 
+func (t *UDPv5) SetActiveCall(nonce Nonce, call *callV5) {
+	// 这个方法会在内部建立 nonce 和 call 的映射
+	t.activeCallByAuth[nonce] = call
+}
+
+// SetCallResponseType 在 UDPv5 结构体所在的包中添加这些方法
+func (t *UDPv5) SetCallResponseType(c *callV5, responseType byte) {
+	c.responseType = responseType
+}
+
+func (t *UDPv5) GetCallResponseChan(c *callV5) <-chan Packet {
+	return c.ch
+}
+
+func (t *UDPv5) GetCallErrorChan(c *callV5) <-chan error {
+	return c.err
+}
+
 // Self returns the local node record.
 func (t *UDPv5) Self() *enode.Node {
 	return t.localNode.Node()
@@ -131,9 +149,7 @@ func (t *UDPv5) Send(n *enode.Node, p Packet, challenge *Whoareyou) (Nonce, erro
 		return nonce, err
 	}
 	// print test
-	fmt.Printf("EncodePacket Output:\n")
-	fmt.Printf("packet: %x\n", enc)
-	fmt.Printf("nonce: %x\n", nonce)
+	fmt.Printf("Generated %s packet with nonce: %x\n", p.Name(), nonce)
 
 	_, err = t.conn.WriteToUDP(enc, addr)
 	t.log.Trace(">> "+p.Name(), t.logcontext...)
@@ -145,6 +161,8 @@ func (t *UDPv5) SetReadDeadline(deadline time.Time) {
 }
 
 func (t *UDPv5) ReadFromUDP(b []byte) (int, *net.UDPAddr, error) {
+	fmt.Printf("Starting ReadFromUDP with deadline: %v\n", t.readDeadline)
+
 	if !t.readDeadline.IsZero() && time.Now().After(t.readDeadline) {
 		return 0, nil, fmt.Errorf("read deadline exceeded")
 	}
@@ -169,8 +187,10 @@ func (t *UDPv5) ReadFromUDP(b []byte) (int, *net.UDPAddr, error) {
 
 	select {
 	case result := <-ch:
+		fmt.Printf("Received UDP data\n")
 		return result.n, result.addr, result.err
 	case <-timeout:
+		fmt.Printf("Select timeout triggered\n")
 		return 0, nil, fmt.Errorf("read deadline exceeded")
 	}
 }
@@ -181,6 +201,10 @@ func (t *UDPv5) Decode(input []byte, fromAddr string) (Packet, Nonce, error) {
 }
 
 func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
+	fmt.Printf("\nGenerating %s packet for node:\n", packetType)
+	fmt.Printf("Node ID: %x\n", n.ID().Bytes())
+	fmt.Printf("Node URL: %s\n", n.String())
+
 	var (
 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
 		packetTypes = []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"}
@@ -191,11 +215,12 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		pingPacket := &Ping{
 			//ENRSeq: t.localNode.Node().Seq(),
 			ReqID:  []byte("reqid"), // 使用固定的 ReqID 用于测试
-			ENRSeq: 5,
+			ENRSeq: t.localNode.Node().Seq(),
 		}
 		reqID := make([]byte, 8)
 		crand.Read(reqID)
 		pingPacket.SetRequestID(reqID)
+		fmt.Printf("Created ping packet with ReqID: %x\n", reqID)
 		return pingPacket
 
 	case "pong":
