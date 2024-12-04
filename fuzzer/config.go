@@ -26,5 +26,5 @@ const (
 	OutputDir       = "./output"
 	SaveFlag        = true
 	PacketSleepTime = 500 * time.Millisecond // Single packet send and waiting time
-	ShouldTrace     = true
+	ShouldTrace     = false
 )

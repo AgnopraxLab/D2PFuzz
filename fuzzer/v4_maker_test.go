@@ -34,7 +34,7 @@ func TestPacketStart(t *testing.T) {
 			setupMaker: func() *V4Maker {
 				maker := NewV4Maker("../test")
 				// 设置一个 mock 节点作为目标
-				maker.targetList = []*enode.Node{mockNode(t)}
+				maker.TargetList = []*enode.Node{mockNode(t)}
 				return maker
 			},
 			wantErr:     false, // 期望成功执行
@@ -66,7 +66,8 @@ func TestPacketStart(t *testing.T) {
 			var buf bytes.Buffer
 
 			// 执行 PacketStart 函数
-			err := maker.PacketStart(&buf)
+			req := maker.Client.GenPacket("random", maker.TargetList[0])
+			err := maker.PacketStart(&buf, req)
 
 			// 验证错误情况
 			if tt.wantErr {

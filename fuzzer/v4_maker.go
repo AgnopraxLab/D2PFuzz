@@ -36,15 +36,18 @@ import (
 )
 
 var (
-	v4state = []string{"ping", "findnode"}
+	v4options = []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
+	v4state   = []string{"ping", "findnode"}
 )
 
 type V4Maker struct {
-	client     *discv4.UDPv4
-	targetList []*enode.Node
+	Client     *discv4.UDPv4
+	TargetList []*enode.Node
 
 	testSeq  []string // testcase sequence
 	stateSeq []string // steate sequence
+
+	PakcetSeed []discv4.Packet // Use store packet seed to mutator
 
 	Series []StateSeries
 	forks  []string
@@ -54,6 +57,7 @@ type V4Maker struct {
 }
 
 type v4packetTestResult struct {
+	PacketID     int
 	RequestType  string
 	Check        bool
 	CheckResults []bool
@@ -78,8 +82,8 @@ func NewV4Maker(targetDir string) *V4Maker {
 	nodeList, _ = getList(targetDir)
 
 	v4maker := &V4Maker{
-		client:     cli,
-		targetList: nodeList,
+		Client:     cli,
+		TargetList: nodeList,
 		testSeq:    generateV4TestSeq(),
 		stateSeq:   v4state,
 	}
@@ -111,7 +115,7 @@ func (m *V4Maker) ToSubTest() *stJSON {
 }
 
 // PacketStart executes fuzzing by sending single packets in multiple goroutines and collecting feedback
-func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
+func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 	var (
 		wg      sync.WaitGroup
 		logger  *log.Logger
@@ -122,50 +126,45 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 	if traceOutput != nil {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
-	target := m.targetList[0]
-	logger.Println("target: ", target.String())
-	// mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
 
-	ping := m.client.GenPacket("ping", target)
+	// logger.Println("target: ", target.String())
+	// mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
+	// ping authentation
+	ping := m.Client.GenPacket("ping", m.TargetList[0])
 	// Add the sendAndWaitResponse call
-	result := sendAndWaitResponse(m, target, ping, logger)
-	if !result.Success {
-		if logger != nil {
-			logger.Printf("First ping failed to send")
-		}
+	result := sendAndWaitResponse(m, m.TargetList[0], ping, logger)
+	if result.Error != nil {
+		fmt.Printf("%s", result.Error)
 	}
 
-	req := m.client.GenPacket("random", target)
-
 	//Iterate over each target object
-	//MutateCount
-	// Iterate over each target object
 	for i := 0; i < MutateCount; i++ {
 		// Print divider line at the start of each iteration
-		logger.Printf("================================================= Starting iteration %d =================================================", i+1)
+		logger.Printf("====================== Starting iteration %d ======================", i+1)
 
 		wg.Add(1)
 
-		go func(iteration int, currentReq discv4.Packet) {
+		go func(iteration int, seed discv4.Packet) {
 			defer wg.Done()
 
 			// Sending a single packet and waiting for feedback
-			result := sendAndWaitResponse(m, target, currentReq, logger)
-			result.CheckResults = m.checkRequestSemantics(currentReq)
+			result := sendAndWaitResponse(m, m.TargetList[0], seed, logger)
+			result.CheckResults = m.checkRequestSemantics(seed)
 			result.Check = allTrue(result.CheckResults)
+			result.PacketID = i
 
 			// Record results with mutex lock for thread safety
 			mu.Lock()
 			results = append(results, result)
 			mu.Unlock()
 
-		}(i, req)
+		}(i, seed)
 
 		// Sleep between iterations to control packet sending rate
 		time.Sleep(PacketSleepTime)
 
 		// Print divider line at the end of each iteration
-		logger.Printf("================================================= Completed iteration %d =================================================", i+1)
+		logger.Printf("====================== Completed iteration %d ======================", i+1)
 	}
 
 	wg.Wait()
@@ -180,8 +179,8 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer) error {
 func (m *V4Maker) Start(traceOutput io.Writer) error {
 	var (
 		wg       sync.WaitGroup
-		resultCh = make(chan *v4result, len(m.targetList))
-		errorCh  = make(chan error, len(m.targetList))
+		resultCh = make(chan *v4result, len(m.TargetList))
+		errorCh  = make(chan error, len(m.TargetList))
 		logger   *log.Logger
 	)
 
@@ -190,7 +189,7 @@ func (m *V4Maker) Start(traceOutput io.Writer) error {
 	}
 
 	// Iterate over each target object
-	for _, target := range m.targetList {
+	for _, target := range m.TargetList {
 		wg.Add(1)
 		go func(target *enode.Node) {
 			defer wg.Done()
@@ -199,16 +198,16 @@ func (m *V4Maker) Start(traceOutput io.Writer) error {
 			}
 			// First round: sending testSeq packets
 			for _, packetType := range m.testSeq {
-				req := m.client.GenPacket(packetType, target)
-				m.client.Send(target, req)
+				req := m.Client.GenPacket(packetType, target)
+				m.Client.Send(target, req)
 				logger.Printf("Sent test packet to target: %s, packet: %v", target.String(), req.Kind())
 			}
 
 			// Round 2: sending stateSeq packets
 			for _, packetType := range m.stateSeq {
-				req := m.client.GenPacket(packetType, target)
+				req := m.Client.GenPacket(packetType, target)
 				// Set the expected response type based on the packet type
-				rm := m.client.Pending(target.ID(), target.IP(), processPacket(req), func(p discv4.Packet) (matched bool, requestDone bool, shouldComplete bool) {
+				rm := m.Client.Pending(target.ID(), target.IP(), processPacket(req), func(p discv4.Packet) (matched bool, requestDone bool, shouldComplete bool) {
 					logger.Printf("Received packet of type: %T\n", p)
 					if pong, ok := p.(*discv4.Pong); ok {
 						logger.Printf("Received Pong response: %+v\n", pong)
@@ -222,7 +221,7 @@ func (m *V4Maker) Start(traceOutput io.Writer) error {
 					}
 					return false, false, false
 				})
-				_ = m.client.Send(target, req)
+				_ = m.Client.Send(target, req)
 
 				// Record send log info
 				if logger != nil {
@@ -260,8 +259,8 @@ func (m *V4Maker) Start(traceOutput io.Writer) error {
 }
 
 func (m *V4Maker) Close() {
-	if m.client != nil {
-		m.client.Close()
+	if m.Client != nil {
+		m.Client.Close()
 	}
 }
 
@@ -297,14 +296,14 @@ func processPacket(packet discv4.Packet) byte {
 }
 
 func generateV4TestSeq() []string {
-	options := []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"}
+
 	seq := make([]string, SequenceLength)
 
 	seq[0] = "ping"
 
 	rand.Seed(time.Now().UnixNano())
 	for i := 1; i < SequenceLength; i++ {
-		seq[i] = options[rand.Intn(len(options))]
+		seq[i] = v4options[rand.Intn(len(v4options))]
 	}
 
 	return seq
@@ -335,21 +334,21 @@ func (m *V4Maker) checkPingSemantics(p *discv4.Ping) []bool {
 	}
 
 	// 2. Check if the source IP matches the client's own IP
-	if !p.From.IP.Equal(m.client.Self().IP()) {
+	if !p.From.IP.Equal(m.Client.Self().IP()) {
 		validityResults = append(validityResults, false) // Mark source IP check as failed
 	} else {
 		validityResults = append(validityResults, true) // Mark source IP check as success
 	}
 
 	// 3. Check if the target IP matches the first target in the list
-	if !p.To.IP.Equal(m.targetList[0].IP()) {
+	if !p.To.IP.Equal(m.TargetList[0].IP()) {
 		validityResults = append(validityResults, false) // Mark target IP check as failed
 	} else {
 		validityResults = append(validityResults, true) // Mark target IP check as success
 	}
 
 	// 4. Check if the expiration time is valid
-	if p.ENRSeq != m.client.Self().Seq() {
+	if p.ENRSeq != m.Client.Self().Seq() {
 		fmt.Println("Ping ENRSeq does not match the client's ENRSeq")
 		validityResults = append(validityResults, false) // Mark expiration check as failed
 	} else {
@@ -401,7 +400,7 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 	}
 
 	// Set the expected response type based on the packet type
-	rm := m.client.Pending(target.ID(), target.IP(), processPacket(req), func(p discv4.Packet) (matched bool, requestDone bool, shouldComplete bool) {
+	rm := m.Client.Pending(target.ID(), target.IP(), processPacket(req), func(p discv4.Packet) (matched bool, requestDone bool, shouldComplete bool) {
 		if pong, ok := p.(*discv4.Pong); ok {
 			logger.Printf("Received Pong response: %+v\n", pong)
 			result.Response = p.(*discv4.Pong)
@@ -423,11 +422,9 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 		return false, false, false
 	})
 
-	_ = m.client.Send(target, req)
+	hash := m.Client.Send(target, req)
 	// Record send log info
-	if logger != nil {
-		logger.Printf("Sent packet to target: %s, packet: %v", target.String(), req.Kind())
-	}
+	logger.Printf("Send Packet: %s, Hash: %x\n", req.Name(), hash)
 	// Waiting for a response with the new WaitForResponse method
 	if err := rm.WaitForResponse(1 * time.Second); err != nil {
 		if err.Error() == "timeout waiting for response" {

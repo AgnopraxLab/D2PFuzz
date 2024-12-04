@@ -44,7 +44,7 @@ var (
 		Usage: "Target flag",
 	}
 
-	engineFlag = &cli.BoolFlag{
+	engineFlag = &cli.IntFlag{
 		Name:  "engine",
 		Usage: "Engine flag",
 	}
