@@ -207,7 +207,7 @@ func (t *UDPv4) Send(n *enode.Node, req Packet) []byte {
 	}
 	//fmt.Printf("Packet: %x\n", packet)
 	//fmt.Printf("Hash: %x\n", hash)
-	fmt.Printf("Packet: %s, Hash: %x\n", req.Name(), hash)
+	//fmt.Printf("Packet: %s, Hash: %x\n", req.Name(), hash)
 	if err := t.write(toaddr, toid, req.Name(), packet); err != nil {
 		panic(fmt.Errorf("can't send %v: %v", req.Name(), err))
 	}

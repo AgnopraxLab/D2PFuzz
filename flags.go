@@ -44,10 +44,9 @@ var (
 		Usage: "Target flag",
 	}
 
-	engineFlag = &cli.BoolFlag{
+	engineFlag = &cli.IntFlag{
 		Name:  "engine",
 		Usage: "Engine flag",
-		Value: false,
 	}
 
 	// chainEnvDirFlag eth protocol
