@@ -21,5 +21,5 @@ import (
 )
 
 func TestFuzzer(t *testing.T) {
-	RunFuzzer("discv4", "../test/enode.txt", "../test/ethdata", false, 1)
+	RunFuzzer("discv4", "../test/enode.txt", "../test/ethdata", 0, 1)
 }
