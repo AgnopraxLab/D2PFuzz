@@ -122,17 +122,23 @@ func discv4Fuzzer(engine int, target string) error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	// Ensure resources are released after testMaker usage
+	// Ensure resources are cleaned up when function returns
 	defer func() {
 		testMaker.Close()
-		savePacketSeed(testMaker)
+		savePacketSeed(testMaker) // Ensure seeds are saved in any case
+		signal.Stop(sigChan)      // Stop signal listening
 	}()
 
+	// Separate goroutine for handling signals
+	done := make(chan struct{})
 	go func() {
-		<-sigChan
-		fmt.Println("Interrupt received, saving PacketSeed...")
-		savePacketSeed(testMaker)
-		os.Exit(0)
+		select {
+		case <-sigChan:
+			fmt.Println("\nReceived interrupt signal, saving PacketSeed and exiting...")
+			close(done)
+		case <-done:
+			// Normal exit case
+		}
 	}()
 
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
@@ -161,19 +167,25 @@ func discv4Fuzzer(engine int, target string) error {
 		// for seed
 		itration := 1
 		for {
-			randomIndex := rand.Intn(len(testMaker.PakcetSeed))
-			seed := testMaker.PakcetSeed[randomIndex]
-			elapsed := time.Since(startTime)
-			fmt.Printf("[%s] Round %d of testing, seed queue: %d, now seed type: %s\n",
-				elapsed.Round(time.Second),
-				itration,
-				len(testMaker.PakcetSeed),
-				seed.Name())
+			select {
+			case <-done:
+				return nil
+			default:
+				// Original loop logic
+				randomIndex := rand.Intn(len(testMaker.PakcetSeed))
+				seed := testMaker.PakcetSeed[randomIndex]
+				elapsed := time.Since(startTime)
+				fmt.Printf("[%s] Round %d of testing, seed queue: %d, now seed type: %s\n",
+					elapsed.Round(time.Second),
+					itration,
+					len(testMaker.PakcetSeed),
+					seed.Name())
 
-			if err = testMaker.PacketStart(traceFile, seed); err != nil {
-				return err
+				if err = testMaker.PacketStart(traceFile, seed); err != nil {
+					return err
+				}
+				itration = itration + 1
 			}
-			itration = itration + 1
 		}
 	}
 

@@ -120,41 +120,33 @@ func (m *V4Maker) ToSubTest() *stJSON {
 // PacketStart executes fuzzing by sending single packets in multiple goroutines and collecting feedback
 func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 	var (
-		wg         sync.WaitGroup
-		logger     *log.Logger
-		mu         sync.Mutex
-		results    []v4packetTestResult
-		shouldSave bool
+		wg           sync.WaitGroup
+		logger       *log.Logger
+		mu           sync.Mutex
+		results      []v4packetTestResult
+		foundNewSeed bool
 	)
 
 	if traceOutput != nil {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
-	// ping authentication
+	// Authentication ping
 	ping := m.Client.GenPacket("ping", m.TargetList[0])
 	result := sendAndWaitResponse(m, m.TargetList[0], ping, logger)
 	if result.Error != nil {
 		fmt.Printf("%s", result.Error)
 	}
 
-	// 创建变异器
 	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
 
-	// 对每个迭代进行变异测试
 	for i := 0; i < MutateCount; i++ {
-		logger.Printf("================================================= Starting iteration %d =================================================", i+1)
-
-		shouldSave = false
 		wg.Add(1)
 
 		go func(iteration int, originalSeed discv4.Packet) {
 			defer wg.Done()
 
-			// 创建seed的副本并进行变异
 			mutatedSeed := cloneAndMutatePacket(mutator, originalSeed)
-
-			// 发送变异后的数据包并等待响应
 			result := sendAndWaitResponse(m, m.TargetList[0], mutatedSeed, logger)
 			result.CheckResults = m.checkRequestSemantics(mutatedSeed)
 			result.Check = allTrue(result.CheckResults)
@@ -163,14 +155,13 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 			if result.Check != result.Success {
 				mu.Lock()
 				m.PakcetSeed = append(m.PakcetSeed, originalSeed)
-				shouldSave = true
+				foundNewSeed = true
 				mu.Unlock()
 			}
 
 			mu.Lock()
 			results = append(results, result)
 			mu.Unlock()
-
 		}(i, seed)
 
 		logger.Printf("================================================= Completed iteration %d =================================================", i+1)
@@ -178,8 +169,8 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 
 	wg.Wait()
 
-	// 处理结果
-	if shouldSave {
+	// Only analyze and save results if we found new seeds
+	if foundNewSeed {
 		analyzeResults(results, logger, OutputDir)
 	}
 
@@ -282,25 +273,25 @@ func (m *V4Maker) SetResult(root, logs common.Hash) {
 func processPacket(packet discv4.Packet) byte {
 	switch packet.Kind() {
 	case discv4.PingPacket:
-		fmt.Println("Send ping packet, expecting pong response")
+		// fmt.Println("Send ping packet, expecting pong response")
 		return discv4.PongPacket
 	case discv4.FindnodePacket:
-		fmt.Println("Send findnode packet, expecting neighbors response")
+		// fmt.Println("Send findnode packet, expecting neighbors response")
 		return discv4.NeighborsPacket
 	case discv4.ENRRequestPacket:
-		fmt.Println("Send ENR request packet, expecting ENR response")
+		// fmt.Println("Send ENR request packet, expecting ENR response")
 		return discv4.ENRResponsePacket
 	case discv4.PongPacket:
-		fmt.Println("Send pong packet, no pending required")
+		// fmt.Println("Send pong packet, no pending required")
 		return NoPendingRequired
 	case discv4.NeighborsPacket:
-		fmt.Println("Send neighbors packet, no pending required")
+		// fmt.Println("Send neighbors packet, no pending required")
 		return NoPendingRequired
 	case discv4.ENRResponsePacket:
-		fmt.Println("Send ENR response, no pending required")
+		// fmt.Println("Send ENR response, no pending required")
 		return NoPendingRequired
 	default:
-		fmt.Printf("Unknown packet type: %v\n", packet.Kind())
+		// fmt.Printf("Unknown packet type: %v\n", packet.Kind())
 		return NoPendingRequired
 	}
 }
