@@ -43,13 +43,13 @@ func (t *UDPv5) makeFindnode(distances []uint) *Findnode {
 // findnode calls FINDNODE on a node and waits for responses.
 func (t *UDPv5) sendfindnode(n *enode.Node, distances []uint) ([]*enode.Node, error) {
 	req := t.makeFindnode(distances)
-	resp := t.callToNode(n, NodesMsg, req)
+	resp := t.CallToNode(n, NodesMsg, req)
 	return t.waitForNodes(resp, distances)
 }
 
 // waitForNodes waits for NODES responses to the given call.
 func (t *UDPv5) waitForNodes(c *callV5, distances []uint) ([]*enode.Node, error) {
-	defer t.callDone(c)
+	defer t.CallDone(c)
 
 	var (
 		nodes           []*enode.Node

@@ -3,6 +3,7 @@ package discv5
 import (
 	crand "crypto/rand"
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -33,8 +34,8 @@ func (t *UDPv5) makeWhoareyou() *Whoareyou {
 func (t *UDPv5) sendWhoareyou(n *enode.Node, callback func()) error {
 	req := t.makeWhoareyou()
 
-	resp := t.callToNode(n, UnknownPacket, req)
-	defer t.callDone(resp)
+	resp := t.CallToNode(n, UnknownPacket, req)
+	defer t.CallDone(resp)
 
 	select {
 	case _ = <-resp.ch:
@@ -53,9 +54,12 @@ func (t *UDPv5) sendWhoareyou(n *enode.Node, callback func()) error {
 func (t *UDPv5) handleWhoareyou(p *Whoareyou, fromID enode.ID, fromAddr *net.UDPAddr) {
 	c, err := t.matchWithCall(fromID, p.Nonce)
 	if err != nil {
+		fmt.Printf("Failed to match call - Error: %v\n", err)
 		t.log.Debug("Invalid "+p.Name(), "addr", fromAddr, "err", err)
 		return
 	}
+
+	fmt.Printf("Successfully matched call with nonce: %x\n", p.Nonce)
 
 	if c.node == nil {
 		// Can't perform handshake because we don't have the ENR.
@@ -63,11 +67,14 @@ func (t *UDPv5) handleWhoareyou(p *Whoareyou, fromID enode.ID, fromAddr *net.UDP
 		c.err <- errors.New("remote wants handshake, but call has no ENR")
 		return
 	}
+
 	// Resend the call that was answered by WHOAREYOU.
 	t.log.Trace("<< "+p.Name(), "id", c.node.ID(), "addr", fromAddr)
+
 	c.handshakeCount++
 	c.challenge = p
 	p.Node = c.node
+
 	t.sendCall(c)
 }
 

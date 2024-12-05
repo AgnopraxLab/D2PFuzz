@@ -139,7 +139,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 	//Iterate over each target object
 	for i := 0; i < MutateCount; i++ {
 		// Print divider line at the start of each iteration
-		logger.Printf("====================== Starting iteration %d ======================", i+1)
+		logger.Printf("================================================= Starting iteration %d =================================================", i+1)
 
 		wg.Add(1)
 
@@ -169,7 +169,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 		// TODO：Mutation seed
 
 		// Print divider line at the end of each iteration
-		logger.Printf("====================== Completed iteration %d ======================", i+1)
+		logger.Printf("================================================= Completed iteration %d =================================================", i+1)
 	}
 
 	wg.Wait()

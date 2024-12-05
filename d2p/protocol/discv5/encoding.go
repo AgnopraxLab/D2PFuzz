@@ -301,6 +301,9 @@ func (c *Codec) encodeWhoareyou(toID enode.ID, packet *Whoareyou) (Header, error
 
 // encodeHandshakeHeader encodes the handshake message packet header.
 func (c *Codec) encodeHandshakeHeader(toID enode.ID, addr string, challenge *Whoareyou) (Header, *session, error) {
+	// 添加调试输出
+	fmt.Printf("Encoding handshake header with ID: %x\n", toID.Bytes())
+
 	// Ensure calling code sets challenge.node.
 	if challenge.Node == nil {
 		panic(interface{}("BUG: missing challenge.Node in encode"))

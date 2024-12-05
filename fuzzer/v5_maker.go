@@ -36,7 +36,8 @@ import (
 )
 
 var (
-	v5state = []string{"ping", "findnode"}
+	v5state          = []string{"ping", "findnode"}
+	HandshakeTimeout = 5 * time.Second // 握手专用超时
 )
 
 type V5Maker struct {
@@ -120,10 +121,12 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 	if traceOutput != nil {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
+
 	target := m.targetList[0]
 
 	// Send initial ping packet to establish connection
 	ping := m.client.GenPacket("ping", target)
+
 	nonce, err := m.sendAndReceive(target, ping, traceOutput, logger)
 	if err != nil {
 		if logger != nil {
@@ -134,9 +137,9 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 		logger.Printf("Initial ping sent, nonce: %x", nonce)
 	}
 
-	req := m.client.GenPacket("random", target)
+	req := m.client.GenPacket("ping", target)
 
-	for i := 0; i < MutateCount; i++ {
+	for i := 0; i < 2; i++ {
 		wg.Add(1)
 
 		go func(iteration int, currentReq discv5.Packet) {
@@ -247,53 +250,93 @@ func (m *V5Maker) Close() {
 	}
 }
 
-func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOutput io.Writer, logger *log.Logger) (discv5.Nonce, error) {
-	nonce, err := m.client.Send(target, req, nil)
-	if err != nil {
-		return nonce, fmt.Errorf("failed to send packet: %v", err)
+func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOutput io.Writer, logger *log.Logger) ([]byte, error) {
+	// 根据请求类型确定期望的响应类型
+	var responseType byte
+	switch req.Kind() {
+	case discv5.PingMsg:
+		responseType = discv5.PongMsg
+	case discv5.FindnodeMsg:
+		responseType = discv5.NodesMsg
+	case discv5.TalkRequestMsg:
+		responseType = discv5.TalkResponseMsg
+	default:
+		// 其他类型的包可能不需要等待响应
+		responseType = req.Kind()
 	}
+	// 创建 call，使用确定的响应类型
+	call := m.client.CallToNode(target, responseType, req)
 
-	m.client.SetReadDeadline(time.Now().Add(PacketSleepTime))
+	defer m.client.CallDone(call) // 使用 defer 确保清理
+
+	respChan := m.client.GetCallResponseChan(call)
+	errChan := m.client.GetCallErrorChan(call)
+	// 等待响应
+	select {
+	case resp := <-respChan:
+		// 根据请求类型处理并返回相应的值
+		switch req.Kind() {
+		case discv5.PingMsg:
+			if pong, ok := resp.(*discv5.Pong); ok {
+				logger.Printf("Received PONG response")
+				return pong.ReqID, nil
+			}
+		case discv5.FindnodeMsg:
+			if nodes, ok := resp.(*discv5.Nodes); ok {
+				logger.Printf("Received NODES response")
+				return nodes.ReqID, nil
+			}
+		case discv5.TalkRequestMsg:
+			if talkResp, ok := resp.(*discv5.TalkResponse); ok {
+				logger.Printf("Received TALK_RESPONSE")
+				return talkResp.ReqID, nil
+			}
+		}
+		return nil, fmt.Errorf("unexpected response type: %T", resp)
+
+	case err := <-errChan:
+		return []byte{}, err
+	}
+}
+
+func (m *V5Maker) waitForHandshakeResponse(whoareyou *discv5.Whoareyou, target *enode.Node, req discv5.Packet, traceOutput io.Writer, logger *log.Logger) (discv5.Nonce, error) {
+	m.client.SetReadDeadline(time.Now().Add(HandshakeTimeout))
+
 	buf := make([]byte, 1280)
-	n, fromAddr, err := m.client.ReadFromUDP(buf)
-	if err != nil {
-		return nonce, fmt.Errorf("failed to read response: %v", err)
-	}
 
-	packet, _, err := m.client.Decode(buf[:n], fromAddr.String())
-	if err != nil {
-		return nonce, fmt.Errorf("failed to decode response: %v", err)
-	}
-
-	if traceOutput != nil {
-		m.logPacketInfo(packet, traceOutput)
-	}
-	if whoareyou, ok := packet.(*discv5.Whoareyou); ok {
-		logger.Printf("Received Whoareyou response: %+v\n", whoareyou)
-		if whoareyou.Nonce != nonce {
-			return nonce, fmt.Errorf("wrong nonce in WHOAREYOU")
-		}
-		challenge := &discv5.Whoareyou{
-			Nonce:     whoareyou.Nonce,
-			IDNonce:   whoareyou.IDNonce,
-			RecordSeq: whoareyou.RecordSeq,
-		}
-		nonce, err = m.client.Send(target, req, challenge)
+	// 等待并处理响应
+	for {
+		n, fromAddr, err := m.client.ReadFromUDP(buf)
 		if err != nil {
-			return nonce, fmt.Errorf("failed to send handshake: %v", err)
+			return discv5.Nonce{}, fmt.Errorf("failed to read handshake response: %v", err)
 		}
-		return m.sendAndReceive(target, req, traceOutput, logger)
+
+		packet, _, err := m.client.Decode(buf[:n], fromAddr.String())
+		if err != nil {
+			return discv5.Nonce{}, fmt.Errorf("failed to decode handshake response: %v", err)
+		}
+
+		switch p := packet.(type) {
+		case *discv5.Unknown:
+			// UNKNOWN 包是握手过程的正常部分
+			logger.Printf("Received expected Unknown packet during handshake")
+			continue
+
+		case *discv5.Pong:
+			// 收到 PONG 表示握手成功完成
+			logger.Printf("Handshake completed successfully, received Pong")
+			return discv5.Nonce{}, nil
+
+		case *discv5.Whoareyou:
+			// 如果在这里又收到 WHOAREYOU，可能之前的认证包有问题
+			logger.Printf("Unexpected WHOAREYOU during handshake")
+			return discv5.Nonce{}, fmt.Errorf("received unexpected WHOAREYOU")
+
+		default:
+			logger.Printf("Unexpected packet type: %T", p)
+			continue
+		}
 	}
-	if pong, ok := packet.(*discv5.Pong); ok {
-		logger.Printf("Received Pong response: %+v\n", pong)
-	}
-	if nodes, ok := packet.(*discv5.Nodes); ok {
-		logger.Printf("Received Nodes response: %+v\n", nodes)
-	}
-	if talkresponse, ok := packet.(*discv5.TalkResponse); ok {
-		logger.Printf("Received Nodes response: %+v\n", talkresponse)
-	}
-	return nonce, nil
 }
 
 func (m *V5Maker) logPacketInfo(packet discv5.Packet, traceOutput io.Writer) {

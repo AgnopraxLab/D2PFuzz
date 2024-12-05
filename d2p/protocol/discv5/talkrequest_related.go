@@ -26,8 +26,8 @@ func (t *UDPv5) makeTalkRequest(protocol string, message []byte) *TalkRequest {
 // sendTalkRequest sends a talk request to a node and waits for a response.
 func (t *UDPv5) sendTalkRequest(n *enode.Node, protocol string, message []byte) ([]byte, error) {
 	req := t.makeTalkRequest(protocol, message)
-	resp := t.callToNode(n, TalkResponseMsg, req)
-	defer t.callDone(resp)
+	resp := t.CallToNode(n, TalkResponseMsg, req)
+	defer t.CallDone(resp)
 
 	select {
 	case respMsg := <-resp.ch:
@@ -41,7 +41,7 @@ func (t *UDPv5) sendTalkRequest(n *enode.Node, protocol string, message []byte) 
 func (t *UDPv5) TalkRequestToID(id enode.ID, addr *net.UDPAddr, protocol string, request []byte) ([]byte, error) {
 	req := t.makeTalkRequest(protocol, request)
 	resp := t.callToID(id, addr, TalkResponseMsg, req)
-	defer t.callDone(resp)
+	defer t.CallDone(resp)
 	select {
 	case respMsg := <-resp.ch:
 		return respMsg.(*TalkResponse).Message, nil
