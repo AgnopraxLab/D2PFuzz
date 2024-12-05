@@ -20,9 +20,14 @@ package fuzzer
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"os"
+	"os/signal"
+	"path/filepath"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"golang.org/x/crypto/sha3"
@@ -111,13 +116,28 @@ func setupTrace(name string) *os.File {
 
 func discv4Fuzzer(engine int, target string) error {
 	testMaker := NewV4Maker(target)
+	startTime := time.Now()
+
+	// Channel to listen for interrupt signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// Ensure resources are released after testMaker usage
-	defer testMaker.Close()
+	defer func() {
+		testMaker.Close()
+		savePacketSeed(testMaker)
+	}()
+
+	go func() {
+		<-sigChan
+		fmt.Println("Interrupt received, saving PacketSeed...")
+		savePacketSeed(testMaker)
+		os.Exit(0)
+	}()
 
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
-	// Execute the test and write out the resulting trace
+
 	var traceFile *os.File
 	if ShouldTrace {
 		traceFile = setupTrace(finalName)
@@ -143,16 +163,54 @@ func discv4Fuzzer(engine int, target string) error {
 		for {
 			randomIndex := rand.Intn(len(testMaker.PakcetSeed))
 			seed := testMaker.PakcetSeed[randomIndex]
-			fmt.Printf("Round %d of testing, seed queue: %d, now seed type: %s\n", itration, len(testMaker.PakcetSeed), seed.Name())
+			elapsed := time.Since(startTime)
+			fmt.Printf("[%s] Round %d of testing, seed queue: %d, now seed type: %s\n",
+				elapsed.Round(time.Second),
+				itration,
+				len(testMaker.PakcetSeed),
+				seed.Name())
+
 			if err = testMaker.PacketStart(traceFile, seed); err != nil {
 				return err
 			}
 			itration = itration + 1
 		}
 	}
-	// Save the test
 
 	return nil
+}
+
+func savePacketSeed(testMaker *V4Maker) {
+	if SaveFlag {
+		savePath := filepath.Join(OutputDir, "discv4")
+		if err := os.MkdirAll(savePath, 0755); err != nil {
+			fmt.Printf("Failed to create directory: %v\n", err)
+			return
+		}
+
+		filename := filepath.Join(savePath, fmt.Sprintf("%s-seed.json", time.Now().Format("2006-01-02_15-04-05")))
+		seeds := make([]map[string]interface{}, 0, len(testMaker.PakcetSeed))
+
+		for _, seed := range testMaker.PakcetSeed {
+			seedMap := map[string]interface{}{
+				"type": seed.Name(),
+				"data": seed,
+			}
+			seeds = append(seeds, seedMap)
+		}
+
+		data, err := json.MarshalIndent(seeds, "", "    ")
+		if err != nil {
+			fmt.Printf("Failed to marshal seeds: %v\n", err)
+			return
+		}
+
+		if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+			fmt.Printf("Failed to save seeds: %v\n", err)
+			return
+		}
+		fmt.Printf("Seeds saved to: %s\n", filename)
+	}
 }
 
 func discv5Fuzzer(engine int, target string) error {

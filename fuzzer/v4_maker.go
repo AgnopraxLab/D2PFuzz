@@ -23,15 +23,18 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv4"
+	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
 
@@ -128,53 +131,54 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
-	// mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
-	// ping authentation
+	// ping authentication
 	ping := m.Client.GenPacket("ping", m.TargetList[0])
 	result := sendAndWaitResponse(m, m.TargetList[0], ping, logger)
 	if result.Error != nil {
 		fmt.Printf("%s", result.Error)
 	}
 
-	//Iterate over each target object
+	// 创建变异器
+	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
+
+	// 对每个迭代进行变异测试
 	for i := 0; i < MutateCount; i++ {
-		// Print divider line at the start of each iteration
 		logger.Printf("================================================= Starting iteration %d =================================================", i+1)
 
+		shouldSave = false
 		wg.Add(1)
 
-		go func(iteration int, seed discv4.Packet) {
+		go func(iteration int, originalSeed discv4.Packet) {
 			defer wg.Done()
 
-			// Sending a single packet and waiting for feedback
-			result := sendAndWaitResponse(m, m.TargetList[0], seed, logger)
-			result.CheckResults = m.checkRequestSemantics(seed)
+			// 创建seed的副本并进行变异
+			mutatedSeed := cloneAndMutatePacket(mutator, originalSeed)
+
+			// 发送变异后的数据包并等待响应
+			result := sendAndWaitResponse(m, m.TargetList[0], mutatedSeed, logger)
+			result.CheckResults = m.checkRequestSemantics(mutatedSeed)
 			result.Check = allTrue(result.CheckResults)
 			result.PacketID = i
+
 			if result.Check != result.Success {
-				m.PakcetSeed = append(m.PakcetSeed, seed)
+				mu.Lock()
+				m.PakcetSeed = append(m.PakcetSeed, originalSeed)
 				shouldSave = true
+				mu.Unlock()
 			}
 
-			// Record results with mutex lock for thread safety
 			mu.Lock()
 			results = append(results, result)
 			mu.Unlock()
 
 		}(i, seed)
 
-		// Sleep between iterations to control packet sending rate
-		// time.Sleep(PacketSleepTime)
-
-		// TODO：Mutation seed
-
-		// Print divider line at the end of each iteration
 		logger.Printf("================================================= Completed iteration %d =================================================", i+1)
 	}
 
 	wg.Wait()
 
-	// Process results
+	// 处理结果
 	if shouldSave {
 		analyzeResults(results, logger, OutputDir)
 	}
@@ -482,4 +486,125 @@ func analyzeResults(results []v4packetTestResult, logger *log.Logger, outputDir 
 	logger.Printf("Results saved to file: %s\n", filename)
 
 	return nil
+}
+
+// cloneAndMutatePacket clones and mutates the packet
+func cloneAndMutatePacket(mutator *fuzzing.Mutator, seed discv4.Packet) discv4.Packet {
+	switch p := seed.(type) {
+	case *discv4.Ping:
+		return mutatePing(mutator, p)
+	case *discv4.Pong:
+		return mutatePong(mutator, p)
+	case *discv4.Findnode:
+		return mutateFindnode(mutator, p)
+	case *discv4.Neighbors:
+		return mutateNeighbors(mutator, p)
+	case *discv4.ENRRequest:
+		return mutateENRRequest(mutator, p)
+	case *discv4.ENRResponse:
+		return mutateENRResponse(mutator, p)
+	default:
+		return seed
+	}
+}
+
+// Mutation functions for different packet types
+func mutatePing(mutator *fuzzing.Mutator, original *discv4.Ping) *discv4.Ping {
+	mutated := *original // Create a copy
+
+	// Mutate fields
+	mutator.MutateExp(&mutated.Expiration)
+	mutator.MutateRest(&mutated.Rest)
+
+	// Randomly mutate other fields
+	if rand.Float32() < 0.3 { // 30% chance to mutate Version
+		mutated.Version = uint(rand.Uint32())
+	}
+	if rand.Float32() < 0.3 { // 30% chance to mutate ENRSeq
+		mutated.ENRSeq = uint64(rand.Uint32())
+	}
+
+	return &mutated
+}
+
+func mutatePong(mutator *fuzzing.Mutator, original *discv4.Pong) *discv4.Pong {
+	mutated := *original
+
+	mutator.MutateExp(&mutated.Expiration)
+	mutator.MutateRest(&mutated.Rest)
+
+	if rand.Float32() < 0.3 {
+		mutator.MutateBytes(&mutated.ReplyTok)
+	}
+	if rand.Float32() < 0.3 {
+		mutated.ENRSeq = uint64(rand.Uint32())
+	}
+
+	return &mutated
+}
+
+func mutateFindnode(mutator *fuzzing.Mutator, original *discv4.Findnode) *discv4.Findnode {
+	mutated := *original
+
+	mutator.MutateExp(&mutated.Expiration)
+	mutator.MutateRest(&mutated.Rest)
+
+	if rand.Float32() < 0.3 {
+		var newTarget discv4.Pubkey
+		mutator.FillBytes((*[]byte)(unsafe.Pointer(&newTarget)))
+		mutated.Target = newTarget
+	}
+
+	return &mutated
+}
+
+func mutateNeighbors(mutator *fuzzing.Mutator, original *discv4.Neighbors) *discv4.Neighbors {
+	mutated := *original
+
+	mutator.MutateExp(&mutated.Expiration)
+	mutator.MutateRest(&mutated.Rest)
+
+	// Mutate node list
+	if rand.Float32() < 0.3 {
+		// Randomly remove nodes
+		if len(mutated.Nodes) > 0 {
+			index := rand.Intn(len(mutated.Nodes))
+			mutated.Nodes = append(mutated.Nodes[:index], mutated.Nodes[index+1:]...)
+		}
+	}
+
+	// Randomly add or modify nodes
+	if rand.Float32() < 0.3 {
+		newNode := discv4.Node{
+			IP:  net.IPv4(byte(rand.Intn(256)), byte(rand.Intn(256)), byte(rand.Intn(256)), byte(rand.Intn(256))),
+			UDP: uint16(rand.Intn(65536)),
+			TCP: uint16(rand.Intn(65536)),
+		}
+		mutator.FillBytes((*[]byte)(unsafe.Pointer(&newNode.ID)))
+		mutated.Nodes = append(mutated.Nodes, newNode)
+	}
+
+	return &mutated
+}
+
+func mutateENRRequest(mutator *fuzzing.Mutator, original *discv4.ENRRequest) *discv4.ENRRequest {
+	mutated := *original
+
+	mutator.MutateExp(&mutated.Expiration)
+	mutator.MutateRest(&mutated.Rest)
+
+	return &mutated
+}
+
+func mutateENRResponse(mutator *fuzzing.Mutator, original *discv4.ENRResponse) *discv4.ENRResponse {
+	mutated := *original
+
+	mutator.MutateRest(&mutated.Rest)
+
+	// Mutate ReplyTok
+	if rand.Float32() < 0.3 {
+		mutator.MutateBytes(&mutated.ReplyTok)
+	}
+
+	return &mutated
 }
