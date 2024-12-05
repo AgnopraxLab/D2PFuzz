@@ -201,10 +201,6 @@ func (t *UDPv5) Decode(input []byte, fromAddr string) (Packet, Nonce, error) {
 }
 
 func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
-	fmt.Printf("\nGenerating %s packet for node:\n", packetType)
-	fmt.Printf("Node ID: %x\n", n.ID().Bytes())
-	fmt.Printf("Node URL: %s\n", n.String())
-
 	var (
 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
 		packetTypes = []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"}
@@ -220,7 +216,8 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		reqID := make([]byte, 8)
 		crand.Read(reqID)
 		pingPacket.SetRequestID(reqID)
-		fmt.Printf("Created ping packet with ReqID: %x\n", reqID)
+		// 添加打印信息
+		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return pingPacket
 
 	case "pong":
@@ -232,6 +229,8 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		reqID := make([]byte, 8)
 		crand.Read(reqID)
 		pongPacket.SetRequestID(reqID)
+		// 添加打印信息
+		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return pongPacket
 
 	case "findnode":
@@ -241,6 +240,8 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		reqID := make([]byte, 8)
 		crand.Read(reqID)
 		findnodePacket.SetRequestID(reqID)
+		// 添加打印信息
+		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return findnodePacket
 
 	case "nodes":
@@ -265,6 +266,8 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		reqID := make([]byte, 8)
 		crand.Read(reqID)
 		nodesPacket.SetRequestID(reqID)
+		// 添加打印信息
+		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return nodesPacket
 
 	case "talkrequest":
@@ -275,6 +278,8 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		reqID := make([]byte, 8)
 		crand.Read(reqID)
 		talkReqPacket.SetRequestID(reqID)
+		// 添加打印信息
+		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return talkReqPacket
 
 	case "talkresponse":
@@ -284,6 +289,8 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		reqID := make([]byte, 8)
 		crand.Read(reqID)
 		talkRespPacket.SetRequestID(reqID)
+		// 添加打印信息
+		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return talkRespPacket
 	/*case "whoareyou":
 	whoareyouPacket := &Whoareyou{
@@ -314,6 +321,7 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 	case "random":
 		randomIndex := cryptoRandIntn(len(packetTypes))
 		randomType := packetTypes[randomIndex]
+		// 添加打印信息
 		return t.GenPacket(randomType, n)
 	default:
 		return nil

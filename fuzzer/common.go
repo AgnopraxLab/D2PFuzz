@@ -57,7 +57,6 @@ func getList(fName string) ([]*enode.Node, error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		node := enode.MustParse(line)
-		fmt.Printf("Node ID after parse: %x\n", node.ID().Bytes())
 		nodeList = append(nodeList, node)
 	}
 

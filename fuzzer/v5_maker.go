@@ -77,7 +77,6 @@ func NewV5Maker(targetDir string) *V5Maker {
 
 	cli = generator.InitDiscv5()
 	nodeList, _ = getList(targetDir)
-	fmt.Printf("Node ID in NewV5Maker: %x\n", nodeList[0].ID().Bytes())
 
 	v5maker := &V5Maker{
 		client:     cli,
@@ -124,10 +123,10 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 	}
 
 	target := m.targetList[0]
-	fmt.Printf("Node ID at PacketStart: %x\n", target.ID().Bytes())
 
 	// Send initial ping packet to establish connection
 	ping := m.client.GenPacket("ping", target)
+
 	nonce, err := m.sendAndReceive(target, ping, traceOutput, logger)
 	if err != nil {
 		if logger != nil {
@@ -138,9 +137,9 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 		logger.Printf("Initial ping sent, nonce: %x", nonce)
 	}
 
-	req := m.client.GenPacket("random", target)
+	req := m.client.GenPacket("ping", target)
 
-	for i := 0; i < 0; i++ {
+	for i := 0; i < 2; i++ {
 		wg.Add(1)
 
 		go func(iteration int, currentReq discv5.Packet) {
@@ -251,88 +250,52 @@ func (m *V5Maker) Close() {
 	}
 }
 
-//	func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOutput io.Writer, logger *log.Logger) (discv5.Nonce, error) {
-//		// 打印初始节点信息，确保我们使用的是正确的节点ID
-//		fmt.Printf("\nStarting sendAndReceive for node:\n")
-//		fmt.Printf("  Target node ID: %x\n", target.ID().Bytes())
-//		fmt.Printf("  Target node record: %s\n", target.String())
-//
-//		// 只在第一次创建 call
-//		call := m.client.CallToNode(target, req.Kind(), req)
-//		m.client.SetCallResponseType(call, v5wire.PongMsg)
-//
-//		// 发送初始包并保存原始 nonce
-//		originalNonce, err := m.client.Send(target, req, nil)
-//		if err != nil {
-//			defer m.client.CallDone(call)
-//			return originalNonce, fmt.Errorf("failed to send packet: %v", err)
-//		}
-//		// 使用新方法建立关联
-//		m.client.SetActiveCall(originalNonce, call)
-//		fmt.Printf("  Initial packet sent with nonce: %x\n", originalNonce)
-//
-//		// 获取响应和错误通道
-//		respChan := m.client.GetCallResponseChan(call)
-//		errChan := m.client.GetCallErrorChan(call)
-//
-//		// 使用更长的超时时间等待完整握手
-//		handshakeTimeout := 5 * time.Second
-//
-//		// 等待响应循环
-//		for {
-//			select {
-//			case resp := <-respChan:
-//				// 打印收到的响应类型，帮助调试
-//				fmt.Printf("  Received response type: %T\n", resp)
-//
-//				if pong, ok := resp.(*discv5.Pong); ok {
-//					m.client.CallDone(call)
-//					logger.Printf("Handshake completed successfully with PONG")
-//					if logger != nil {
-//						logger.Printf("PONG details: %+v", pong)
-//					}
-//					return originalNonce, nil
-//				}
-//
-//				// 如果不是PONG，打印详细信息并继续等待
-//				fmt.Printf("  Continuing to wait for PONG, received: %T\n", resp)
-//				continue
-//
-//			case err := <-errChan:
-//				m.client.CallDone(call)
-//				fmt.Printf("  Error received: %v\n", err)
-//				return originalNonce, fmt.Errorf("call failed: %v", err)
-//
-//			case <-time.After(handshakeTimeout):
-//				m.client.CallDone(call)
-//				fmt.Printf("  Handshake timed out after %v\n", handshakeTimeout)
-//				return originalNonce, fmt.Errorf("handshake timeout after %v", handshakeTimeout)
-//			}
-//		}
-//	}
-func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOutput io.Writer, logger *log.Logger) (discv5.Nonce, error) {
-	// 创建 call，响应类型已经在 CallToNode 中设置
-	call := m.client.CallToNode(target, req.Kind(), req)
-	defer m.client.CallDone(call) // 使用 defer 确保清理
-
-	// 发送包并获取 nonce
-	originalNonce, err := m.client.Send(target, req, nil)
-	if err != nil {
-		return originalNonce, fmt.Errorf("failed to send packet: %v", err)
+func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOutput io.Writer, logger *log.Logger) ([]byte, error) {
+	// 根据请求类型确定期望的响应类型
+	var responseType byte
+	switch req.Kind() {
+	case discv5.PingMsg:
+		responseType = discv5.PongMsg
+	case discv5.FindnodeMsg:
+		responseType = discv5.NodesMsg
+	case discv5.TalkRequestMsg:
+		responseType = discv5.TalkResponseMsg
+	default:
+		// 其他类型的包可能不需要等待响应
+		responseType = req.Kind()
 	}
+	// 创建 call，使用确定的响应类型
+	call := m.client.CallToNode(target, responseType, req)
+
+	defer m.client.CallDone(call) // 使用 defer 确保清理
 
 	respChan := m.client.GetCallResponseChan(call)
 	errChan := m.client.GetCallErrorChan(call)
-	// 简化的响应等待
+	// 等待响应
 	select {
 	case resp := <-respChan:
-		if pong, ok := resp.(*discv5.Pong); ok {
-			logger.Printf("Received %v response", pong)
-			return originalNonce, nil
+		// 根据请求类型处理并返回相应的值
+		switch req.Kind() {
+		case discv5.PingMsg:
+			if pong, ok := resp.(*discv5.Pong); ok {
+				logger.Printf("Received PONG response")
+				return pong.ReqID, nil
+			}
+		case discv5.FindnodeMsg:
+			if nodes, ok := resp.(*discv5.Nodes); ok {
+				logger.Printf("Received NODES response")
+				return nodes.ReqID, nil
+			}
+		case discv5.TalkRequestMsg:
+			if talkResp, ok := resp.(*discv5.TalkResponse); ok {
+				logger.Printf("Received TALK_RESPONSE")
+				return talkResp.ReqID, nil
+			}
 		}
-		return originalNonce, fmt.Errorf("unexpected response type: %T", resp)
+		return nil, fmt.Errorf("unexpected response type: %T", resp)
+
 	case err := <-errChan:
-		return originalNonce, fmt.Errorf("call failed: %v", err)
+		return []byte{}, err
 	}
 }
 

@@ -302,14 +302,7 @@ func (c *Codec) encodeWhoareyou(toID enode.ID, packet *Whoareyou) (Header, error
 // encodeHandshakeHeader encodes the handshake message packet header.
 func (c *Codec) encodeHandshakeHeader(toID enode.ID, addr string, challenge *Whoareyou) (Header, *session, error) {
 	// 添加调试输出
-	fmt.Printf("Encoding handshake header with raw ID: %x\n", toID[:])
-	fmt.Printf("  Node ID: %x\n", toID.Bytes())
-	fmt.Printf("  Raw ID length: %d bytes\n", len(toID))
-
-	// 确保直接使用原始 ID 字节，而不是从字符串转换
-	if len(toID) != 32 {
-		return Header{}, nil, fmt.Errorf("invalid node ID length: %d", len(toID))
-	}
+	fmt.Printf("Encoding handshake header with ID: %x\n", toID.Bytes())
 
 	// Ensure calling code sets challenge.node.
 	if challenge.Node == nil {
