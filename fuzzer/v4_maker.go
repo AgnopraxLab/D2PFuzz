@@ -117,21 +117,20 @@ func (m *V4Maker) ToSubTest() *stJSON {
 // PacketStart executes fuzzing by sending single packets in multiple goroutines and collecting feedback
 func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 	var (
-		wg      sync.WaitGroup
-		logger  *log.Logger
-		mu      sync.Mutex
-		results []v4packetTestResult
+		wg         sync.WaitGroup
+		logger     *log.Logger
+		mu         sync.Mutex
+		results    []v4packetTestResult
+		shouldSave bool
 	)
 
 	if traceOutput != nil {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
-	// logger.Println("target: ", target.String())
 	// mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
 	// ping authentation
 	ping := m.Client.GenPacket("ping", m.TargetList[0])
-	// Add the sendAndWaitResponse call
 	result := sendAndWaitResponse(m, m.TargetList[0], ping, logger)
 	if result.Error != nil {
 		fmt.Printf("%s", result.Error)
@@ -152,6 +151,10 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 			result.CheckResults = m.checkRequestSemantics(seed)
 			result.Check = allTrue(result.CheckResults)
 			result.PacketID = i
+			if result.Check != result.Success {
+				m.PakcetSeed = append(m.PakcetSeed, seed)
+				shouldSave = true
+			}
 
 			// Record results with mutex lock for thread safety
 			mu.Lock()
@@ -161,7 +164,9 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 		}(i, seed)
 
 		// Sleep between iterations to control packet sending rate
-		time.Sleep(PacketSleepTime)
+		// time.Sleep(PacketSleepTime)
+
+		// TODO：Mutation seed
 
 		// Print divider line at the end of each iteration
 		logger.Printf("====================== Completed iteration %d ======================", i+1)
@@ -170,8 +175,9 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 	wg.Wait()
 
 	// Process results
-	analyzeResults(results, logger, SaveFlag, OutputDir)
-	// fmt.Printf("All results: %v\n", allResults)
+	if shouldSave {
+		analyzeResults(results, logger, OutputDir)
+	}
 
 	return nil
 }
@@ -439,7 +445,7 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 	return result
 }
 
-func analyzeResults(results []v4packetTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
+func analyzeResults(results []v4packetTestResult, logger *log.Logger, outputDir string) error {
 	// Define slices for three scenarios
 	resultWanted := make([]v4packetTestResult, 0)
 
@@ -450,35 +456,30 @@ func analyzeResults(results []v4packetTestResult, logger *log.Logger, saveToFile
 		}
 	}
 
-	if saveToFile {
-		// Create output directory if it doesn't exist
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
-			return fmt.Errorf("failed to create output directory: %v", err)
-		}
-
-		// 需要创建完整的目录路径
-		fullPath := filepath.Join(outputDir, "discv4")
-		if err := os.MkdirAll(fullPath, 0755); err != nil {
-			return fmt.Errorf("failed to create discv4 directory: %v", err)
-		}
-
-		filename := filepath.Join(fullPath, fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
-
-		// Save to file
-		data, err := json.MarshalIndent(resultWanted, "", "    ")
-		if err != nil {
-			return fmt.Errorf("JSON serialization failed: %v", err)
-		}
-
-		if err := ioutil.WriteFile(filename, data, 0644); err != nil {
-			return fmt.Errorf("failed to write to file: %v", err)
-		}
-
-		logger.Printf("Results saved to file: %s\n", filename)
-	} else {
-		// Output to log
-		logger.Printf("Number of results with: %d\n", len(resultWanted))
+	// Create output directory if it doesn't exist
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %v", err)
 	}
+
+	// 需要创建完整的目录路径
+	fullPath := filepath.Join(outputDir, "discv4")
+	if err := os.MkdirAll(fullPath, 0755); err != nil {
+		return fmt.Errorf("failed to create discv4 directory: %v", err)
+	}
+
+	filename := filepath.Join(fullPath, fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
+
+	// Save to file
+	data, err := json.MarshalIndent(resultWanted, "", "    ")
+	if err != nil {
+		return fmt.Errorf("JSON serialization failed: %v", err)
+	}
+
+	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+		return fmt.Errorf("failed to write to file: %v", err)
+	}
+
+	logger.Printf("Results saved to file: %s\n", filename)
 
 	return nil
 }
