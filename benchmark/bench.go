@@ -42,6 +42,7 @@ func printResult(name string, time time.Duration, err error) {
 func testExcution(prot, target, chainDir, packetType string, N int, engine int) (time.Duration, error) {
 	// var traceFile *os.File
 	start := time.Now()
+
 	for i := 0; i < N; i++ {
 		switch prot {
 		case "discv4":
