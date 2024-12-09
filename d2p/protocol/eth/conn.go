@@ -29,23 +29,54 @@ func (s *Suite) dial() (*Conn, error) {
 	return s.dialAs(s.pri)
 }
 
+func (s *Suite) Dial() (*Conn, error) {
+	return s.dialAs(s.pri)
+}
+
 func (s *Suite) dialAs(key *ecdsa.PrivateKey) (*Conn, error) {
-	fd, err := net.Dial("tcp", fmt.Sprintf("%v:%d", s.DestList.IP(), s.DestList.TCP()))
-	if err != nil {
-		return nil, err
+	// Validate basic parameters
+	if s.DestList == nil {
+		return nil, fmt.Errorf("error: target node information is empty")
 	}
+	if s.DestList.IP() == nil {
+		return nil, fmt.Errorf("error: invalid target IP address")
+	}
+	if key == nil {
+		return nil, fmt.Errorf("error: private key not set")
+	}
+
+	// Build target address
+	targetAddr := fmt.Sprintf("%v:%d", s.DestList.IP(), s.DestList.TCP())
+
+	// Attempt TCP connection
+	fd, err := net.Dial("tcp", targetAddr)
+	if err != nil {
+		// Provide detailed error diagnostic information
+		return nil, fmt.Errorf("TCP connection failed (target=%s): %v\nPossible reasons:\n"+
+			"1. Target node is not running\n"+
+			"2. Port is not open\n"+
+			"3. Network connectivity issues\n"+
+			"4. Firewall restrictions", targetAddr, err)
+	}
+
+	// Create RLPx connection with the established TCP connection
 	conn := Conn{Conn: rlpx.NewConn(fd, s.DestList.Pubkey())}
 	conn.ourKey = key
+
+	// Perform encryption handshake
 	_, err = conn.Handshake(conn.ourKey)
 	if err != nil {
 		conn.Close()
-		return nil, err
+		return nil, fmt.Errorf("encryption handshake failed: %v", err)
 	}
+
+	// Set protocol versions and capabilities
 	conn.caps = []p2p.Cap{
 		{Name: "eth", Version: 67},
 		{Name: "eth", Version: 68},
 	}
 	conn.ourHighestProtoVersion = 68
+
 	return &conn, nil
 }
 
@@ -110,15 +141,38 @@ func (c *Conn) Write(proto Proto, code uint64, msg any) error {
 }
 
 func (s *Suite) SendMsg(proto Proto, code uint64, msg interface{}) error {
-	if s.conn == nil {
+	fmt.Println(">>> 进入 SendMsg 函数")
+	fmt.Printf(">>> 接收到的参数: proto=%v, code=%v, msg=%v\n", proto, code, msg)
+
+	if !s.IsConnected() {
+		fmt.Println(">>> 错误: 连接未建立")
 		return errors.New("connection not established")
 	}
-	return s.conn.Write(proto, code, msg)
+
+	fmt.Println(">>> 开始执行消息写入")
+	err := s.conn.Write(proto, code, msg)
+	if err != nil {
+		fmt.Printf(">>> 写入失败: %v\n", err)
+		return err
+	}
+
+	fmt.Println(">>> SendMsg 执行完成")
+	return nil
 }
 
 // peer performs both the protocol handshake and the status message
-// exchange with the node in order to peer with it.
+// exchange with the node to peer with it.
 func (c *Conn) peer(chain *Chain, status *StatusPacket) error {
+	if err := c.handshake(); err != nil {
+		return fmt.Errorf("handshake failed: %v", err)
+	}
+	if err := c.statusExchange(chain, status); err != nil {
+		return fmt.Errorf("status exchange failed: %v", err)
+	}
+	return nil
+}
+
+func (c *Conn) Peer(chain *Chain, status *StatusPacket) error {
 	if err := c.handshake(); err != nil {
 		return fmt.Errorf("handshake failed: %v", err)
 	}
@@ -130,7 +184,7 @@ func (c *Conn) peer(chain *Chain, status *StatusPacket) error {
 
 // handshake performs a protocol handshake with the node.
 func (c *Conn) handshake() error {
-	// Write hello to client.
+	// Write hello to a client.
 	pub0 := crypto.FromECDSAPub(&c.ourKey.PublicKey)[1:]
 	ourHandshake := &protoHandshake{
 		Version: 5,
@@ -140,7 +194,7 @@ func (c *Conn) handshake() error {
 	if err := c.Write(baseProto, handshakeMsg, ourHandshake); err != nil {
 		return fmt.Errorf("write to connection failed: %v", err)
 	}
-	// Read hello from client.
+	// Read hello from a client.
 	code, data, err := c.Read()
 	if err != nil {
 		return fmt.Errorf("erroring reading handshake: %v", err)
@@ -151,7 +205,7 @@ func (c *Conn) handshake() error {
 		if err := rlp.DecodeBytes(data, &msg); err != nil {
 			return fmt.Errorf("error decoding handshake msg: %v", err)
 		}
-		// Set snappy if version is at least 5.
+		// Set snappy if a version is at least 5.
 		if msg.Version >= 5 {
 			c.SetSnappy(true)
 		}
@@ -159,7 +213,7 @@ func (c *Conn) handshake() error {
 		if c.negotiatedProtoVersion == 0 {
 			return fmt.Errorf("could not negotiate eth protocol (remote caps: %v, local eth version: %v)", msg.Caps, c.ourHighestProtoVersion)
 		}
-		// If we require snap, verify that it was negotiated.
+		// If we require a snap, verify that it was negotiated.
 		if c.ourHighestSnapProtoVersion != c.negotiatedSnapProtoVersion {
 			return fmt.Errorf("could not negotiate snap protocol (remote caps: %v, local snap version: %v)", msg.Caps, c.ourHighestSnapProtoVersion)
 		}
@@ -232,7 +286,7 @@ loop:
 			return fmt.Errorf("bad status message: code %d", code)
 		}
 	}
-	// make sure eth protocol version is set for negotiation
+	// make sure an eth protocol version is set for negotiation
 	if c.negotiatedProtoVersion == 0 {
 		return errors.New("eth protocol version must be set in Conn")
 	}

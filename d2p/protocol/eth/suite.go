@@ -27,6 +27,10 @@ type Suite struct {
 	engine   *EngineClient
 }
 
+func (s *Suite) Chain() *Chain {
+	return s.chain
+}
+
 func NewSuite(dest *enode.Node, chainDir string, pri *ecdsa.PrivateKey, engineURL, jwt string) (*Suite, error) {
 	chain, err := NewChain(chainDir)
 	if err != nil {
@@ -48,6 +52,27 @@ func NewSuite(dest *enode.Node, chainDir string, pri *ecdsa.PrivateKey, engineUR
 type PacketSpecification struct {
 	BlockNumbers []int
 	BlockHashes  []common.Hash
+}
+
+func (s *Suite) IsConnected() bool {
+	return s.conn != nil
+}
+
+// Close 在 eth/suite.go 中添加
+func (s *Suite) Close() error {
+	// 检查连接是否存在
+	if !s.IsConnected() {
+		return nil // 如果连接已经关闭，直接返回
+	}
+
+	// 安全地关闭连接
+	if s.conn != nil {
+		err := s.conn.Close()
+		s.conn = nil // 确保连接对象被清理
+		return err
+	}
+
+	return nil
 }
 
 func (s *Suite) GenPacket(packetType int) (Packet, error) {
@@ -308,7 +333,7 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 // 			newHeader.BaseFee = new(big.Int).Set(s.chain.genesis.BaseFee)
 // 		}
 // 		// 创建区块体
-// 		body := &types.Body{
+// 		body: = &types.Body{
 // 			Transactions: txs,
 // 			Uncles:       []*types.Header{},
 // 			Withdrawals:  nil, // 如果不支持提款，保持为 nil
@@ -318,10 +343,10 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 // 		var receipts []*types.Receipt
 
 // 		// 创建 hasher
-// 		hasher := trie.NewStackTrie(nil)
+// 		 := trie.NewStackTrie(nil)
 
 // 		// 创建新区块
-// 		newBlock := types.NewBlock(newHeader, body, receipts, hasher)
+// 		newBlock: = types.NewBlock(newHeader, body, receipts, hasher)
 
 // 		// 计算总难度
 // 		td := calculateTotalDifficulty(s.chain)
@@ -474,10 +499,16 @@ func (s *Suite) InitializeAndConnect() error {
 	if err != nil {
 		return fmt.Errorf("dial failed: %v", err)
 	}
-	defer conn.Close()
+	//defer func() {
+	//	conn.Close()
+	//}()
+	//defer conn.Close()
 	if err := conn.peer(s.chain, nil); err != nil {
 		return fmt.Errorf("peer failed: %v", err)
 	}
+	////
+
+	///
 	return nil
 }
 
@@ -488,7 +519,7 @@ func (s *Suite) SendForkchoiceUpdated() error {
 // SendTxs sends the given transactions to the node and
 // expects the node to accept and propagate them.
 func (s *Suite) SendTxs(txs []*types.Transaction) error {
-	// Open sending conn.
+	// Open sending conning.
 	sendConn, err := s.dial()
 	if err != nil {
 		return err
@@ -566,7 +597,7 @@ func (c *Conn) ReadEth() (any, error) {
 			continue
 		}
 		if getProto(code) != ethProto {
-			// Read until eth message.
+			// Read until an eth message.
 			continue
 		}
 		code -= baseProtoLen
