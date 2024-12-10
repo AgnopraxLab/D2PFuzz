@@ -34,9 +34,16 @@ import (
 )
 
 var (
-	outputDir = "TraceOut"
-	EnvKey    = "FUZZYDIR"
+	outputDir     = "TraceOut"
+	EnvKey        = "FUZZYDIR"
+	globalV4Stats = make(map[string]*V4PacketStats)
 )
+
+type V4PacketStats struct {
+	ExecuteCount   int // Execute count
+	CheckTrueFail  int // First type of exception: Check is true but Success is false
+	CheckFalsePass int // Second type of exception: Check is false but Success is true
+}
 
 // SetFuzzyVMDir sets the output directory for FuzzyVM
 // If the environment variable FUZZYDIR is set, the output directory
@@ -116,6 +123,9 @@ func setupTrace(name string) *os.File {
 
 func discv4Fuzzer(engine int, target string) error {
 	testMaker := NewV4Maker(target)
+	if testMaker == nil {
+		return fmt.Errorf("failed to create V4Maker")
+	}
 	startTime := time.Now()
 
 	// Channel to listen for interrupt signals
@@ -162,6 +172,7 @@ func discv4Fuzzer(engine int, target string) error {
 		for _, packetType := range v4options {
 			req := testMaker.Client.GenPacket(packetType, testMaker.TargetList[0])
 			testMaker.PakcetSeed = append(testMaker.PakcetSeed, req)
+			globalV4Stats[req.Name()] = &V4PacketStats{0, 0, 0}
 		}
 
 		// for seed
@@ -180,9 +191,13 @@ func discv4Fuzzer(engine int, target string) error {
 					itration,
 					len(testMaker.PakcetSeed),
 					seed.Name())
-
-				if err = testMaker.PacketStart(traceFile, seed); err != nil {
+				if err = testMaker.PacketStart(traceFile, seed, globalV4Stats[seed.Name()]); err != nil {
 					return err
+				}
+				globalV4Stats[seed.Name()].ExecuteCount = globalV4Stats[seed.Name()].ExecuteCount + 1
+				for name, stats := range globalV4Stats {
+					fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d\n",
+						name, stats.ExecuteCount, stats.CheckTrueFail, stats.CheckFalsePass)
 				}
 				itration = itration + 1
 			}

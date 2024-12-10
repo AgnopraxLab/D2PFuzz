@@ -118,7 +118,7 @@ func (m *V4Maker) ToSubTest() *stJSON {
 }
 
 // PacketStart executes fuzzing by sending single packets in multiple goroutines and collecting feedback
-func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
+func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *V4PacketStats) error {
 	var (
 		wg           sync.WaitGroup
 		logger       *log.Logger
@@ -143,7 +143,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 	for i := 0; i < MutateCount; i++ {
 		wg.Add(1)
 
-		go func(iteration int, originalSeed discv4.Packet) {
+		go func(iteration int, originalSeed discv4.Packet, packetStats *V4PacketStats) {
 			defer wg.Done()
 
 			mutatedSeed := cloneAndMutatePacket(mutator, originalSeed)
@@ -152,26 +152,32 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet) error {
 			result.Check = allTrue(result.CheckResults)
 			result.PacketID = i
 
-			if result.Check != result.Success {
+			if result.Check && !result.Success {
 				mu.Lock()
+				packetStats.CheckTrueFail = packetStats.CheckTrueFail + 1
+				// m.PakcetSeed = append(m.PakcetSeed, originalSeed)
+				foundNewSeed = true
+				results = append(results, result)
+				mu.Unlock()
+			} else if !result.Check && result.Success {
+				mu.Lock()
+				packetStats.CheckFalsePass = packetStats.CheckFalsePass + 1
 				m.PakcetSeed = append(m.PakcetSeed, originalSeed)
 				foundNewSeed = true
+				results = append(results, result)
 				mu.Unlock()
 			}
-
-			mu.Lock()
-			results = append(results, result)
-			mu.Unlock()
-		}(i, seed)
+		}(i, seed, stats)
 
 		logger.Printf("================================================= Completed iteration %d =================================================", i+1)
+		// time.Sleep(PacketSleepTime)
 	}
 
 	wg.Wait()
 
 	// Only analyze and save results if we found new seeds
 	if foundNewSeed {
-		analyzeResults(results, logger, OutputDir)
+		// analyzeResults(results, logger, OutputDir)
 	}
 
 	return nil
@@ -350,7 +356,7 @@ func (m *V4Maker) checkPingSemantics(p *discv4.Ping) []bool {
 
 	// 4. Check if the expiration time is valid
 	if p.ENRSeq != m.Client.Self().Seq() {
-		fmt.Println("Ping ENRSeq does not match the client's ENRSeq")
+		// fmt.Println("Ping ENRSeq does not match the client's ENRSeq")
 		validityResults = append(validityResults, false) // Mark expiration check as failed
 	} else {
 		validityResults = append(validityResults, true) // Mark expiration check as success

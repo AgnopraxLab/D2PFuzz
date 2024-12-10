@@ -23,6 +23,16 @@ import (
 	"github.com/AgnopraxLab/D2PFuzz/fuzzer"
 )
 
+var (
+	globalV4Stats = make(map[string]*fuzzer.V4PacketStats)
+)
+
+func init() {
+	for _, packetType := range []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"} {
+		globalV4Stats[packetType] = &fuzzer.V4PacketStats{}
+	}
+}
+
 // RunFullBench runs a full benchmark with N runs.
 func RunFullBench(prot, target, chainDir, packetType string, N int, engine int) {
 	time, err := testExcution(prot, target, chainDir, packetType, N, engine)
@@ -51,7 +61,7 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 				testMaker.Start(os.Stdout)
 			} else {
 				packet := testMaker.Client.GenPacket(packetType, testMaker.TargetList[0])
-				testMaker.PacketStart(os.Stdout, packet)
+				testMaker.PacketStart(os.Stdout, packet, globalV4Stats[packet.Name()])
 			}
 		case "discv5":
 			testMaker := fuzzer.NewV5Maker(target)

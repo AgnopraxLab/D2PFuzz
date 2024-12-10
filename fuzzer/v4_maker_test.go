@@ -67,7 +67,7 @@ func TestPacketStart(t *testing.T) {
 
 			// 执行 PacketStart 函数
 			req := maker.Client.GenPacket("random", maker.TargetList[0])
-			err := maker.PacketStart(&buf, req)
+			err := maker.PacketStart(&buf, req, globalV4Stats[req.Name()])
 
 			// 验证错误情况
 			if tt.wantErr {
