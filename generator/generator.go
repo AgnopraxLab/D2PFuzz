@@ -111,18 +111,32 @@ func ReplaceNodeIP(n *enode.Node, newIP net.IP) *enode.Node {
 func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 	jwtPath, secret, err := eth.MakeJWTSecret()
 	if err != nil {
-		fmt.Printf("could not make jwt secret: %v", err)
+		return nil, fmt.Errorf("failed to make jwt secret: %v", err)
 	}
+
 	geth, err := eth.RunGeth(dir, jwtPath)
 	if err != nil {
-		fmt.Printf("could not run geth: %v", err)
+		return nil, fmt.Errorf("failed to run geth: %v", err)
 	}
-	defer geth.Close()
 
-	pri, _ := crypto.GenerateKey()
+	// 创建一个用于清理资源的函数
+	cleanup := func() {
+		fmt.Println("clear sources")
+		geth.Close()
+	}
+
+	// 生成私钥
+	pri, err := crypto.GenerateKey()
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("failed to generate private key: %v", err)
+	}
+
+	// 创建 Suite
 	client, err := eth.NewSuite(dest, dir, pri, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
 	if err != nil {
-		return nil, fmt.Errorf("new suite fail")
+		cleanup()
+		return nil, fmt.Errorf("failed to create suite: %v", err)
 	}
 
 	return client, nil

@@ -69,7 +69,11 @@ type ethPacketTestResult struct {
 func NewEthMaker(targetDir string, chain string) *EthMaker {
 	var suiteList []*eth.Suite
 
-	nodeList, _ := getList(targetDir)
+	nodeList, err := getList(targetDir)
+	if err != nil {
+		fmt.Printf("failed to read targetDir: %v", err)
+		return nil
+	}
 
 	for _, node := range nodeList {
 		suite, err := generator.Initeth(node, chain)
@@ -124,25 +128,34 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 
 	target := m.suiteList[0]
 
-	// 初始化连接
-	if err := target.InitializeAndConnect(); err != nil {
-		if logger != nil {
-			logger.Printf("Failed to initialize connection: %v", err)
-		}
-		return err
-	}
+	logger.Println("开始初始化连接...")
+
+	//// 初始化连接
+	//if err := target.InitializeAndConnect(); err != nil {
+	//	if logger != nil {
+	//		logger.Printf("Failed to initialize connection: %v", err)
+	//	}
+	//	return err
+	//}
+	//
+	//logger.Println("连接初始化成功")
 
 	// 生成随机请求包
-	req, _ := target.GenPacket(eth.StatusMsg)
+	req, err := target.GenPacket(eth.GetBlockHeadersMsg)
+	if err != nil {
+		logger.Printf("数据包生成失败: %v", err)
+		return err
+	}
+	logger.Printf("StatusPacket生成成功，包含以下信息\n")
 
-	for i := 0; i < MutateCount; i++ {
+	for i := 0; i < 1; i++ {
 		wg.Add(1)
 
 		go func(iteration int, currentReq eth.Packet) {
 			defer wg.Done()
 
 			result := ethPacketTestResult{
-				RequestType: fmt.Sprintf("%d", currentReq.Kind()),
+				RequestType: fmt.Sprintf("%x\n", currentReq.Kind()),
 			}
 
 			// 发送并等待响应
@@ -346,15 +359,53 @@ func (m *EthMaker) handleTransactionPacket(p *eth.TransactionsPacket, suite *eth
 }
 
 func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, suite *eth.Suite, traceOutput io.Writer) error {
+
+	fmt.Println("=== 开始函数执行 ===")
+	fmt.Printf("检查点1: p=%v, suite=%v\n", p, suite)
+
 	if traceOutput != nil {
-		fmt.Println(traceOutput, "Sending GetBlockHeadersPacket with RequestId: %d\n", p.RequestId)
+		fmt.Fprintf(traceOutput, "Preparing to send GetBlockHeadersPacket with RequestId: %d\n", p.RequestId)
 	}
 
-	if err := suite.SendMsg(eth.EthProto, eth.GetBlockHeadersMsg, p); err != nil {
+	fmt.Println("检查点2: 即将调用 SendMsg")
+	// 添加函数调用前的状态打印
+	fmt.Printf("SendMsg 参数: proto=%v, code=%v, msg=%v\n", eth.EthProto, eth.GetBlockHeadersMsg, p)
+
+	conn, err := suite.Dial()
+	if err != nil {
+		return fmt.Errorf("dial failed: %v", err)
+	}
+	//defer func() {
+	//	conn.Close()
+	//}()
+	//defer conn.Close()
+	if err := conn.Peer(suite.Chain(), nil); err != nil {
+		return fmt.Errorf("peer failed: %v", err)
+	}
+
+	if err := conn.Write(eth.EthProto, eth.GetBlockHeadersMsg, p); err != nil {
+		fmt.Println("检查点3: SendMsg 返回错误")
+
 		return fmt.Errorf("could not send GetBlockHeadersMsg: %v", err)
 	}
 
+	fmt.Println("检查点4: SendMsg 执行成功")
+	fmt.Println("=== 函数执行结束 ===")
+
+	// 添加发送确认日志
+	if traceOutput != nil {
+		fmt.Fprintf(traceOutput, "Successfully sent GetBlockHeadersPacket with RequestId: %d. Waiting for response...\n", p.RequestId)
+		fmt.Fprintf(traceOutput, "Message details: Protocol=%d, MsgType=%d\n", eth.EthProto, eth.GetBlockHeadersMsg)
+	}
+
 	headers := new(eth.BlockHeadersPacket)
+
+	// 添加等待接收日志
+	if traceOutput != nil {
+		fmt.Fprintf(traceOutput, "Initializing BlockHeaders response packet. Starting to wait for response...\n")
+		fmt.Fprintf(traceOutput, "Expecting response for RequestId: %d\n", p.RequestId)
+	}
+
 	if err := suite.ReadMsg(eth.EthProto, eth.BlockHeadersMsg, headers); err != nil {
 		return fmt.Errorf("error reading BlockHeadersMsg: %v", err)
 	}
