@@ -118,7 +118,7 @@ func (m *V4Maker) ToSubTest() *stJSON {
 }
 
 // PacketStart executes fuzzing by sending single packets in multiple goroutines and collecting feedback
-func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *V4PacketStats) error {
+func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *UDPPacketStats) error {
 	var (
 		wg           sync.WaitGroup
 		logger       *log.Logger
@@ -143,10 +143,10 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *
 	for i := 0; i < MutateCount; i++ {
 		wg.Add(1)
 
-		go func(iteration int, originalSeed discv4.Packet, packetStats *V4PacketStats) {
+		go func(iteration int, originalSeed discv4.Packet, packetStats *UDPPacketStats) {
 			defer wg.Done()
 
-			mutatedSeed := cloneAndMutatePacket(mutator, originalSeed)
+			mutatedSeed := cloneAndMutateV4Packet(mutator, originalSeed)
 			result := sendAndWaitResponse(m, m.TargetList[0], mutatedSeed, logger)
 			result.CheckResults = m.checkRequestSemantics(mutatedSeed)
 			result.Check = allTrue(result.CheckResults)
@@ -162,9 +162,13 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *
 			} else if !result.Check && result.Success {
 				mu.Lock()
 				packetStats.CheckFalsePass = packetStats.CheckFalsePass + 1
-				m.PakcetSeed = append(m.PakcetSeed, originalSeed)
+				// m.PakcetSeed = append(m.PakcetSeed, originalSeed)
 				foundNewSeed = true
 				results = append(results, result)
+				mu.Unlock()
+			} else if result.Check && result.Success {
+				mu.Lock()
+				packetStats.CheckTruePass = packetStats.CheckTruePass + 1
 				mu.Unlock()
 			}
 		}(i, seed, stats)
@@ -485,8 +489,8 @@ func analyzeResults(results []v4packetTestResult, logger *log.Logger, outputDir 
 	return nil
 }
 
-// cloneAndMutatePacket clones and mutates the packet
-func cloneAndMutatePacket(mutator *fuzzing.Mutator, seed discv4.Packet) discv4.Packet {
+// cloneAndMutateV4Packet clones and mutates the packet
+func cloneAndMutateV4Packet(mutator *fuzzing.Mutator, seed discv4.Packet) discv4.Packet {
 	switch p := seed.(type) {
 	case *discv4.Ping:
 		return mutatePing(mutator, p)

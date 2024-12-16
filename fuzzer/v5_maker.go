@@ -23,29 +23,35 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv5"
+	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
 
 var (
+	v5options        = []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"}
 	v5state          = []string{"ping", "findnode"}
-	HandshakeTimeout = 5 * time.Second // 握手专用超时
+	HandshakeTimeout = 1 * time.Second // Timeout for handshake
 )
 
 type V5Maker struct {
-	client     *discv5.UDPv5
-	targetList []*enode.Node
+	Client     *discv5.UDPv5
+	TargetList []*enode.Node
 
 	testSeq  []string // testcase sequence
 	stateSeq []string // steate sequence
+
+	PakcetSeed []discv5.Packet // Use store packet seed to mutator
 
 	Series []StateSeries
 	forks  []string
@@ -55,9 +61,10 @@ type V5Maker struct {
 }
 
 type v5packetTestResult struct {
+	PacketID     int
 	RequestType  string
-	CheckResults []bool
 	Check        bool
+	CheckResults []bool
 	Success      bool
 	Response     discv5.Packet
 	Error        error
@@ -79,8 +86,8 @@ func NewV5Maker(targetDir string) *V5Maker {
 	nodeList, _ = getList(targetDir)
 
 	v5maker := &V5Maker{
-		client:     cli,
-		targetList: nodeList,
+		Client:     cli,
+		TargetList: nodeList,
 		testSeq:    generateV5TestSeq(),
 		stateSeq:   v5state,
 	}
@@ -110,7 +117,7 @@ func (m *V5Maker) ToSubTest() *stJSON {
 	return st
 }
 
-func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
+func (m *V5Maker) PacketStart(traceOutput io.Writer, seed discv5.Packet, stats *UDPPacketStats) error {
 	var (
 		wg      sync.WaitGroup
 		logger  *log.Logger
@@ -122,48 +129,48 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
-	target := m.targetList[0]
-
 	// Send initial ping packet to establish connection
-	ping := m.client.GenPacket("ping", target)
-
-	nonce, err := m.sendAndReceive(target, ping, traceOutput, logger)
+	ping := m.Client.GenPacket("ping", m.TargetList[0])
+	_, err := m.sendAndReceive(m.TargetList[0], ping, logger)
 	if err != nil {
-		if logger != nil {
-			logger.Printf("Failed to send initial ping: %v", err)
-		}
-	}
-	if logger != nil {
-		logger.Printf("Initial ping sent, nonce: %x", nonce)
+		fmt.Printf("Send initial ping failed: %s", err)
 	}
 
-	req := m.client.GenPacket("ping", target)
+	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
 
-	for i := 0; i < 2; i++ {
+	for i := 0; i < MutateCount; i++ {
 		wg.Add(1)
 
-		go func(iteration int, currentReq discv5.Packet) {
+		go func(iteration int, originalSeed discv5.Packet, packetStats *UDPPacketStats) {
 			defer wg.Done()
 
-			result := v5packetTestResult{
-				RequestType: currentReq.Name(),
-			}
-
-			_, err := m.sendAndReceive(target, currentReq, traceOutput, logger)
+			mutatedSeed := cloneAndMutateV5Packet(mutator, originalSeed)
+			result, err := m.sendAndReceive(m.TargetList[0], mutatedSeed, logger)
 			if err != nil {
-				result.Error = err
-				result.Success = false
-			} else {
-				result.Success = true
+				fmt.Errorf("failed to send and receive packet")
 			}
-			result.CheckResults = m.checkRequestSemanticsV5(currentReq)
+			result.CheckResults = m.checkRequestSemanticsV5(mutatedSeed)
 			result.Check = allTrue(result.CheckResults)
+			result.PacketID = i
 
-			mu.Lock()
-			results = append(results, result)
-			mu.Unlock()
-
-		}(i, req)
+			if result.Check && !result.Success {
+				mu.Lock()
+				packetStats.CheckTrueFail = packetStats.CheckTrueFail + 1
+				// m.PakcetSeed = append(m.PakcetSeed, mutatedSeed)
+				results = append(results, result)
+				mu.Unlock()
+			} else if !result.Check && result.Success {
+				mu.Lock()
+				packetStats.CheckFalsePass = packetStats.CheckFalsePass + 1
+				// m.PakcetSeed = append(m.PakcetSeed, mutatedSeed)
+				results = append(results, result)
+				mu.Unlock()
+			} else if result.Check && result.Success {
+				mu.Lock()
+				packetStats.CheckTruePass = packetStats.CheckTruePass + 1
+				mu.Unlock()
+			}
+		}(i, seed, stats)
 
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -178,8 +185,8 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer) error {
 func (m *V5Maker) Start(traceOutput io.Writer) error {
 	var (
 		wg       sync.WaitGroup
-		resultCh = make(chan *v5result, len(m.targetList))
-		errorCh  = make(chan error, len(m.targetList))
+		resultCh = make(chan *v5result, len(m.TargetList))
+		errorCh  = make(chan error, len(m.TargetList))
 		logger   *log.Logger
 	)
 
@@ -188,7 +195,7 @@ func (m *V5Maker) Start(traceOutput io.Writer) error {
 	}
 
 	// Iterate over each target object
-	for _, target := range m.targetList {
+	for _, target := range m.TargetList {
 		wg.Add(1)
 		go func(target *enode.Node) {
 			defer wg.Done()
@@ -197,27 +204,21 @@ func (m *V5Maker) Start(traceOutput io.Writer) error {
 			}
 			// First round: sending testSeq packets
 			for _, packetType := range m.testSeq {
-				req := m.client.GenPacket(packetType, target)
-				nonce, err := m.sendAndReceive(target, req, traceOutput, logger)
+				req := m.Client.GenPacket(packetType, target)
+				_, err := m.sendAndReceive(target, req, logger)
 				if err != nil {
 					fmt.Errorf("failed to send and receive packet")
 				}
 				logger.Printf("Sent test packet to target: %s, packet: %v", target.String(), req.Kind())
-				if traceOutput != nil {
-					logger.Println(traceOutput, "Sent packet, nonce: %x\n", nonce)
-				}
 			}
 
 			// Round 2: sending stateSeq packets
 			for _, packetType := range m.stateSeq {
-				req := m.client.GenPacket(packetType, target)
+				req := m.Client.GenPacket(packetType, target)
 				// Set the expected response type based on the packet type
-				nonce, err := m.sendAndReceive(target, req, traceOutput, logger)
+				_, err := m.sendAndReceive(target, req, logger)
 				if err != nil {
 					fmt.Errorf("failed to send and receive packet")
-				}
-				if traceOutput != nil {
-					logger.Println(traceOutput, "Sent packet, nonce: %x\n", nonce)
 				}
 			}
 			resultCh <- result
@@ -245,13 +246,17 @@ func (m *V5Maker) Start(traceOutput io.Writer) error {
 }
 
 func (m *V5Maker) Close() {
-	if m.client != nil {
-		m.client.Close()
+	if m.Client != nil {
+		m.Client.Close()
 	}
 }
 
-func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOutput io.Writer, logger *log.Logger) ([]byte, error) {
-	// 根据请求类型确定期望的响应类型
+func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, logger *log.Logger) (v5packetTestResult, error) {
+	result := v5packetTestResult{
+		RequestType: req.Name(),
+	}
+
+	// Determine expected response type based on request type
 	var responseType byte
 	switch req.Kind() {
 	case discv5.PingMsg:
@@ -261,74 +266,85 @@ func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, traceOut
 	case discv5.TalkRequestMsg:
 		responseType = discv5.TalkResponseMsg
 	default:
-		// 其他类型的包可能不需要等待响应
+		// Other packet types may not need to wait for response
 		responseType = req.Kind()
 	}
-	// 创建 call，使用确定的响应类型
-	call := m.client.CallToNode(target, responseType, req)
+	// Create call with determined response type
+	call := m.Client.CallToNode(target, responseType, req)
 
-	defer m.client.CallDone(call) // 使用 defer 确保清理
+	defer m.Client.CallDone(call) // Use defer to ensure cleanup
 
-	respChan := m.client.GetCallResponseChan(call)
-	errChan := m.client.GetCallErrorChan(call)
-	// 等待响应
+	respChan := m.Client.GetCallResponseChan(call)
+	errChan := m.Client.GetCallErrorChan(call)
+	// Wait for response
 	select {
 	case resp := <-respChan:
-		// 根据请求类型处理并返回相应的值
+		// Process and return value based on request type
 		switch req.Kind() {
 		case discv5.PingMsg:
 			if pong, ok := resp.(*discv5.Pong); ok {
 				logger.Printf("Received PONG response")
-				return pong.ReqID, nil
+				result.Response = pong
+				result.Success = true
+				return result, nil
 			}
 		case discv5.FindnodeMsg:
 			if nodes, ok := resp.(*discv5.Nodes); ok {
 				logger.Printf("Received NODES response")
-				return nodes.ReqID, nil
+				result.Response = nodes
+				result.Success = true
+				return result, nil
 			}
 		case discv5.TalkRequestMsg:
 			if talkResp, ok := resp.(*discv5.TalkResponse); ok {
 				logger.Printf("Received TALK_RESPONSE")
-				return talkResp.ReqID, nil
+				result.Response = talkResp
+				result.Success = true
+				return result, nil
 			}
+		default:
+			logger.Printf("Received unexpected response type: %T", resp)
+			result.Success = true
+			result.Response = resp
+			return result, fmt.Errorf("unexpected response type: %T", resp)
 		}
-		return nil, fmt.Errorf("unexpected response type: %T", resp)
 
 	case err := <-errChan:
-		return []byte{}, err
+		return result, err
 	}
+	return result, fmt.Errorf("unknown result")
 }
 
 func (m *V5Maker) waitForHandshakeResponse(whoareyou *discv5.Whoareyou, target *enode.Node, req discv5.Packet, traceOutput io.Writer, logger *log.Logger) (discv5.Nonce, error) {
-	m.client.SetReadDeadline(time.Now().Add(HandshakeTimeout))
+	m.Client.SetReadDeadline(time.Now().Add(HandshakeTimeout))
 
 	buf := make([]byte, 1280)
 
-	// 等待并处理响应
+	// Wait and process response
 	for {
-		n, fromAddr, err := m.client.ReadFromUDP(buf)
+		n, fromAddr, err := m.Client.ReadFromUDP(buf)
 		if err != nil {
 			return discv5.Nonce{}, fmt.Errorf("failed to read handshake response: %v", err)
 		}
 
-		packet, _, err := m.client.Decode(buf[:n], fromAddr.String())
+		packet, _, err := m.Client.Decode(buf[:n], fromAddr.String())
 		if err != nil {
 			return discv5.Nonce{}, fmt.Errorf("failed to decode handshake response: %v", err)
 		}
 
 		switch p := packet.(type) {
 		case *discv5.Unknown:
-			// UNKNOWN 包是握手过程的正常部分
+			// UNKNOWN packet is normal part of handshake process
 			logger.Printf("Received expected Unknown packet during handshake")
 			continue
 
 		case *discv5.Pong:
-			// 收到 PONG 表示握手成功完成
+			// Receiving PONG indicates successful handshake completion
 			logger.Printf("Handshake completed successfully, received Pong")
 			return discv5.Nonce{}, nil
 
 		case *discv5.Whoareyou:
-			// 如果在这里又收到 WHOAREYOU，可能之前的认证包有问题
+			// If receiving WHOAREYOU here, previous auth packet may have issues
 			logger.Printf("Unexpected WHOAREYOU during handshake")
 			return discv5.Nonce{}, fmt.Errorf("received unexpected WHOAREYOU")
 
@@ -369,14 +385,13 @@ func (m *V5Maker) SetResult(root, logs common.Hash) {
 }
 
 func generateV5TestSeq() []string {
-	options := []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"}
 	seq := make([]string, SequenceLength)
 
 	seq[0] = "ping"
 
 	rand.Seed(time.Now().UnixNano())
 	for i := 1; i < SequenceLength; i++ {
-		seq[i] = options[rand.Intn(len(options))]
+		seq[i] = v5options[rand.Intn(len(v5options))]
 	}
 
 	return seq
@@ -402,7 +417,7 @@ func (m *V5Maker) checkPingSemanticsV5(p *discv5.Ping) []bool {
 	var validityResults []bool
 
 	// 1. Check if the ENRSeq is valid
-	if p.ENRSeq != m.client.Self().Seq() {
+	if p.ENRSeq != m.Client.Self().Seq() {
 		validityResults = append(validityResults, false) // Mark expiration check as failed
 	} else {
 		validityResults = append(validityResults, true) // Mark expiration check as success
@@ -432,14 +447,14 @@ func (m *V5Maker) checkWhoareyouSemantics(w *discv5.Whoareyou) []bool {
 	var validityResults []bool
 
 	// 1. Check if RecordSeq matches the client's current sequence
-	if w.RecordSeq != m.targetList[0].Seq() {
+	if w.RecordSeq != m.TargetList[0].Seq() {
 		validityResults = append(validityResults, false)
 	} else {
 		validityResults = append(validityResults, true)
 	}
 
 	// 2. Check if the Node matches the client's local node
-	if w.Node != m.targetList[0] {
+	if w.Node != m.TargetList[0] {
 		validityResults = append(validityResults, false)
 	} else {
 		fmt.Println("Node is invalid")
@@ -486,4 +501,112 @@ func analyzeResultsV5(results []v5packetTestResult, logger *log.Logger, saveToFi
 	}
 
 	return nil
+}
+
+// Main function for cloning and mutating v5 packets
+func cloneAndMutateV5Packet(mutator *fuzzing.Mutator, seed discv5.Packet) discv5.Packet {
+	switch p := seed.(type) {
+	case *discv5.Ping:
+		return mutatePingV5(mutator, p)
+	case *discv5.Pong:
+		return mutatePongV5(mutator, p)
+	case *discv5.Findnode:
+		return mutateFindnodeV5(mutator, p)
+	case *discv5.Nodes:
+		return mutateNodesV5(mutator, p)
+	case *discv5.TalkRequest:
+		return mutateTalkRequestV5(mutator, p)
+	case *discv5.TalkResponse:
+		return mutateTalkResponseV5(mutator, p)
+	case *discv5.Whoareyou:
+		return mutateWhoareyouV5(mutator, p)
+	default:
+		return seed
+	}
+}
+
+func mutatePingV5(mutator *fuzzing.Mutator, original *discv5.Ping) *discv5.Ping {
+	mutated := *original
+
+	// 使用已有的变异方法
+	mutator.MutateBytes(&mutated.ReqID)
+	mutator.MutateENRSeq(&mutated.ENRSeq)
+
+	return &mutated
+}
+
+func mutatePongV5(mutator *fuzzing.Mutator, original *discv5.Pong) *discv5.Pong {
+	mutated := *original
+
+	mutator.MutateBytes(&mutated.ReqID)
+	mutator.MutateENRSeq(&mutated.ENRSeq)
+	// Mutate network address
+	if mutator.Bool() {
+		mutated.ToIP = net.IPv4(
+			byte(mutator.Rand(256)),
+			byte(mutator.Rand(256)),
+			byte(mutator.Rand(256)),
+			byte(mutator.Rand(256)),
+		)
+		mutated.ToPort = uint16(mutator.Rand(65536))
+	}
+
+	return &mutated
+}
+
+func mutateFindnodeV5(mutator *fuzzing.Mutator, original *discv5.Findnode) *discv5.Findnode {
+	mutated := *original
+
+	mutator.MutateBytes(&mutated.ReqID)
+	mutator.MutateDistances(&mutated.Distances)
+
+	return &mutated
+}
+
+func mutateNodesV5(mutator *fuzzing.Mutator, original *discv5.Nodes) *discv5.Nodes {
+	mutated := *original
+
+	mutator.MutateBytes(&mutated.ReqID)
+	mutator.MutateNodes(&mutated.Nodes)
+
+	// Mutate RespCount
+	if mutator.Bool() {
+		mutated.RespCount = uint8(mutator.Rand(256))
+	}
+
+	return &mutated
+}
+
+func mutateTalkRequestV5(mutator *fuzzing.Mutator, original *discv5.TalkRequest) *discv5.TalkRequest {
+	mutated := *original
+
+	mutator.MutateBytes(&mutated.ReqID)
+	mutator.MutateBytes(&mutated.Message)
+
+	// Mutate Protocol
+	if mutator.Bool() {
+		protocols := []string{"test-protocol", "discv5", "eth", "snap"}
+		mutated.Protocol = protocols[mutator.Rand(len(protocols))]
+	}
+
+	return &mutated
+}
+
+func mutateTalkResponseV5(mutator *fuzzing.Mutator, original *discv5.TalkResponse) *discv5.TalkResponse {
+	mutated := *original
+
+	mutator.MutateBytes(&mutated.ReqID)
+	mutator.MutateBytes(&mutated.Message)
+
+	return &mutated
+}
+
+func mutateWhoareyouV5(mutator *fuzzing.Mutator, original *discv5.Whoareyou) *discv5.Whoareyou {
+	mutated := *original
+
+	mutator.MutateBytes(&mutated.ChallengeData)
+	mutator.FillBytes((*[]byte)(unsafe.Pointer(&mutated.IDNonce)))
+	mutator.MutateENRSeq(&mutated.RecordSeq)
+
+	return &mutated
 }

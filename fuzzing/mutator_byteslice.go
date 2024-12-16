@@ -21,7 +21,7 @@ func byteSliceRemoveBytes(m *Mutator, b []byte) []byte {
 	if len(b) <= 1 {
 		return nil
 	}
-	pos0 := m.rand(len(b))
+	pos0 := m.Rand(len(b))
 	pos1 := pos0 + m.chooseLen(len(b)-pos0)
 	copy(b[pos0:], b[pos1:])
 	b = b[:len(b)-(pos1-pos0)]
@@ -31,7 +31,7 @@ func byteSliceRemoveBytes(m *Mutator, b []byte) []byte {
 // byteSliceInsertRandomBytes inserts a chunk of random bytes into b at a random
 // position.
 func byteSliceInsertRandomBytes(m *Mutator, b []byte) []byte {
-	pos := m.rand(len(b) + 1)
+	pos := m.Rand(len(b) + 1)
 	n := m.chooseLen(1024)
 	if len(b)+n >= cap(b) {
 		return nil
@@ -39,7 +39,7 @@ func byteSliceInsertRandomBytes(m *Mutator, b []byte) []byte {
 	b = b[:len(b)+n]
 	copy(b[pos+n:], b[pos:])
 	for i := 0; i < n; i++ {
-		b[pos+i] = byte(m.rand(256))
+		b[pos+i] = byte(m.Rand(256))
 	}
 	return b
 }
@@ -50,10 +50,10 @@ func byteSliceDuplicateBytes(m *Mutator, b []byte) []byte {
 	if len(b) <= 1 {
 		return nil
 	}
-	src := m.rand(len(b))
-	dst := m.rand(len(b))
+	src := m.Rand(len(b))
+	dst := m.Rand(len(b))
 	for dst == src {
-		dst = m.rand(len(b))
+		dst = m.Rand(len(b))
 	}
 	n := m.chooseLen(len(b) - src)
 	// Use the end of the slice as scratch space to avoid doing an
@@ -83,10 +83,10 @@ func byteSliceOverwriteBytes(m *Mutator, b []byte) []byte {
 	if len(b) <= 1 {
 		return nil
 	}
-	src := m.rand(len(b))
-	dst := m.rand(len(b))
+	src := m.Rand(len(b))
+	dst := m.Rand(len(b))
 	for dst == src {
-		dst = m.rand(len(b))
+		dst = m.Rand(len(b))
 	}
 	n := m.chooseLen(len(b) - src - 1)
 	copy(b[dst:], b[src:src+n])
@@ -98,8 +98,8 @@ func byteSliceBitFlip(m *Mutator, b []byte) []byte {
 	if len(b) == 0 {
 		return nil
 	}
-	pos := m.rand(len(b))
-	b[pos] ^= 1 << uint(m.rand(8))
+	pos := m.Rand(len(b))
+	b[pos] ^= 1 << uint(m.Rand(8))
 	return b
 }
 
@@ -108,11 +108,11 @@ func byteSliceXORByte(m *Mutator, b []byte) []byte {
 	if len(b) == 0 {
 		return nil
 	}
-	pos := m.rand(len(b))
+	pos := m.Rand(len(b))
 	// In order to avoid a no-op (where the random value matches
 	// the existing value), use XOR instead of just setting to
 	// the random value.
-	b[pos] ^= byte(1 + m.rand(255))
+	b[pos] ^= byte(1 + m.Rand(255))
 	return b
 }
 
@@ -121,10 +121,10 @@ func byteSliceSwapByte(m *Mutator, b []byte) []byte {
 	if len(b) <= 1 {
 		return nil
 	}
-	src := m.rand(len(b))
-	dst := m.rand(len(b))
+	src := m.Rand(len(b))
+	dst := m.Rand(len(b))
 	for dst == src {
-		dst = m.rand(len(b))
+		dst = m.Rand(len(b))
 	}
 	b[src], b[dst] = b[dst], b[src]
 	return b
@@ -135,9 +135,9 @@ func byteSliceArithmeticUint8(m *Mutator, b []byte) []byte {
 	if len(b) == 0 {
 		return nil
 	}
-	pos := m.rand(len(b))
-	v := byte(m.rand(35) + 1)
-	if m.bool() {
+	pos := m.Rand(len(b))
+	v := byte(m.Rand(35) + 1)
+	if m.Bool() {
 		b[pos] += v
 	} else {
 		b[pos] -= v
@@ -150,11 +150,11 @@ func byteSliceArithmeticUint16(m *Mutator, b []byte) []byte {
 	if len(b) < 2 {
 		return nil
 	}
-	v := uint16(m.rand(35) + 1)
-	if m.bool() {
+	v := uint16(m.Rand(35) + 1)
+	if m.Bool() {
 		v = 0 - v
 	}
-	pos := m.rand(len(b) - 1)
+	pos := m.Rand(len(b) - 1)
 	enc := m.randByteOrder()
 	enc.PutUint16(b[pos:], enc.Uint16(b[pos:])+v)
 	return b
@@ -165,11 +165,11 @@ func byteSliceArithmeticUint32(m *Mutator, b []byte) []byte {
 	if len(b) < 4 {
 		return nil
 	}
-	v := uint32(m.rand(35) + 1)
-	if m.bool() {
+	v := uint32(m.Rand(35) + 1)
+	if m.Bool() {
 		v = 0 - v
 	}
-	pos := m.rand(len(b) - 3)
+	pos := m.Rand(len(b) - 3)
 	enc := m.randByteOrder()
 	enc.PutUint32(b[pos:], enc.Uint32(b[pos:])+v)
 	return b
@@ -180,11 +180,11 @@ func byteSliceArithmeticUint64(m *Mutator, b []byte) []byte {
 	if len(b) < 8 {
 		return nil
 	}
-	v := uint64(m.rand(35) + 1)
-	if m.bool() {
+	v := uint64(m.Rand(35) + 1)
+	if m.Bool() {
 		v = 0 - v
 	}
-	pos := m.rand(len(b) - 7)
+	pos := m.Rand(len(b) - 7)
 	enc := m.randByteOrder()
 	enc.PutUint64(b[pos:], enc.Uint64(b[pos:])+v)
 	return b
@@ -196,8 +196,8 @@ func byteSliceOverwriteInterestingUint8(m *Mutator, b []byte) []byte {
 	if len(b) == 0 {
 		return nil
 	}
-	pos := m.rand(len(b))
-	b[pos] = byte(interesting8[m.rand(len(interesting8))])
+	pos := m.Rand(len(b))
+	b[pos] = byte(interesting8[m.Rand(len(interesting8))])
 	return b
 }
 
@@ -207,8 +207,8 @@ func byteSliceOverwriteInterestingUint16(m *Mutator, b []byte) []byte {
 	if len(b) < 2 {
 		return nil
 	}
-	pos := m.rand(len(b) - 1)
-	v := uint16(interesting16[m.rand(len(interesting16))])
+	pos := m.Rand(len(b) - 1)
+	v := uint16(interesting16[m.Rand(len(interesting16))])
 	m.randByteOrder().PutUint16(b[pos:], v)
 	return b
 }
@@ -219,8 +219,8 @@ func byteSliceOverwriteInterestingUint32(m *Mutator, b []byte) []byte {
 	if len(b) < 4 {
 		return nil
 	}
-	pos := m.rand(len(b) - 3)
-	v := uint32(interesting32[m.rand(len(interesting32))])
+	pos := m.Rand(len(b) - 3)
+	v := uint32(interesting32[m.Rand(len(interesting32))])
 	m.randByteOrder().PutUint32(b[pos:], v)
 	return b
 }
@@ -230,7 +230,7 @@ func byteSliceInsertConstantBytes(m *Mutator, b []byte) []byte {
 	if len(b) <= 1 {
 		return nil
 	}
-	dst := m.rand(len(b))
+	dst := m.Rand(len(b))
 	// TODO(rolandshoemaker,katiehockman): 4096 was mainly picked
 	// randomly. We may want to either pick a much larger value
 	// (AFL uses 32768, paired with a similar impl to chooseLen
@@ -245,7 +245,7 @@ func byteSliceInsertConstantBytes(m *Mutator, b []byte) []byte {
 	}
 	b = b[:len(b)+n]
 	copy(b[dst+n:], b[dst:])
-	rb := byte(m.rand(256))
+	rb := byte(m.Rand(256))
 	for i := dst; i < dst+n; i++ {
 		b[i] = rb
 	}
@@ -257,9 +257,9 @@ func byteSliceOverwriteConstantBytes(m *Mutator, b []byte) []byte {
 	if len(b) <= 1 {
 		return nil
 	}
-	dst := m.rand(len(b))
+	dst := m.Rand(len(b))
 	n := m.chooseLen(len(b) - dst)
-	rb := byte(m.rand(256))
+	rb := byte(m.Rand(256))
 	for i := dst; i < dst+n; i++ {
 		b[i] = rb
 	}
@@ -271,7 +271,7 @@ func byteSliceShuffleBytes(m *Mutator, b []byte) []byte {
 	if len(b) <= 1 {
 		return nil
 	}
-	dst := m.rand(len(b))
+	dst := m.Rand(len(b))
 	n := m.chooseLen(len(b) - dst)
 	if n <= 2 {
 		return nil
@@ -280,7 +280,7 @@ func byteSliceShuffleBytes(m *Mutator, b []byte) []byte {
 	// to dst, swapping each element with another element in
 	// dst:dst+n (Fisher-Yates shuffle).
 	for i := n - 1; i > 0; i-- {
-		j := m.rand(i + 1)
+		j := m.Rand(i + 1)
 		b[dst+i], b[dst+j] = b[dst+j], b[dst+i]
 	}
 	return b
@@ -291,10 +291,10 @@ func byteSliceSwapBytes(m *Mutator, b []byte) []byte {
 	if len(b) <= 1 {
 		return nil
 	}
-	src := m.rand(len(b))
-	dst := m.rand(len(b))
+	src := m.Rand(len(b))
+	dst := m.Rand(len(b))
 	for dst == src {
-		dst = m.rand(len(b))
+		dst = m.Rand(len(b))
 	}
 	// Choose the random length as len(b) - max(src, dst)
 	// so that we don't attempt to swap a chunk that extends

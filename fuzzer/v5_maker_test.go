@@ -2,12 +2,13 @@ package fuzzer
 
 import (
 	"bytes"
+	"net"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"net"
-	"testing"
 )
 
 // mockNode 创建一个测试用的 enode 节点
@@ -33,7 +34,7 @@ func Test5PacketStart(t *testing.T) {
 			setupMaker: func() *V5Maker {
 				maker := NewV5Maker("../test")
 				// 设置一个 mock 节点作为目标
-				maker.targetList = []*enode.Node{mock5Node(t)}
+				maker.TargetList = []*enode.Node{mock5Node(t)}
 				return maker
 			},
 			wantErr:     false, // 期望成功执行
@@ -63,9 +64,9 @@ func Test5PacketStart(t *testing.T) {
 
 			// 创建一个缓冲区用于捕获日志输出
 			var buf bytes.Buffer
-
+			packet := maker.Client.GenPacket("ping", maker.TargetList[0])
 			// 执行 PacketStart 函数
-			err := maker.PacketStart(&buf)
+			err := maker.PacketStart(&buf, packet, globalV5Stats[packet.Name()])
 
 			// 验证错误情况
 			if tt.wantErr {

@@ -24,12 +24,16 @@ import (
 )
 
 var (
-	globalV4Stats = make(map[string]*fuzzer.V4PacketStats)
+	globalV4Stats = make(map[string]*fuzzer.UDPPacketStats)
+	globalV5Stats = make(map[string]*fuzzer.UDPPacketStats)
 )
 
 func init() {
 	for _, packetType := range []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"} {
-		globalV4Stats[packetType] = &fuzzer.V4PacketStats{}
+		globalV4Stats[packetType] = &fuzzer.UDPPacketStats{}
+	}
+	for _, packetType := range []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"} {
+		globalV5Stats[packetType] = &fuzzer.UDPPacketStats{}
 	}
 }
 
@@ -70,7 +74,8 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 			if engine == 1 {
 				testMaker.Start(os.Stdout)
 			} else {
-				testMaker.PacketStart(os.Stdout)
+				packet := testMaker.Client.GenPacket(packetType, testMaker.TargetList[0])
+				testMaker.PacketStart(os.Stdout, packet, globalV5Stats[packet.Name()])
 			}
 		case "eth":
 			testMaker := fuzzer.NewEthMaker(target, chainDir)
