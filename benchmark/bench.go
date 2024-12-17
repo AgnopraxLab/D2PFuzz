@@ -20,6 +20,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
 	"github.com/AgnopraxLab/D2PFuzz/fuzzer"
 )
 
@@ -65,7 +66,8 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 				}
 				testMaker.PacketStart(os.Stdout, packet, globalV4Stats[packet.Name()])
 				fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
-					packet.Name(), globalV4Stats[packet.Name()].ExecuteCount, globalV4Stats[packet.Name()].CheckTrueFail, globalV4Stats[packet.Name()].CheckFalsePass, globalV4Stats[packet.Name()].CheckTruePass)
+					packet.Name(), globalV4Stats[packet.Name()].ExecuteCount, globalV4Stats[packet.Name()].CheckTrueFail,
+					globalV4Stats[packet.Name()].CheckFalsePass, globalV4Stats[packet.Name()].CheckTruePass)
 			}
 		case "discv5":
 			testMaker := fuzzer.NewV5Maker(target)
@@ -82,16 +84,55 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 				}
 				testMaker.PacketStart(os.Stdout, packet, globalV5Stats[packet.Name()])
 				fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
-					packet.Name(), globalV5Stats[packet.Name()].ExecuteCount, globalV5Stats[packet.Name()].CheckTrueFail, globalV5Stats[packet.Name()].CheckFalsePass, globalV5Stats[packet.Name()].CheckTruePass)
+					packet.Name(), globalV5Stats[packet.Name()].ExecuteCount, globalV5Stats[packet.Name()].CheckTrueFail,
+					globalV5Stats[packet.Name()].CheckFalsePass, globalV5Stats[packet.Name()].CheckTruePass)
 			}
 		case "eth":
 			testMaker := fuzzer.NewEthMaker(target, chainDir)
 			if engine == 1 {
 				testMaker.Start(os.Stdout)
 			} else {
-				testMaker.PacketStart(os.Stdout)
+				packetTypeInt := getEthPacketType(packetType)
+				packet, err := testMaker.SuiteList[0].GenPacket(packetTypeInt)
+				if err != nil {
+					fmt.Printf("Failed to generate packet: %v\n", err)
+				}
+				testMaker.PacketStart(os.Stdout, packet)
 			}
 		}
 	}
 	return time.Since(start), nil
+}
+
+func getEthPacketType(packetType string) int {
+	switch packetType {
+	case "Status":
+		return eth.StatusMsg // 0x00
+	case "NewBlockHashes":
+		return eth.NewBlockHashesMsg // 0x01
+	case "Transactions":
+		return eth.TransactionsMsg // 0x02
+	case "GetBlockHeaders":
+		return eth.GetBlockHeadersMsg // 0x03
+	case "BlockHeaders":
+		return eth.BlockHeadersMsg // 0x04
+	case "GetBlockBodies":
+		return eth.GetBlockBodiesMsg // 0x05
+	case "BlockBodies":
+		return eth.BlockBodiesMsg // 0x06
+	case "NewBlock":
+		return eth.NewBlockMsg // 0x07
+	case "NewPooledTransactionHashes":
+		return eth.NewPooledTransactionHashesMsg // 0x08
+	case "GetPooledTransactions":
+		return eth.GetPooledTransactionsMsg // 0x09
+	case "PooledTransactions":
+		return eth.PooledTransactionsMsg // 0x0a
+	case "GetReceipts":
+		return eth.GetReceiptsMsg // 0x0f
+	case "Receipts":
+		return eth.ReceiptsMsg // 0x10
+	default:
+		return -1
+	}
 }

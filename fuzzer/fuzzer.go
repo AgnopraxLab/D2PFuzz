@@ -163,7 +163,7 @@ func discv4Fuzzer(engine int, target string) error {
 	}
 	var err error
 
-	fmt.Println("Fuzzing start!!!")
+	fmt.Println("Discv4 protocol Fuzzing start!!!")
 	if engine == 1 {
 		if err = testMaker.Start(traceFile); err != nil {
 			return err
@@ -210,36 +210,34 @@ func discv4Fuzzer(engine int, target string) error {
 }
 
 func saveV4PacketSeed(testMaker *V4Maker) {
-	if SaveFlag {
-		savePath := filepath.Join(OutputDir, "discv4")
-		if err := os.MkdirAll(savePath, 0755); err != nil {
-			fmt.Printf("Failed to create directory: %v\n", err)
-			return
-		}
-
-		filename := filepath.Join(savePath, fmt.Sprintf("%s-seed.json", time.Now().Format("2006-01-02_15-04-05")))
-		seeds := make([]map[string]interface{}, 0, len(testMaker.PakcetSeed))
-
-		for _, seed := range testMaker.PakcetSeed {
-			seedMap := map[string]interface{}{
-				"type": seed.Name(),
-				"data": seed,
-			}
-			seeds = append(seeds, seedMap)
-		}
-
-		data, err := json.MarshalIndent(seeds, "", "    ")
-		if err != nil {
-			fmt.Printf("Failed to marshal seeds: %v\n", err)
-			return
-		}
-
-		if err := ioutil.WriteFile(filename, data, 0644); err != nil {
-			fmt.Printf("Failed to save seeds: %v\n", err)
-			return
-		}
-		fmt.Printf("Seeds saved to: %s\n", filename)
+	savePath := filepath.Join(OutputDir, "discv4")
+	if err := os.MkdirAll(savePath, 0755); err != nil {
+		fmt.Printf("Failed to create directory: %v\n", err)
+		return
 	}
+
+	filename := filepath.Join(savePath, fmt.Sprintf("%s-seed.json", time.Now().Format("2006-01-02_15-04-05")))
+	seeds := make([]map[string]interface{}, 0, len(testMaker.PakcetSeed))
+
+	for _, seed := range testMaker.PakcetSeed {
+		seedMap := map[string]interface{}{
+			"type": seed.Name(),
+			"data": seed,
+		}
+		seeds = append(seeds, seedMap)
+	}
+
+	data, err := json.MarshalIndent(seeds, "", "    ")
+	if err != nil {
+		fmt.Printf("Failed to marshal seeds: %v\n", err)
+		return
+	}
+
+	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+		fmt.Printf("Failed to save seeds: %v\n", err)
+		return
+	}
+	fmt.Printf("Seeds saved to: %s\n", filename)
 }
 
 func discv5Fuzzer(engine int, target string) error {
@@ -282,7 +280,7 @@ func discv5Fuzzer(engine int, target string) error {
 	}
 	var err error
 
-	fmt.Println("Fuzzing start!!!")
+	fmt.Println("Discv5 protocol Fuzzing start!!!")
 	if engine == 1 {
 		if err = testMaker.Start(traceFile); err != nil {
 			return err
@@ -329,40 +327,65 @@ func discv5Fuzzer(engine int, target string) error {
 }
 
 func saveV5PacketSeed(testMaker *V5Maker) {
-	if SaveFlag {
-		savePath := filepath.Join(OutputDir, "discv5")
-		if err := os.MkdirAll(savePath, 0755); err != nil {
-			fmt.Printf("Failed to create directory: %v\n", err)
-			return
-		}
-
-		filename := filepath.Join(savePath, fmt.Sprintf("%s-seed.json", time.Now().Format("2006-01-02_15-04-05")))
-		seeds := make([]map[string]interface{}, 0, len(testMaker.PakcetSeed))
-
-		for _, seed := range testMaker.PakcetSeed {
-			seedMap := map[string]interface{}{
-				"type": seed.Name(),
-				"data": seed,
-			}
-			seeds = append(seeds, seedMap)
-		}
-
-		data, err := json.MarshalIndent(seeds, "", "    ")
-		if err != nil {
-			fmt.Printf("Failed to marshal seeds: %v\n", err)
-			return
-		}
-
-		if err := ioutil.WriteFile(filename, data, 0644); err != nil {
-			fmt.Printf("Failed to save seeds: %v\n", err)
-			return
-		}
-		fmt.Printf("Seeds saved to: %s\n", filename)
+	savePath := filepath.Join(OutputDir, "discv5")
+	if err := os.MkdirAll(savePath, 0755); err != nil {
+		fmt.Printf("Failed to create directory: %v\n", err)
+		return
 	}
+
+	filename := filepath.Join(savePath, fmt.Sprintf("%s-seed.json", time.Now().Format("2006-01-02_15-04-05")))
+	seeds := make([]map[string]interface{}, 0, len(testMaker.PakcetSeed))
+
+	for _, seed := range testMaker.PakcetSeed {
+		seedMap := map[string]interface{}{
+			"type": seed.Name(),
+			"data": seed,
+		}
+		seeds = append(seeds, seedMap)
+	}
+
+	data, err := json.MarshalIndent(seeds, "", "    ")
+	if err != nil {
+		fmt.Printf("Failed to marshal seeds: %v\n", err)
+		return
+	}
+
+	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+		fmt.Printf("Failed to save seeds: %v\n", err)
+		return
+	}
+	fmt.Printf("Seeds saved to: %s\n", filename)
 }
 
 func ethFuzzer(engine int, target, chain string) error {
 	testMaker := NewEthMaker(target, chain)
+	if testMaker == nil {
+		return fmt.Errorf("failed to create V4Maker")
+	}
+	startTime := time.Now()
+
+	// Channel to listen for interrupt signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Ensure resources are cleaned up when function returns
+	defer func() {
+		testMaker.SuiteList[0].Close()
+		saveEthPacketSeed(testMaker) // Ensure seeds are saved in any case
+		signal.Stop(sigChan)         // Stop signal listening
+	}()
+
+	// Separate goroutine for handling signals
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-sigChan:
+			fmt.Println("\nReceived interrupt signal, saving PacketSeed and exiting...")
+			close(done)
+		case <-done:
+			// Normal exit case
+		}
+	}()
 
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
@@ -373,18 +396,80 @@ func ethFuzzer(engine int, target, chain string) error {
 		defer traceFile.Close()
 	}
 	var err error
+
+	fmt.Println("Eth protocol Fuzzing start!!!")
 	if engine == 1 {
 		if err = testMaker.Start(traceFile); err != nil {
 			return err
 		}
 	} else {
-		if err = testMaker.PacketStart(traceFile); err != nil {
-			return err
+		// seed init
+		fmt.Println("Seed init...")
+		for _, packetType := range ethoptions {
+			req, err := testMaker.SuiteList[0].GenPacket(packetType)
+			if err != nil {
+				fmt.Printf("Packet generate failed: %v\n", err)
+				return err
+			}
+			testMaker.PakcetSeed[0] = append(testMaker.PakcetSeed[0], req)
+		}
+
+		// for seed
+		itration := 1
+		for {
+			select {
+			case <-done:
+				return nil
+			default:
+				// Original loop logic
+				randomIndex := rand.Intn(len(testMaker.PakcetSeed[0]))
+				seed := testMaker.PakcetSeed[0][randomIndex]
+				elapsed := time.Since(startTime)
+				fmt.Printf("[%s] Round %d of testing, seed queue: %d, now seed type: %s\n",
+					elapsed.Round(time.Second),
+					itration,
+					len(testMaker.PakcetSeed),
+					seed.Name())
+				if err = testMaker.PacketStart(traceFile, seed); err != nil {
+					return err
+				}
+				itration = itration + 1
+			}
 		}
 	}
-	// Save the test
 
 	return nil
+}
+
+func saveEthPacketSeed(testMaker *EthMaker) {
+	savePath := filepath.Join(OutputDir, "eth")
+	if err := os.MkdirAll(savePath, 0755); err != nil {
+		fmt.Printf("Failed to create directory: %v\n", err)
+		return
+	}
+
+	filename := filepath.Join(savePath, fmt.Sprintf("%s-seed.json", time.Now().Format("2006-01-02_15-04-05")))
+	seeds := make([]map[string]interface{}, 0, len(testMaker.PakcetSeed))
+
+	for _, seed := range testMaker.PakcetSeed[0] {
+		seedMap := map[string]interface{}{
+			"type": seed.Name(),
+			"data": seed,
+		}
+		seeds = append(seeds, seedMap)
+	}
+
+	data, err := json.MarshalIndent(seeds, "", "    ")
+	if err != nil {
+		fmt.Printf("Failed to marshal seeds: %v\n", err)
+		return
+	}
+
+	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+		fmt.Printf("Failed to save seeds: %v\n", err)
+		return
+	}
+	fmt.Printf("Seeds saved to: %s\n", filename)
 }
 
 func hash(test *GeneralStateTest) []byte {

@@ -460,7 +460,6 @@ func analyzeResults(results []v4packetTestResult, logger *log.Logger, outputDir 
 		return fmt.Errorf("failed to create output directory: %v", err)
 	}
 
-	// 需要创建完整的目录路径
 	fullPath := filepath.Join(outputDir, "discv4")
 	if err := os.MkdirAll(fullPath, 0755); err != nil {
 		return fmt.Errorf("failed to create discv4 directory: %v", err)

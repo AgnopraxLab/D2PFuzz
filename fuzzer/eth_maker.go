@@ -37,14 +37,20 @@ import (
 )
 
 var (
+	ethoptions = []int{eth.StatusMsg, eth.NewBlockHashesMsg, eth.TransactionsMsg, eth.GetBlockHeadersMsg,
+		eth.BlockHeadersMsg, eth.GetBlockBodiesMsg, eth.BlockBodiesMsg, eth.NewBlockMsg,
+		eth.NewPooledTransactionHashesMsg, eth.GetPooledTransactionsMsg, eth.PooledTransactionsMsg,
+		eth.GetReceiptsMsg, eth.ReceiptsMsg}
 	ethstate = []int{eth.StatusMsg, eth.GetReceiptsMsg}
 )
 
 type EthMaker struct {
-	suiteList []*eth.Suite
+	SuiteList []*eth.Suite
 
 	testSeq  []int // testcase sequence
 	stateSeq []int // steate sequence
+
+	PakcetSeed [][]eth.Packet // Use store packet seed to mutator
 
 	Series []StateSeries
 	forks  []string
@@ -60,8 +66,11 @@ type ethSnapshot struct {
 }
 
 type ethPacketTestResult struct {
+	PacketID    int
 	RequestType string
+	Check       bool
 	Success     bool
+	Request     eth.Packet
 	Response    eth.Packet
 	Error       error
 }
@@ -84,7 +93,7 @@ func NewEthMaker(targetDir string, chain string) *EthMaker {
 	}
 
 	ethmaker := &EthMaker{
-		suiteList: suiteList,
+		SuiteList: suiteList,
 		testSeq:   generateEthTestSeq(),
 		stateSeq:  ethstate,
 	}
@@ -114,7 +123,7 @@ func (m *EthMaker) ToSubTest() *stJSON {
 	return st
 }
 
-func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
+func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet) error {
 	var (
 		wg      sync.WaitGroup
 		logger  *log.Logger
@@ -126,10 +135,6 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
-	target := m.suiteList[0]
-
-	logger.Println("开始初始化连接...")
-
 	//// 初始化连接
 	//if err := target.InitializeAndConnect(); err != nil {
 	//	if logger != nil {
@@ -140,15 +145,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 	//
 	//logger.Println("连接初始化成功")
 
-	// 生成随机请求包
-	req, err := target.GenPacket(eth.GetBlockHeadersMsg)
-	if err != nil {
-		logger.Printf("数据包生成失败: %v", err)
-		return err
-	}
-	logger.Printf("StatusPacket生成成功，包含以下信息\n")
-
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 2; i++ {
 		wg.Add(1)
 
 		go func(iteration int, currentReq eth.Packet) {
@@ -159,7 +156,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 			}
 
 			// 发送并等待响应
-			err := m.handlePacketWithResponse(currentReq, target, traceOutput)
+			err := m.handlePacketWithResponse(currentReq, m.SuiteList[0], traceOutput)
 			if err != nil {
 				result.Error = err
 				result.Success = false
@@ -171,23 +168,26 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer) error {
 			results = append(results, result)
 			mu.Unlock()
 
-		}(i, req)
+		}(i, seed)
 
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(PacketSleepTime)
 	}
 
 	wg.Wait()
 
 	// 分析结果
-	analyzeEthResults(results, logger, SaveFlag, OutputDir)
+	if SaveFlag {
+		analyzeResultsEth(results, logger, OutputDir)
+	}
+
 	return nil
 }
 
 func (m *EthMaker) Start(traceOutput io.Writer) error {
 	var (
 		wg       sync.WaitGroup
-		resultCh = make(chan *ethSnapshot, len(m.suiteList))
-		errorCh  = make(chan error, len(m.suiteList))
+		resultCh = make(chan *ethSnapshot, len(m.SuiteList))
+		errorCh  = make(chan error, len(m.SuiteList))
 		logger   *log.Logger
 	)
 
@@ -196,7 +196,7 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 	}
 
 	// Iterate over each target object
-	for _, target := range m.suiteList {
+	for _, target := range m.SuiteList {
 		wg.Add(1)
 		go func(target *eth.Suite) {
 			defer wg.Done()
@@ -609,31 +609,30 @@ func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, tr
 	}
 }
 
-func analyzeEthResults(results []ethPacketTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
-	if saveToFile {
-		// Create output directory if it doesn't exist
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
-			return fmt.Errorf("failed to create output directory: %v", err)
-		}
-
-		// Generate filename (using timestamp)
-		filename := filepath.Join(outputDir, "/eth", fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
-
-		// Save to file
-		data, err := json.MarshalIndent(results, "", "    ")
-		if err != nil {
-			return fmt.Errorf("JSON serialization failed: %v", err)
-		}
-
-		if err := ioutil.WriteFile(filename, data, 0644); err != nil {
-			return fmt.Errorf("failed to write to file: %v", err)
-		}
-
-		logger.Printf("Results saved to file: %s\n", filename)
-	} else {
-		// Output to log
-		logger.Printf("Number of results with: %d\n", len(results))
+func analyzeResultsEth(results []ethPacketTestResult, logger *log.Logger, outputDir string) error {
+	// Create output directory if it doesn't exist
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %v", err)
 	}
+
+	fullPath := filepath.Join(outputDir, "eth")
+	if err := os.MkdirAll(fullPath, 0755); err != nil {
+		return fmt.Errorf("failed to create eth directory: %v", err)
+	}
+
+	filename := filepath.Join(fullPath, fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
+
+	// Save to file
+	data, err := json.MarshalIndent(results, "", "    ")
+	if err != nil {
+		return fmt.Errorf("JSON serialization failed: %v", err)
+	}
+
+	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+		return fmt.Errorf("failed to write to file: %v", err)
+	}
+
+	logger.Printf("Results saved to file: %s\n", filename)
 
 	return nil
 }

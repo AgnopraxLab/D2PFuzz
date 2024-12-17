@@ -476,7 +476,6 @@ func analyzeResultsV5(results []v5packetTestResult, logger *log.Logger, outputDi
 		return fmt.Errorf("failed to create output directory: %v", err)
 	}
 
-	// 需要创建完整的目录路径
 	fullPath := filepath.Join(outputDir, "discv5")
 	if err := os.MkdirAll(fullPath, 0755); err != nil {
 		return fmt.Errorf("failed to create discv5 directory: %v", err)
