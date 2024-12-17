@@ -65,6 +65,7 @@ type v4packetTestResult struct {
 	Check        bool
 	CheckResults []bool
 	Success      bool
+	Request      discv4.Packet
 	Response     discv4.Packet
 	Error        error
 }
@@ -120,11 +121,11 @@ func (m *V4Maker) ToSubTest() *stJSON {
 // PacketStart executes fuzzing by sending single packets in multiple goroutines and collecting feedback
 func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *UDPPacketStats) error {
 	var (
-		wg           sync.WaitGroup
-		logger       *log.Logger
-		mu           sync.Mutex
-		results      []v4packetTestResult
-		foundNewSeed bool
+		wg      sync.WaitGroup
+		logger  *log.Logger
+		mu      sync.Mutex
+		results []v4packetTestResult
+		// foundNewSeed bool
 	)
 
 	if traceOutput != nil {
@@ -153,24 +154,24 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *
 			result.CheckResults = m.checkRequestSemantics(packetSeed)
 			result.Check = allTrue(result.CheckResults)
 			result.PacketID = i
+			result.Request = packetSeed
 
 			if result.Check && !result.Success {
 				mu.Lock()
 				packetStats.CheckTrueFail = packetStats.CheckTrueFail + 1
 				// m.PakcetSeed = append(m.PakcetSeed, originalSeed)
-				foundNewSeed = true
 				results = append(results, result)
 				mu.Unlock()
 			} else if !result.Check && result.Success {
 				mu.Lock()
 				packetStats.CheckFalsePass = packetStats.CheckFalsePass + 1
 				// m.PakcetSeed = append(m.PakcetSeed, originalSeed)
-				foundNewSeed = true
 				results = append(results, result)
 				mu.Unlock()
 			} else if result.Check && result.Success {
 				mu.Lock()
 				packetStats.CheckTruePass = packetStats.CheckTruePass + 1
+				results = append(results, result)
 				mu.Unlock()
 			}
 
@@ -183,8 +184,8 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *
 	wg.Wait()
 
 	// Only analyze and save results if we found new seeds
-	if foundNewSeed {
-		// analyzeResults(results, logger, OutputDir)
+	if SaveFlag {
+		analyzeResults(results, logger, OutputDir)
 	}
 
 	return nil
@@ -361,7 +362,7 @@ func (m *V4Maker) checkPingSemantics(p *discv4.Ping) []bool {
 		validityResults = append(validityResults, true) // Mark target IP check as success
 	}
 
-	// 4. Check if the expiration time is valid
+	// 4. Check if the ENRSeq matches the client's ENRSeq
 	if p.ENRSeq != m.Client.Self().Seq() {
 		// fmt.Println("Ping ENRSeq does not match the client's ENRSeq")
 		validityResults = append(validityResults, false) // Mark expiration check as failed
@@ -369,7 +370,7 @@ func (m *V4Maker) checkPingSemantics(p *discv4.Ping) []bool {
 		validityResults = append(validityResults, true) // Mark expiration check as success
 	}
 
-	// 5. Check if the ENRSeq matches the client's ENRSeq
+	// 5. Check if the expiration time is valid
 	if p.Expiration <= uint64(time.Now().Unix()) {
 		validityResults = append(validityResults, false) // Mark ENRSeq check as failed
 	} else {
@@ -454,16 +455,6 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 }
 
 func analyzeResults(results []v4packetTestResult, logger *log.Logger, outputDir string) error {
-	// Define slices for three scenarios
-	resultWanted := make([]v4packetTestResult, 0)
-
-	// Iterate through results and categorize
-	for _, result := range results {
-		if result.Check || result.Success {
-			resultWanted = append(resultWanted, result)
-		}
-	}
-
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %v", err)
@@ -478,7 +469,7 @@ func analyzeResults(results []v4packetTestResult, logger *log.Logger, outputDir 
 	filename := filepath.Join(fullPath, fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
 
 	// Save to file
-	data, err := json.MarshalIndent(resultWanted, "", "    ")
+	data, err := json.MarshalIndent(results, "", "    ")
 	if err != nil {
 		return fmt.Errorf("JSON serialization failed: %v", err)
 	}

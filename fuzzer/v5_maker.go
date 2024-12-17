@@ -66,6 +66,7 @@ type v5packetTestResult struct {
 	Check        bool
 	CheckResults []bool
 	Success      bool
+	Request      discv5.Packet
 	Response     discv5.Packet
 	Error        error
 }
@@ -137,21 +138,24 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer, seed discv5.Packet, stats *
 	}
 
 	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
+	currentSeed := seed
 
 	for i := 0; i < MutateCount; i++ {
 		wg.Add(1)
 
-		go func(iteration int, originalSeed discv5.Packet, packetStats *UDPPacketStats) {
+		mutateSeed := cloneAndMutateV5Packet(mutator, currentSeed)
+
+		go func(iteration int, packetSeed discv5.Packet, packetStats *UDPPacketStats) {
 			defer wg.Done()
 
-			mutatedSeed := cloneAndMutateV5Packet(mutator, originalSeed)
-			result, err := m.sendAndReceive(m.TargetList[0], mutatedSeed, logger)
+			result, err := m.sendAndReceive(m.TargetList[0], packetSeed, logger)
 			if err != nil {
-				fmt.Errorf("failed to send and receive packet")
+				logger.Printf("failed to send and receive packet: %v", err)
 			}
-			result.CheckResults = m.checkRequestSemanticsV5(mutatedSeed)
+			result.CheckResults = m.checkRequestSemanticsV5(packetSeed)
 			result.Check = allTrue(result.CheckResults)
 			result.PacketID = i
+			result.Request = packetSeed
 
 			if result.Check && !result.Success {
 				mu.Lock()
@@ -168,17 +172,19 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer, seed discv5.Packet, stats *
 			} else if result.Check && result.Success {
 				mu.Lock()
 				packetStats.CheckTruePass = packetStats.CheckTruePass + 1
+				results = append(results, result)
 				mu.Unlock()
 			}
-		}(i, seed, stats)
-
-		time.Sleep(50 * time.Millisecond)
+		}(i, mutateSeed, stats)
+		currentSeed = mutateSeed
+		time.Sleep(PacketSleepTime)
 	}
 
 	wg.Wait()
 
-	// Analyze results
-	analyzeResultsV5(results, logger, SaveFlag, OutputDir)
+	if SaveFlag {
+		analyzeResultsV5(results, logger, OutputDir)
+	}
 	return nil
 }
 
@@ -464,41 +470,31 @@ func (m *V5Maker) checkWhoareyouSemantics(w *discv5.Whoareyou) []bool {
 	return validityResults
 }
 
-func analyzeResultsV5(results []v5packetTestResult, logger *log.Logger, saveToFile bool, outputDir string) error {
-	// Define slices for three scenarios
-	resultWanted := make([]v5packetTestResult, 0)
-
-	// Iterate through results and categorize
-	for _, result := range results {
-		if result.Check || result.Success {
-			resultWanted = append(resultWanted, result)
-		}
+func analyzeResultsV5(results []v5packetTestResult, logger *log.Logger, outputDir string) error {
+	// Create output directory if it doesn't exist
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %v", err)
 	}
 
-	if saveToFile {
-		// Create output directory if it doesn't exist
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
-			return fmt.Errorf("failed to create output directory: %v", err)
-		}
-
-		// Generate filename (using timestamp)
-		filename := filepath.Join(outputDir, "/discv5", fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
-
-		// Save to file
-		data, err := json.MarshalIndent(resultWanted, "", "    ")
-		if err != nil {
-			return fmt.Errorf("JSON serialization failed: %v", err)
-		}
-
-		if err := ioutil.WriteFile(filename, data, 0644); err != nil {
-			return fmt.Errorf("failed to write to file: %v", err)
-		}
-
-		logger.Printf("Results saved to file: %s\n", filename)
-	} else {
-		// Output to log
-		logger.Printf("Number of results with: %d\n", len(resultWanted))
+	// 需要创建完整的目录路径
+	fullPath := filepath.Join(outputDir, "discv5")
+	if err := os.MkdirAll(fullPath, 0755); err != nil {
+		return fmt.Errorf("failed to create discv5 directory: %v", err)
 	}
+
+	filename := filepath.Join(fullPath, fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
+
+	// Save to file
+	data, err := json.MarshalIndent(results, "", "    ")
+	if err != nil {
+		return fmt.Errorf("JSON serialization failed: %v", err)
+	}
+
+	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+		return fmt.Errorf("failed to write to file: %v", err)
+	}
+
+	logger.Printf("Results saved to file: %s\n", filename)
 
 	return nil
 }
