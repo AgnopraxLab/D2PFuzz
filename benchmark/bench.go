@@ -28,15 +28,6 @@ var (
 	globalV5Stats = make(map[string]*fuzzer.UDPPacketStats)
 )
 
-func init() {
-	for _, packetType := range []string{"ping", "pong", "findnode", "neighbors", "ENRRequest", "ENRResponse"} {
-		globalV4Stats[packetType] = &fuzzer.UDPPacketStats{}
-	}
-	for _, packetType := range []string{"ping", "pong", "findnode", "nodes", "talkrequest", "talkresponse", "whoareyou"} {
-		globalV5Stats[packetType] = &fuzzer.UDPPacketStats{}
-	}
-}
-
 // RunFullBench runs a full benchmark with N runs.
 func RunFullBench(prot, target, chainDir, packetType string, N int, engine int) {
 	time, err := testExcution(prot, target, chainDir, packetType, N, engine)
@@ -66,7 +57,15 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 				testMaker.Start(os.Stdout)
 			} else {
 				packet := testMaker.Client.GenPacket(packetType, testMaker.TargetList[0])
+				globalV4Stats[packet.Name()] = &fuzzer.UDPPacketStats{
+					ExecuteCount:   0,
+					CheckTrueFail:  0,
+					CheckFalsePass: 0,
+					CheckTruePass:  0,
+				}
 				testMaker.PacketStart(os.Stdout, packet, globalV4Stats[packet.Name()])
+				fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
+					packet.Name(), globalV4Stats[packet.Name()].ExecuteCount, globalV4Stats[packet.Name()].CheckTrueFail, globalV4Stats[packet.Name()].CheckFalsePass, globalV4Stats[packet.Name()].CheckTruePass)
 			}
 		case "discv5":
 			testMaker := fuzzer.NewV5Maker(target)
@@ -75,7 +74,15 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 				testMaker.Start(os.Stdout)
 			} else {
 				packet := testMaker.Client.GenPacket(packetType, testMaker.TargetList[0])
+				globalV5Stats[packet.Name()] = &fuzzer.UDPPacketStats{
+					ExecuteCount:   0,
+					CheckTrueFail:  0,
+					CheckFalsePass: 0,
+					CheckTruePass:  0,
+				}
 				testMaker.PacketStart(os.Stdout, packet, globalV5Stats[packet.Name()])
+				fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
+					packet.Name(), globalV5Stats[packet.Name()].ExecuteCount, globalV5Stats[packet.Name()].CheckTrueFail, globalV5Stats[packet.Name()].CheckFalsePass, globalV5Stats[packet.Name()].CheckTruePass)
 			}
 		case "eth":
 			testMaker := fuzzer.NewEthMaker(target, chainDir)

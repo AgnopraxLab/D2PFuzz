@@ -139,16 +139,18 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *
 	}
 
 	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
+	currentSeed := seed
 
 	for i := 0; i < MutateCount; i++ {
 		wg.Add(1)
 
-		go func(iteration int, originalSeed discv4.Packet, packetStats *UDPPacketStats) {
+		mutateSeed := cloneAndMutateV4Packet(mutator, currentSeed)
+
+		go func(iteration int, packetSeed discv4.Packet, packetStats *UDPPacketStats) {
 			defer wg.Done()
 
-			mutatedSeed := cloneAndMutateV4Packet(mutator, originalSeed)
-			result := sendAndWaitResponse(m, m.TargetList[0], mutatedSeed, logger)
-			result.CheckResults = m.checkRequestSemantics(mutatedSeed)
+			result := sendAndWaitResponse(m, m.TargetList[0], packetSeed, logger)
+			result.CheckResults = m.checkRequestSemantics(packetSeed)
 			result.Check = allTrue(result.CheckResults)
 			result.PacketID = i
 
@@ -171,10 +173,11 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *
 				packetStats.CheckTruePass = packetStats.CheckTruePass + 1
 				mu.Unlock()
 			}
-		}(i, seed, stats)
 
+		}(i, mutateSeed, stats)
+		currentSeed = mutateSeed
 		logger.Printf("================================================= Completed iteration %d =================================================", i+1)
-		// time.Sleep(PacketSleepTime)
+		time.Sleep(PacketSleepTime)
 	}
 
 	wg.Wait()

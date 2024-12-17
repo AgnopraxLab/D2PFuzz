@@ -138,43 +138,53 @@ func (m *Mutator) MutateExp(expiration *uint64) {
 	if *expiration > 0 {
 		switch m.Rand(5) {
 		case 0:
-			// Decrement: ensure non-negative
-			delta := uint64(m.r.Int63n(int64(*expiration)/2 + 1))
-			if *expiration > delta {
+			// 递减：确保非负
+			maxDecrease := *expiration / 2
+			if maxDecrease > 0 {
+				delta := uint64(m.r.Int63n(max(int64(maxDecrease), 1)))
 				*expiration -= delta
-			} else {
-				*expiration = 0
 			}
 		case 1:
-			// Increment: avoid overflow, use safer calculation
-			maxDelta := uint64(1<<63 - 1) // Maximum value for Int63n
-			if maxDelta > ^*expiration {
-				maxDelta = ^*expiration
-			}
-			if maxDelta > 0 {
-				delta := uint64(m.r.Int63n(int64(maxDelta)))
+			// 递增：避免溢出
+			maxIncrease := uint64(^uint64(0) - *expiration)
+			if maxIncrease > 0 {
+				maxDelta := max(min64(int64(maxIncrease), 1000000), 1)
+				delta := uint64(m.r.Int63n(maxDelta))
 				*expiration += delta
 			}
 		case 2:
-			// Multiply: avoid overflow
-			multiplier := uint64(m.Rand(10) + 1)
-			if *expiration <= ^uint64(0)/multiplier {
-				*expiration *= multiplier
-			} else {
-				*expiration = ^uint64(0)
+			// 乘法：避免溢出
+			maxMultiplier := uint64(10)
+			if *expiration > 0 {
+				safeMultiplier := min64(int64(^uint64(0) / *expiration), int64(maxMultiplier))
+				if safeMultiplier > 1 {
+					multiplier := uint64(m.r.Int63n(int64(safeMultiplier)-1) + 1)
+					*expiration *= multiplier
+				}
 			}
 		case 3:
-			// Bitwise NOT
+			// 位反转
 			*expiration = ^*expiration
 		case 4:
-			// Boundary value test
+			// 边界值测试
 			if m.Bool() {
 				*expiration = 0
 			} else {
-				*expiration = ^uint64(0) // Maximum value of uint64
+				*expiration = ^uint64(0) // uint64的最大值
 			}
 		}
+	} else {
+		// 如果当前值为0，随机设置一个小的正值
+		*expiration = uint64(m.r.Int63n(1000) + 1)
 	}
+}
+
+// 辅助函数：返回两个int64中的较小值
+func min64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (m *Mutator) MutateRest(rest *[]rlp.RawValue) {
