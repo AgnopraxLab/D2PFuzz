@@ -1,0 +1,88 @@
+[
+    {
+        "PacketID": 35,
+        "RequestType": "PING/v4",
+        "Check": false,
+        "CheckResults": [
+            false,
+            true,
+            true,
+            false,
+            false
+        ],
+        "Success": true,
+        "Request": {
+            "Version": 2925614422,
+            "From": {
+                "IP": "192.168.1.154",
+                "UDP": 52335,
+                "TCP": 0
+            },
+            "To": {
+                "IP": "10.130.147.103",
+                "UDP": 30306,
+                "TCP": 0
+            },
+            "Expiration": 0,
+            "ENRSeq": 792402600,
+            "Rest": [
+                ""
+            ]
+        },
+        "Response": {
+            "To": {
+                "IP": "10.130.159.58",
+                "UDP": 52335,
+                "TCP": 0
+            },
+            "ReplyTok": "UtzdkZxwrWCzpWQFSaY7PpGbkfEHxvOxgGOgtwW7C2g=",
+            "Expiration": 1734525463,
+            "ENRSeq": 1733203734246,
+            "Rest": []
+        },
+        "Error": null
+    },
+    {
+        "PacketID": 36,
+        "RequestType": "PING/v4",
+        "Check": false,
+        "CheckResults": [
+            false,
+            true,
+            true,
+            false,
+            false
+        ],
+        "Success": true,
+        "Request": {
+            "Version": 2925614422,
+            "From": {
+                "IP": "192.168.1.154",
+                "UDP": 52335,
+                "TCP": 0
+            },
+            "To": {
+                "IP": "10.130.147.103",
+                "UDP": 30306,
+                "TCP": 0
+            },
+            "Expiration": 844,
+            "ENRSeq": 792402600,
+            "Rest": [
+                ""
+            ]
+        },
+        "Response": {
+            "To": {
+                "IP": "10.130.159.58",
+                "UDP": 52335,
+                "TCP": 0
+            },
+            "ReplyTok": "UtzdkZxwrWCzpWQFSaY7PpGbkfEHxvOxgGOgtwW7C2g=",
+            "Expiration": 1734525463,
+            "ENRSeq": 1733203734246,
+            "Rest": []
+        },
+        "Error": null
+    }
+]

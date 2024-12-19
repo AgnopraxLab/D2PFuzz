@@ -135,15 +135,17 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet) error {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
-	//// 初始化连接
-	//if err := target.InitializeAndConnect(); err != nil {
-	//	if logger != nil {
-	//		logger.Printf("Failed to initialize connection: %v", err)
-	//	}
-	//	return err
-	//}
-	//
-	//logger.Println("连接初始化成功")
+	// 初始化连接
+	// if err := m.SuiteList[0].InitializeAndConnect(); err != nil {
+	// 	if logger != nil {
+	// 		logger.Printf("Failed to initialize connection: %v", err)
+	// 	}
+	// 	return err
+	// }
+
+	// logger.Println("连接初始化成功")
+
+	m.SuiteList[0].SetupConn()
 
 	for i := 0; i < 2; i++ {
 		wg.Add(1)
@@ -376,9 +378,9 @@ func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, sui
 		return fmt.Errorf("dial failed: %v", err)
 	}
 	//defer func() {
-	//	conn.Close()
+	// conn.Close()
 	//}()
-	//defer conn.Close()
+	// defer conn.Close()
 	if err := conn.Peer(suite.Chain(), nil); err != nil {
 		return fmt.Errorf("peer failed: %v", err)
 	}

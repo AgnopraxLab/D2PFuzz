@@ -635,3 +635,13 @@ func (c *Conn) ReadEth() (any, error) {
 		return msg, nil
 	}
 }
+
+func (s *Suite) SetupConn() error {
+	s.conn, _ = s.dial()
+
+	if err := s.conn.Peer(s.Chain(), nil); err != nil {
+		return fmt.Errorf("peer failed: %v", err)
+	}
+
+	return nil
+}
