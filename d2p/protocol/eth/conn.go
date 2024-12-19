@@ -141,22 +141,22 @@ func (c *Conn) Write(proto Proto, code uint64, msg any) error {
 }
 
 func (s *Suite) SendMsg(proto Proto, code uint64, msg interface{}) error {
-	fmt.Println(">>> 进入 SendMsg 函数")
-	fmt.Printf(">>> 接收到的参数: proto=%v, code=%v, msg=%v\n", proto, code, msg)
+	//fmt.Println(">>> 进入 SendMsg 函数")
+	//fmt.Printf(">>> 接收到的参数: proto=%v, code=%v, msg=%v\n", proto, code, msg)
 
 	if !s.IsConnected() {
 		fmt.Println(">>> 错误: 连接未建立")
 		return errors.New("connection not established")
 	}
 
-	fmt.Println(">>> 开始执行消息写入")
+	//fmt.Println(">>> 开始执行消息写入")
 	err := s.conn.Write(proto, code, msg)
 	if err != nil {
 		fmt.Printf(">>> 写入失败: %v\n", err)
 		return err
 	}
 
-	fmt.Println(">>> SendMsg 执行完成")
+	//fmt.Println(">>> SendMsg 执行完成")
 	return nil
 }
 

@@ -135,16 +135,6 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet) error {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
-	// 初始化连接
-	// if err := m.SuiteList[0].InitializeAndConnect(); err != nil {
-	// 	if logger != nil {
-	// 		logger.Printf("Failed to initialize connection: %v", err)
-	// 	}
-	// 	return err
-	// }
-
-	// logger.Println("连接初始化成功")
-
 	m.SuiteList[0].SetupConn()
 
 	for i := 0; i < 2; i++ {
@@ -154,11 +144,20 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet) error {
 			defer wg.Done()
 
 			result := ethPacketTestResult{
-				RequestType: fmt.Sprintf("%x\n", currentReq.Kind()),
+				PacketID:    iteration,
+				RequestType: fmt.Sprintf("%x", currentReq.Kind()),
+				Request:     currentReq,
 			}
 
 			// 发送并等待响应
-			err := m.handlePacketWithResponse(currentReq, m.SuiteList[0], traceOutput)
+			err := func() error {
+				resp, err := m.handlePacketWithResponse(currentReq, m.SuiteList[0], traceOutput)
+				if err != nil {
+					return err
+				}
+				result.Response = resp
+				return nil
+			}()
 			if err != nil {
 				result.Error = err
 				result.Success = false
@@ -254,7 +253,11 @@ func (m *EthMaker) handlePacket(req eth.Packet, suite *eth.Suite, traceOutput io
 		if err := suite.InitializeAndConnect(); err != nil {
 			return fmt.Errorf("initialization and connection failed: %v", err)
 		}
-		return m.handleGetBlockHeadersPacket(p, suite, traceOutput)
+		result := m.handleGetBlockHeadersPacket(p, suite)
+		if result.Error != nil {
+			return fmt.Errorf("failed to handle get block headers packet: %v", result.Error)
+		}
+		return nil
 	case *eth.GetBlockBodiesPacket:
 		if err := suite.InitializeAndConnect(); err != nil {
 			return fmt.Errorf("initialization and connection failed: %v", err)
@@ -360,80 +363,42 @@ func (m *EthMaker) handleTransactionPacket(p *eth.TransactionsPacket, suite *eth
 	return nil
 }
 
-func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, suite *eth.Suite, traceOutput io.Writer) error {
-
-	fmt.Println("=== 开始函数执行 ===")
-	fmt.Printf("检查点1: p=%v, suite=%v\n", p, suite)
-
-	if traceOutput != nil {
-		fmt.Fprintf(traceOutput, "Preparing to send GetBlockHeadersPacket with RequestId: %d\n", p.RequestId)
+func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, suite *eth.Suite) ethPacketTestResult {
+	if err := suite.SendMsg(eth.EthProto, eth.GetBlockHeadersMsg, p); err != nil {
+		return ethPacketTestResult{
+			Error: fmt.Errorf("could not send GetBlockHeadersMsg: %v", err),
+		}
 	}
-
-	fmt.Println("检查点2: 即将调用 SendMsg")
-	// 添加函数调用前的状态打印
-	fmt.Printf("SendMsg 参数: proto=%v, code=%v, msg=%v\n", eth.EthProto, eth.GetBlockHeadersMsg, p)
-
-	conn, err := suite.Dial()
-	if err != nil {
-		return fmt.Errorf("dial failed: %v", err)
-	}
-	//defer func() {
-	// conn.Close()
-	//}()
-	// defer conn.Close()
-	if err := conn.Peer(suite.Chain(), nil); err != nil {
-		return fmt.Errorf("peer failed: %v", err)
-	}
-
-	if err := conn.Write(eth.EthProto, eth.GetBlockHeadersMsg, p); err != nil {
-		fmt.Println("检查点3: SendMsg 返回错误")
-
-		return fmt.Errorf("could not send GetBlockHeadersMsg: %v", err)
-	}
-
-	fmt.Println("检查点4: SendMsg 执行成功")
-	fmt.Println("=== 函数执行结束 ===")
-
-	// 添加发送确认日志
-	if traceOutput != nil {
-		fmt.Fprintf(traceOutput, "Successfully sent GetBlockHeadersPacket with RequestId: %d. Waiting for response...\n", p.RequestId)
-		fmt.Fprintf(traceOutput, "Message details: Protocol=%d, MsgType=%d\n", eth.EthProto, eth.GetBlockHeadersMsg)
-	}
-
 	headers := new(eth.BlockHeadersPacket)
 
-	// 添加等待接收日志
-	if traceOutput != nil {
-		fmt.Fprintf(traceOutput, "Initializing BlockHeaders response packet. Starting to wait for response...\n")
-		fmt.Fprintf(traceOutput, "Expecting response for RequestId: %d\n", p.RequestId)
-	}
-
 	if err := suite.ReadMsg(eth.EthProto, eth.BlockHeadersMsg, headers); err != nil {
-		return fmt.Errorf("error reading BlockHeadersMsg: %v", err)
-	}
-
-	if traceOutput != nil {
-		fmt.Fprintf(traceOutput, "Received BlockHeaders packet: %+v\n", headers)
+		return ethPacketTestResult{
+			Error: fmt.Errorf("error reading BlockHeadersMsg: %v", err),
+		}
 	}
 
 	if got, want := headers.RequestId, p.RequestId; got != want {
-		return fmt.Errorf("unexpected request id: got %d, want %d", headers.RequestId, p.RequestId)
+		return ethPacketTestResult{
+			Error: fmt.Errorf("unexpected request id: got %d, want %d", headers.RequestId, p.RequestId),
+		}
 	}
 
 	expected, err := suite.GetHeaders(p)
 	if err != nil {
-		return fmt.Errorf("failed to get headers for given request: %v", err)
+		return ethPacketTestResult{
+			Error: fmt.Errorf("failed to get headers for given request: %v", err),
+		}
 	}
 
 	if !eth.HeadersMatch(expected, headers.BlockHeadersRequest) {
-		return fmt.Errorf("header mismatch")
+		return ethPacketTestResult{
+			Error: fmt.Errorf("header mismatch"),
+		}
 	}
 
-	if traceOutput != nil {
-		fmt.Println(traceOutput, "Received headers for request %d\n", headers.RequestId)
+	return ethPacketTestResult{
+		Response: headers,
 	}
-
-	return nil
 }
 
 func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, suite *eth.Suite, traceOutput io.Writer) error {
@@ -589,25 +554,38 @@ func generateEthTestSeq() []int {
 }
 
 // packet test deal data
-func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, traceOutput io.Writer) error {
+func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, traceOutput io.Writer) (eth.Packet, error) {
 	switch p := req.(type) {
 	case *eth.StatusPacket:
-		return suite.InitializeAndConnect()
+		err := suite.InitializeAndConnect()
+		return nil, err
 	case *eth.TransactionsPacket:
 		if err := suite.SendForkchoiceUpdated(); err != nil {
-			return fmt.Errorf("failed to send forkchoice update: %v", err)
+			return nil, fmt.Errorf("failed to send forkchoice update: %v", err)
 		}
-		return m.handleTransactionPacket(p, suite, traceOutput)
+		err := m.handleTransactionPacket(p, suite, traceOutput)
+		return nil, err
 	case *eth.GetBlockHeadersPacket:
-		return m.handleGetBlockHeadersPacket(p, suite, traceOutput)
+		result := m.handleGetBlockHeadersPacket(p, suite)
+		if result.Error != nil {
+			return nil, result.Error
+		}
+		return result.Response, nil
 	case *eth.GetBlockBodiesPacket:
-		return m.handleGetBlockBodiesPacket(p, suite, traceOutput)
+		resp := new(eth.BlockBodiesPacket)
+		err := m.handleGetBlockBodiesPacket(p, suite, traceOutput)
+		return resp, err
 	case *eth.GetPooledTransactionsPacket:
-		return m.handleGetPooledTransactionsPacket(p, suite, traceOutput)
+		resp := new(eth.PooledTransactionsPacket)
+		err := m.handleGetPooledTransactionsPacket(p, suite, traceOutput)
+		return resp, err
 	case *eth.GetReceiptsPacket:
-		return m.handleGetReceiptsPacket(p, suite, traceOutput)
+		resp := new(eth.ReceiptsPacket)
+		err := m.handleGetReceiptsPacket(p, suite, traceOutput)
+		return resp, err
 	default:
-		return m.handleSendOnlyPacket(p, suite, traceOutput)
+		err := m.handleSendOnlyPacket(p, suite, traceOutput)
+		return nil, err
 	}
 }
 

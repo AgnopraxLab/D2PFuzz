@@ -1,0 +1,20 @@
+[
+    {
+        "PacketID": 0,
+        "RequestType": "3\n",
+        "Check": false,
+        "Success": true,
+        "Request": null,
+        "Response": null,
+        "Error": null
+    },
+    {
+        "PacketID": 0,
+        "RequestType": "3\n",
+        "Check": false,
+        "Success": true,
+        "Request": null,
+        "Response": null,
+        "Error": null
+    }
+]
