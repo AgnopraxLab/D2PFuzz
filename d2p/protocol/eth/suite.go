@@ -9,14 +9,13 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
-
-	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 )
 
 type Suite struct {
@@ -31,7 +30,7 @@ func (s *Suite) Chain() *Chain {
 	return s.chain
 }
 
-func NewSuite(dest *enode.Node, chainDir string, pri *ecdsa.PrivateKey, engineURL, jwt string) (*Suite, error) {
+func NewSuite(dest *enode.Node, chainDir string, engineURL, jwt string) (*Suite, error) {
 	chain, err := NewChain(chainDir)
 	if err != nil {
 		return nil, err
@@ -45,7 +44,6 @@ func NewSuite(dest *enode.Node, chainDir string, pri *ecdsa.PrivateKey, engineUR
 		DestList: dest,
 		chain:    chain,
 		engine:   engine,
-		pri:      pri,
 	}, nil
 }
 
@@ -78,19 +76,23 @@ func (s *Suite) Close() error {
 func (s *Suite) GenPacket(packetType int) (Packet, error) {
 	switch packetType {
 	case StatusMsg:
+		// 如果连接未初始化，仍然可以创建Status包，但使用chain的信息
 		buf := make([]byte, 2024)
 		_, err := rand.Read(buf)
 		if err != nil {
-			fmt.Println("Error generating random bytes:", err)
+			return nil, fmt.Errorf("生成随机字节失败: %v", err)
 		}
+
+		// 使用chain的信息创建Status包，而不依赖conn
 		return &StatusPacket{
-			ProtocolVersion: uint32(s.conn.negotiatedProtoVersion),
+			ProtocolVersion: uint32(ETH68), // 使用固定的协议版本
 			NetworkID:       s.chain.config.ChainID.Uint64(),
 			TD:              new(big.Int).SetBytes(buf),
 			Head:            s.chain.Head().Hash(),
 			Genesis:         s.chain.GetBlock(0).Hash(),
 			ForkID:          s.chain.ForkID(),
 		}, nil
+
 	case NewBlockHashesMsg:
 		return &NewBlockHashesPacket{
 			{
@@ -167,8 +169,8 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 		return &GetPooledTransactionsPacket{
 			RequestId: 99,
 			GetPooledTransactionsRequest: GetPooledTransactionsRequest{
-				s.chain.blocks[54].Transactions()[0].Hash(), // 假设我们要请求第54个区块的第一个交易
-				s.chain.blocks[75].Transactions()[0].Hash(), // 假设我们要请求第75个区块的第一个交易
+				s.chain.blocks[13].Transactions()[0].Hash(), // 假设我们要请求第13个区块的第一个交易
+				s.chain.blocks[7].Transactions()[0].Hash(),  // 假设我们要请求第7个区块的第一个交易
 			},
 		}, nil
 	case PooledTransactionsMsg:
@@ -186,8 +188,8 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 		packet := &GetReceiptsPacket{
 			RequestId: 110,
 			GetReceiptsRequest: GetReceiptsRequest{
-				s.chain.blocks[54].Hash(), // 请求第54个区块的收据
-				s.chain.blocks[75].Hash(), // 请求第75个区块的收据
+				s.chain.blocks[12].Hash(), // 请求第54个区块的收据
+				s.chain.blocks[3].Hash(),  // 请求第75个区块的收据
 			},
 		}
 		return packet, nil
@@ -520,24 +522,30 @@ func (s *Suite) SendForkchoiceUpdated() error {
 // expects the node to accept and propagate them.
 func (s *Suite) SendTxs(txs []*types.Transaction) error {
 	// Open sending conning.
+	fmt.Println("正在建立发送连接...")
 	sendConn, err := s.dial()
 	if err != nil {
-		return err
+		return fmt.Errorf("建立发送连接失败: %v", err)
 	}
 	defer sendConn.Close()
+	fmt.Println("发送连接建立成功，正在进行peer握手...")
 	if err = sendConn.peer(s.chain, nil); err != nil {
-		return fmt.Errorf("peering failed: %v", err)
+		return fmt.Errorf("sending peer failed: %v", err)
 	}
+	fmt.Println("发送send peer握手完成")
 
 	// Open receiving conn.
+	fmt.Println("正在建立接收连接...")
 	recvConn, err := s.dial()
 	if err != nil {
-		return err
+		return fmt.Errorf("建立接收连接失败: %v", err)
 	}
 	defer recvConn.Close()
+	fmt.Println("接收连接建立成功，正在进行peer握手...")
 	if err = recvConn.peer(s.chain, nil); err != nil {
-		return fmt.Errorf("peering failed: %v", err)
+		return fmt.Errorf("receiving peer failed: %v", err)
 	}
+	fmt.Println("接收recv peer握手完成")
 
 	if err = sendConn.Write(ethProto, eth.TransactionsMsg, eth.TransactionsPacket(txs)); err != nil {
 		return fmt.Errorf("failed to write message to connection: %v", err)
@@ -638,10 +646,15 @@ func (c *Conn) ReadEth() (any, error) {
 
 func (s *Suite) SetupConn() error {
 	s.conn, _ = s.dial()
-
+	//defer s.conn.Close()
 	if err := s.conn.Peer(s.Chain(), nil); err != nil {
 		return fmt.Errorf("peer failed: %v", err)
 	}
 
 	return nil
+}
+
+// Conn returns the connection of the suite
+func (s *Suite) Conn() *Conn {
+	return s.conn
 }

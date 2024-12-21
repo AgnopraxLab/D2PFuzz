@@ -325,3 +325,16 @@ func setupGeth(stack *node.Node, dir string) error {
 	_, err = backend.BlockChain().InsertChain(chain.blocks[1:])
 	return err
 }
+
+// IncNonce increases the specified signing account's pending nonce.
+func (c *Chain) IncNonce(addr common.Address, amt uint64) {
+	if _, ok := c.senders[addr]; !ok {
+		panic("nonce increment for non-signer")
+	}
+	c.senders[addr].Nonce += amt
+}
+
+// Config returns the chain configuration
+func (c *Chain) Config() *params.ChainConfig {
+	return c.config
+}

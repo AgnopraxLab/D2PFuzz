@@ -26,7 +26,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -126,14 +125,14 @@ func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 	}
 
 	// 生成私钥
-	pri, err := crypto.GenerateKey()
-	if err != nil {
-		cleanup()
-		return nil, fmt.Errorf("failed to generate private key: %v", err)
-	}
+	// pri, err := crypto.GenerateKey()
+	// if err != nil {
+	// 	cleanup()
+	// 	return nil, fmt.Errorf("failed to generate private key: %v", err)
+	// }
 
 	// 创建 Suite
-	client, err := eth.NewSuite(dest, dir, pri, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
+	client, err := eth.NewSuite(dest, dir, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("failed to create suite: %v", err)

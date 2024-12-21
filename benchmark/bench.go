@@ -107,17 +107,17 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 func getEthPacketType(packetType string) int {
 	switch packetType {
 	case "Status":
-		return eth.StatusMsg // 0x00
+		return eth.StatusMsg // 0x00-F
 	case "NewBlockHashes":
 		return eth.NewBlockHashesMsg // 0x01
 	case "Transactions":
 		return eth.TransactionsMsg // 0x02
 	case "GetBlockHeaders":
-		return eth.GetBlockHeadersMsg // 0x03
+		return eth.GetBlockHeadersMsg // 0x03-T
 	case "BlockHeaders":
 		return eth.BlockHeadersMsg // 0x04
 	case "GetBlockBodies":
-		return eth.GetBlockBodiesMsg // 0x05
+		return eth.GetBlockBodiesMsg // 0x05-T
 	case "BlockBodies":
 		return eth.BlockBodiesMsg // 0x06
 	case "NewBlock":
@@ -129,7 +129,7 @@ func getEthPacketType(packetType string) int {
 	case "PooledTransactions":
 		return eth.PooledTransactionsMsg // 0x0a
 	case "GetReceipts":
-		return eth.GetReceiptsMsg // 0x0f
+		return eth.GetReceiptsMsg // 0x0f-T
 	case "Receipts":
 		return eth.ReceiptsMsg // 0x10
 	default:
