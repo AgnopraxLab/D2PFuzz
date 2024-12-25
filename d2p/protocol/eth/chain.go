@@ -338,3 +338,8 @@ func (c *Chain) IncNonce(addr common.Address, amt uint64) {
 func (c *Chain) Config() *params.ChainConfig {
 	return c.config
 }
+
+// Blocks 返回链中的所有区块
+func (c *Chain) Blocks() []*types.Block {
+	return c.blocks
+}

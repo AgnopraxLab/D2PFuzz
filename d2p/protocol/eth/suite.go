@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -107,7 +106,9 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 		return &GetBlockHeadersPacket{
 			RequestId: 33,
 			GetBlockHeadersRequest: &GetBlockHeadersRequest{
-				Origin:  HashOrNumber{Hash: s.chain.blocks[1].Hash()},
+				//Origin: HashOrNumber{Hash: s.chain.blocks[1].Hash()},
+				//Origin:  HashOrNumber{Number: uint64(1)},
+				Origin:  HashOrNumber{Hash: s.chain.blocks[1].Hash(), Number: uint64(1)},
 				Amount:  2,
 				Skip:    1,
 				Reverse: false,
@@ -434,34 +435,48 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 // }
 
 func (s *Suite) makeTxs() TransactionsPacket {
-	// Generate many transactions to seed target with.
+	// // Generate many transactions to seed target with.
+	// var (
+	// 	from, nonce = s.chain.GetSender(1)
+	// 	count       = 2000
+	// 	txs         []*types.Transaction
+	// 	hashes      []common.Hash
+	// 	set         = make(map[common.Hash]struct{})
+	// )
+
+	// for i := 0; i < count; i++ {
+	// 	// Use filler to fill the fields for transaction
+	// 	gasTipCap := fuzzing.RandBigInt() // Random big.Int for GasTipCap
+	// 	gasFeeCap := fuzzing.RandBigInt() // Random big.Int for GasFeeCap
+	// 	gasLimit := fuzzing.RandUint64()  // Random uint64 for Gas limit
+
+	// 	inner := &types.DynamicFeeTx{
+	// 		ChainID:   s.chain.config.ChainID,
+	// 		Nonce:     nonce + uint64(i),
+	// 		GasTipCap: gasTipCap,
+	// 		GasFeeCap: gasFeeCap,
+	// 		Gas:       gasLimit,
+	// 	}
+	// 	tx, _ := s.chain.SignTx(from, types.NewTx(inner))
+	// 	txs = append(txs, tx)
+	// 	set[tx.Hash()] = struct{}{}
+	// 	hashes = append(hashes, tx.Hash())
+	// }
 	var (
-		from, nonce = s.chain.GetSender(1)
-		count       = 2000
+		from, nonce = s.chain.GetSender(0)
 		txs         []*types.Transaction
-		hashes      []common.Hash
-		set         = make(map[common.Hash]struct{})
 	)
-
-	for i := 0; i < count; i++ {
-		// Use filler to fill the fields for transaction
-		gasTipCap := fuzzing.RandBigInt() // Random big.Int for GasTipCap
-		gasFeeCap := fuzzing.RandBigInt() // Random big.Int for GasFeeCap
-		gasLimit := fuzzing.RandUint64()  // Random uint64 for Gas limit
-
-		inner := &types.DynamicFeeTx{
-			ChainID:   s.chain.config.ChainID,
-			Nonce:     nonce + uint64(i),
-			GasTipCap: gasTipCap,
-			GasFeeCap: gasFeeCap,
-			Gas:       gasLimit,
-		}
-		tx, _ := s.chain.SignTx(from, types.NewTx(inner))
-		txs = append(txs, tx)
-		set[tx.Hash()] = struct{}{}
-		hashes = append(hashes, tx.Hash())
+	inner := &types.DynamicFeeTx{
+		ChainID:   s.chain.config.ChainID,
+		Nonce:     nonce,
+		GasTipCap: common.Big1,
+		GasFeeCap: s.chain.Head().BaseFee(),
+		Gas:       30000,
+		To:        &common.Address{0xaa},
+		Value:     common.Big1,
 	}
-
+	tx, _ := s.chain.SignTx(from, types.NewTx(inner))
+	txs = append(txs, tx)
 	return txs
 }
 
@@ -522,30 +537,24 @@ func (s *Suite) SendForkchoiceUpdated() error {
 // expects the node to accept and propagate them.
 func (s *Suite) SendTxs(txs []*types.Transaction) error {
 	// Open sending conning.
-	fmt.Println("正在建立发送连接...")
 	sendConn, err := s.dial()
 	if err != nil {
 		return fmt.Errorf("建立发送连接失败: %v", err)
 	}
 	defer sendConn.Close()
-	fmt.Println("发送连接建立成功，正在进行peer握手...")
 	if err = sendConn.peer(s.chain, nil); err != nil {
 		return fmt.Errorf("sending peer failed: %v", err)
 	}
-	fmt.Println("发送send peer握手完成")
 
 	// Open receiving conn.
-	fmt.Println("正在建立接收连接...")
 	recvConn, err := s.dial()
 	if err != nil {
 		return fmt.Errorf("建立接收连接失败: %v", err)
 	}
 	defer recvConn.Close()
-	fmt.Println("接收连接建立成功，正在进行peer握手...")
 	if err = recvConn.peer(s.chain, nil); err != nil {
 		return fmt.Errorf("receiving peer failed: %v", err)
 	}
-	fmt.Println("接收recv peer握手完成")
 
 	if err = sendConn.Write(ethProto, eth.TransactionsMsg, eth.TransactionsPacket(txs)); err != nil {
 		return fmt.Errorf("failed to write message to connection: %v", err)
@@ -560,7 +569,7 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 	for time.Now().Before(end) {
 		msg, err := recvConn.ReadEth()
 		if err != nil {
-			return fmt.Errorf("failed to read from connection: %w", err)
+			return fmt.Errorf("failed to read connection: %w", err)
 		}
 		switch msg := msg.(type) {
 		case *eth.TransactionsPacket:

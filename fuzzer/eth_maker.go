@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
+	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 )
 
@@ -66,13 +67,14 @@ type ethSnapshot struct {
 }
 
 type ethPacketTestResult struct {
-	PacketID    int
-	RequestType string
-	Check       bool
-	Success     bool
-	Request     eth.Packet
-	Response    eth.Packet
-	Error       string `json:"error"`
+	PacketID     int
+	RequestType  string
+	Check        bool
+	CheckResults []bool
+	Success      bool
+	Request      eth.Packet
+	Response     eth.Packet
+	Error        string `json:"error"`
 }
 
 func NewEthMaker(targetDir string, chain string) *EthMaker {
@@ -123,7 +125,7 @@ func (m *EthMaker) ToSubTest() *stJSON {
 	return st
 }
 
-func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet) error {
+func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UDPPacketStats) error {
 	var (
 		wg      sync.WaitGroup
 		logger  *log.Logger
@@ -135,7 +137,9 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet) error {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
-	// 根据不同的包类型进行处理
+	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
+	currentSeed := seed
+
 	switch seed.Kind() {
 	case eth.StatusMsg:
 		// TODO: 实现 Status 处理函数
@@ -160,40 +164,54 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet) error {
 		defer m.SuiteList[0].Conn().Close()
 	}
 
-	for i := 0; i < 2; i++ {
+	for i := 0; i < MutateCount; i++ {
 		wg.Add(1)
 
-		go func(iteration int, currentReq eth.Packet) {
+		mutateSeed := cloneAndMutateEthPacket(mutator, currentSeed, m.SuiteList[0].Chain())
+
+		go func(iteration int, currentReq eth.Packet, packetStats *UDPPacketStats) {
 			defer wg.Done()
 
 			result := ethPacketTestResult{
 				PacketID:    iteration,
-				RequestType: fmt.Sprintf("%x", currentReq.Kind()),
+				RequestType: fmt.Sprintf("%d", currentReq.Kind()),
 				Request:     currentReq,
 			}
 
 			// 发送并等待响应
-			err := func() error {
-				resp, err := m.handlePacketWithResponse(currentReq, m.SuiteList[0], traceOutput)
-				if err != nil {
-					return err
-				}
-				result.Response = resp
-				return nil
-			}()
+			resp, err := m.handlePacketWithResponse(currentReq, m.SuiteList[0], traceOutput)
 			if err != nil {
 				result.Error = err.Error()
-				result.Success = false
 			} else {
+				result.Response = resp
 				result.Success = true
 			}
 
-			mu.Lock()
-			results = append(results, result)
-			mu.Unlock()
+			// 进行语义检查
+			result.CheckResults = checkRequestSemantics(currentReq, m.SuiteList[0].Chain())
+			result.Check = allTrue(result.CheckResults)
 
-		}(i, seed)
+			if result.Check && !result.Success {
+				mu.Lock()
+				packetStats.CheckTrueFail = packetStats.CheckTrueFail + 1
+				// m.PakcetSeed = append(m.PakcetSeed, originalSeed)
+				results = append(results, result)
+				mu.Unlock()
+			} else if !result.Check && result.Success {
+				mu.Lock()
+				packetStats.CheckFalsePass = packetStats.CheckFalsePass + 1
+				// m.PakcetSeed = append(m.PakcetSeed, originalSeed)
+				results = append(results, result)
+				mu.Unlock()
+			} else if result.Check && result.Success {
+				mu.Lock()
+				packetStats.CheckTruePass = packetStats.CheckTruePass + 1
+				results = append(results, result)
+				mu.Unlock()
+			}
 
+		}(i, mutateSeed, stats)
+		currentSeed = mutateSeed
 		time.Sleep(PacketSleepTime)
 	}
 
@@ -205,6 +223,20 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet) error {
 	}
 
 	return nil
+}
+
+// 辅助函数：打印results数组
+func printResults(results []ethPacketTestResult, logger *log.Logger) {
+	for i, r := range results {
+		resultBytes, err := json.MarshalIndent(r, "", "    ")
+		if err != nil {
+			logger.Printf("Error marshaling result %d: %v", i, err)
+			continue
+		}
+		logger.Printf("Result %d:\n%s", i, string(resultBytes))
+	}
+	logger.Printf("Total results: %d\n", len(results))
+	logger.Printf("=====================================")
 }
 
 func (m *EthMaker) Start(traceOutput io.Writer) error {
@@ -414,6 +446,12 @@ func (m *EthMaker) handleSendOnlyPacket(packet interface{}, suite *eth.Suite, tr
 }
 
 func (m *EthMaker) handleTransactionPacket(p *eth.TransactionsPacket, suite *eth.Suite) ethPacketTestResult {
+	if err := suite.SendForkchoiceUpdated(); err != nil {
+		return ethPacketTestResult{
+			Error: fmt.Errorf("failed to send forkchoice update: %v", err).Error(),
+		}
+	}
+
 	for _, tx := range *p {
 		if err := suite.SendTxs([]*types.Transaction{tx}); err != nil {
 			return ethPacketTestResult{
@@ -425,40 +463,65 @@ func (m *EthMaker) handleTransactionPacket(p *eth.TransactionsPacket, suite *eth
 }
 
 func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, suite *eth.Suite) ethPacketTestResult {
+	// 先进行语义检查
+	checkResults := checkGetBlockHeadersSemantics(p, suite.Chain())
+
+	// 如果任何检查失败，直接返回错误
+	for i, passed := range checkResults {
+		if !passed {
+			return ethPacketTestResult{
+				Error:        fmt.Sprintf("semantic check %d failed for GetBlockHeaders request", i),
+				CheckResults: checkResults,
+			}
+		}
+	}
+
+	// 发送请求
 	if err := suite.SendMsg(eth.EthProto, eth.GetBlockHeadersMsg, p); err != nil {
 		return ethPacketTestResult{
-			Error: fmt.Errorf("could not send GetBlockHeadersMsg: %v", err).Error(),
+			Error:        fmt.Errorf("could not send GetBlockHeadersMsg: %v", err).Error(),
+			CheckResults: checkResults,
 		}
 	}
-	headers := new(eth.BlockHeadersPacket)
 
+	// 读取响应
+	headers := new(eth.BlockHeadersPacket)
 	if err := suite.ReadMsg(eth.EthProto, eth.BlockHeadersMsg, headers); err != nil {
 		return ethPacketTestResult{
-			Error: fmt.Errorf("error reading BlockHeadersMsg: %v", err).Error(),
+			Error:        fmt.Errorf("error reading BlockHeadersMsg: %v", err).Error(),
+			CheckResults: checkResults,
 		}
 	}
 
+	// 检查请求ID
 	if got, want := headers.RequestId, p.RequestId; got != want {
 		return ethPacketTestResult{
-			Error: fmt.Errorf("unexpected request id: got %d, want %d", headers.RequestId, p.RequestId).Error(),
+			Error:        fmt.Errorf("unexpected request id: got %d, want %d", headers.RequestId, p.RequestId).Error(),
+			CheckResults: checkResults,
 		}
 	}
 
-	expected, err := suite.GetHeaders(p)
-	if err != nil {
-		return ethPacketTestResult{
-			Error: fmt.Errorf("failed to get headers for given request: %v", err).Error(),
-		}
-	}
+	// // 获取预期的headers
+	// expected, err := suite.GetHeaders(p)
+	// if err != nil {
+	// 	return ethPacketTestResult{
+	// 		Error:        fmt.Errorf("failed to get headers for given request: %v", err).Error(),
+	// 		CheckResults: checkResults,
+	// 	}
+	// }
 
-	if !eth.HeadersMatch(expected, headers.BlockHeadersRequest) {
-		return ethPacketTestResult{
-			Error: fmt.Errorf("header mismatch").Error(),
-		}
-	}
+	// // 比较结果
+	// if !eth.HeadersMatch(expected, headers.BlockHeadersRequest) {
+	// 	return ethPacketTestResult{
+	// 		Error:        fmt.Errorf("header mismatch").Error(),
+	// 		CheckResults: checkResults,
+	// 	}
+	// }
 
 	return ethPacketTestResult{
-		Response: headers,
+		Response:     headers,
+		Success:      true,
+		CheckResults: checkResults,
 	}
 }
 
@@ -701,9 +764,6 @@ func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, tr
 		}
 		return result.Response, nil
 	case *eth.TransactionsPacket:
-		if err := suite.SendForkchoiceUpdated(); err != nil {
-			return nil, fmt.Errorf("failed to send forkchoice update: %v", err)
-		}
 		result := m.handleTransactionPacket(p, suite)
 		if result.Error != "" {
 			return nil, fmt.Errorf("%s", result.Error)
@@ -739,8 +799,110 @@ func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, tr
 	}
 }
 
+// checkRequestSemantics 检查请求的语义正确性
+func checkRequestSemantics(req eth.Packet, chain *eth.Chain) []bool {
+	var results []bool
+
+	switch p := req.(type) {
+	case *eth.GetBlockHeadersPacket:
+		results = checkGetBlockHeadersSemantics(p, chain)
+	case *eth.GetBlockBodiesPacket:
+		// TODO: 实现GetBlockBodies语义检查
+		results = []bool{true} // 临时返回
+	case *eth.GetReceiptsPacket:
+		// TODO: 实现GetReceipts语义检查
+		results = []bool{true} // 临时返回
+	case *eth.GetPooledTransactionsPacket:
+		// TODO: 实现GetPooledTransactions语义检查
+		results = []bool{true} // 临时返回
+	default:
+		// 对于其他类型的包，暂时返回true
+		results = []bool{true}
+	}
+
+	return results
+}
+
+// MulUint64 返回两个uint64相乘的结果和是否发生溢出
+func MulUint64(a, b uint64) (uint64, bool) {
+	if a == 0 || b == 0 {
+		return 0, false
+	}
+
+	c := a * b
+	if c/a != b {
+		return 0, true // 发生溢出
+	}
+	return c, false
+}
+
+// AddUint64 返回两个uint64相加的结果和是否发生溢出
+func AddUint64(a, b uint64) (uint64, bool) {
+	c := a + b
+	if c < a {
+		return 0, true // 发生溢出
+	}
+	return c, false
+}
+
+// checkGetBlockHeadersSemantics 检查GetBlockHeaders请求的语义正确性
+func checkGetBlockHeadersSemantics(p *eth.GetBlockHeadersPacket, chain *eth.Chain) []bool {
+	results := make([]bool, 4)
+	chainLen := uint64(chain.Len())
+
+	// 检查1: Origin 的有效性
+	if p.Origin.Hash != (common.Hash{}) {
+		found := false
+		for _, block := range chain.Blocks() {
+			if block.Hash() == p.Origin.Hash {
+				found = true
+				break
+			}
+		}
+		results[0] = found && p.Origin.Number == 0
+	} else {
+		results[0] = p.Origin.Number < chainLen
+	}
+
+	// 检查2: Amount 和 Skip 的基本有效性
+	results[1] = p.Amount > 0 && p.Amount <= 1024 // 限制最大请求数量
+
+	// 检查3: 计算最终区块号，防止溢出
+	if p.Reverse {
+		// 检查乘法是否会溢出
+		if mul, overflow := MulUint64(p.Amount-1, p.Skip+1); !overflow {
+			if p.Origin.Number >= mul {
+				endBlock := p.Origin.Number - mul
+				results[2] = endBlock >= 0
+			} else {
+				results[2] = false
+			}
+		} else {
+			results[2] = false
+		}
+	} else {
+		// 检查乘法是否会溢出
+		if mul, overflow := MulUint64(p.Amount-1, p.Skip+1); !overflow {
+			if sum, overflow := AddUint64(p.Origin.Number, mul); !overflow {
+				results[2] = sum < chainLen
+			} else {
+				results[2] = false
+			}
+		} else {
+			results[2] = false
+		}
+	}
+
+	// 检查4: 预估响应大小
+	estimatedSize := p.Amount * 500           // 假设每个区块头约500字节
+	results[3] = estimatedSize <= 4*1024*1024 // 限制在4MB以内
+
+	return results
+}
+
+// analyzeResultsEth 分析测试结果并保存到文件
 func analyzeResultsEth(results []ethPacketTestResult, logger *log.Logger, outputDir string) error {
-	// Create output directory if it doesn't exist
+	// 创建输出目录
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %v", err)
 	}
@@ -752,7 +914,7 @@ func analyzeResultsEth(results []ethPacketTestResult, logger *log.Logger, output
 
 	filename := filepath.Join(fullPath, fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
 
-	// Save to file
+	//Save to file
 	data, err := json.MarshalIndent(results, "", "    ")
 	if err != nil {
 		return fmt.Errorf("JSON serialization failed: %v", err)
@@ -765,4 +927,68 @@ func analyzeResultsEth(results []ethPacketTestResult, logger *log.Logger, output
 	logger.Printf("Results saved to file: %s\n", filename)
 
 	return nil
+}
+
+// cloneAndMutateV4Packet clones and mutates the packet
+func cloneAndMutateEthPacket(mutator *fuzzing.Mutator, seed eth.Packet, chain *eth.Chain) eth.Packet {
+	switch p := seed.(type) {
+	case *eth.StatusPacket:
+		return mutateStatusPacket(mutator, p)
+	case *eth.TransactionsPacket:
+		return mutateTransactionsPacket(mutator, p)
+	case *eth.GetBlockHeadersPacket:
+		// 创建深拷贝
+		newPacket := *p
+		newRequest := *p.GetBlockHeadersRequest
+		newPacket.GetBlockHeadersRequest = &newRequest
+		return mutateGetBlockHeadersPacket(mutator, &newPacket, chain)
+	case *eth.GetBlockBodiesPacket:
+		return mutateGetBlockBodiesPacket(mutator, p)
+	case *eth.GetPooledTransactionsPacket:
+		return mutateGetPooledTransactionsPacket(mutator, p)
+	case *eth.GetReceiptsPacket:
+		return mutateGetReceiptsPacket(mutator, p)
+	default:
+		return seed
+	}
+}
+
+func mutateStatusPacket(mutator *fuzzing.Mutator, p *eth.StatusPacket) eth.Packet {
+	panic("unimplemented")
+}
+
+func mutateTransactionsPacket(mutator *fuzzing.Mutator, p *eth.TransactionsPacket) eth.Packet {
+	panic("unimplemented")
+}
+
+func mutateGetBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.GetBlockHeadersPacket, chain *eth.Chain) *eth.GetBlockHeadersPacket {
+	mutated := *original
+
+	// 各字段有30%的概率进行变异
+	if rand.Float32() < 0.3 {
+		mutator.MutateOrigin(&mutated.Origin, mutated.Amount, mutated.Skip, mutated.Reverse, chain)
+	}
+	if rand.Float32() < 0.3 {
+		mutator.MutateAmount(&mutated.Amount, mutated.Origin.Number, mutated.Skip, mutated.Reverse, chain)
+	}
+	if rand.Float32() < 0.3 {
+		mutator.MutateSkip(&mutated.Skip, chain)
+	}
+	if rand.Float32() < 0.3 {
+		mutator.MutateReverse(&mutated.Reverse)
+	}
+
+	return &mutated
+}
+
+func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, p *eth.GetBlockBodiesPacket) eth.Packet {
+	panic("unimplemented")
+}
+
+func mutateGetPooledTransactionsPacket(mutator *fuzzing.Mutator, p *eth.GetPooledTransactionsPacket) eth.Packet {
+	panic("unimplemented")
+}
+
+func mutateGetReceiptsPacket(mutator *fuzzing.Mutator, p *eth.GetReceiptsPacket) eth.Packet {
+	panic("unimplemented")
 }

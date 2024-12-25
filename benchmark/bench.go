@@ -25,8 +25,9 @@ import (
 )
 
 var (
-	globalV4Stats = make(map[string]*fuzzer.UDPPacketStats)
-	globalV5Stats = make(map[string]*fuzzer.UDPPacketStats)
+	globalV4Stats  = make(map[string]*fuzzer.UDPPacketStats)
+	globalV5Stats  = make(map[string]*fuzzer.UDPPacketStats)
+	globalEthStats = make(map[string]*fuzzer.UDPPacketStats)
 )
 
 // RunFullBench runs a full benchmark with N runs.
@@ -97,7 +98,16 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 				if err != nil {
 					fmt.Printf("Failed to generate packet: %v\n", err)
 				}
-				testMaker.PacketStart(os.Stdout, packet)
+				globalEthStats[packet.Name()] = &fuzzer.UDPPacketStats{
+					ExecuteCount:   0,
+					CheckTrueFail:  0,
+					CheckFalsePass: 0,
+					CheckTruePass:  0,
+				}
+				testMaker.PacketStart(os.Stdout, packet, globalEthStats[packet.Name()])
+				fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
+					packet.Name(), globalEthStats[packet.Name()].ExecuteCount, globalEthStats[packet.Name()].CheckTrueFail,
+					globalEthStats[packet.Name()].CheckFalsePass, globalEthStats[packet.Name()].CheckTruePass)
 			}
 		}
 	}

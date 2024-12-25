@@ -34,10 +34,11 @@ import (
 )
 
 var (
-	outputDir     = "TraceOut"
-	EnvKey        = "FUZZYDIR"
-	globalV4Stats = make(map[string]*UDPPacketStats)
-	globalV5Stats = make(map[string]*UDPPacketStats)
+	outputDir      = "TraceOut"
+	EnvKey         = "FUZZYDIR"
+	globalV4Stats  = make(map[string]*UDPPacketStats)
+	globalV5Stats  = make(map[string]*UDPPacketStats)
+	globalEthStats = make(map[string]*UDPPacketStats)
 )
 
 type UDPPacketStats struct {
@@ -389,7 +390,7 @@ func ethFuzzer(engine int, target, chain string) error {
 
 	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
 	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
-	// Execute the test and write out the resulting trace
+
 	var traceFile *os.File
 	if ShouldTrace {
 		traceFile = setupTrace(finalName)
@@ -412,6 +413,7 @@ func ethFuzzer(engine int, target, chain string) error {
 				return err
 			}
 			testMaker.PakcetSeed[0] = append(testMaker.PakcetSeed[0], req)
+			globalEthStats[req.Name()] = &UDPPacketStats{0, 0, 0, 0}
 		}
 
 		// for seed
@@ -430,8 +432,13 @@ func ethFuzzer(engine int, target, chain string) error {
 					itration,
 					len(testMaker.PakcetSeed),
 					seed.Name())
-				if err = testMaker.PacketStart(traceFile, seed); err != nil {
+				if err = testMaker.PacketStart(traceFile, seed, globalEthStats[seed.Name()]); err != nil {
 					return err
+				}
+				globalEthStats[seed.Name()].ExecuteCount = globalEthStats[seed.Name()].ExecuteCount + 1
+				for name, stats := range globalEthStats {
+					fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
+						name, stats.ExecuteCount, stats.CheckTrueFail, stats.CheckFalsePass, stats.CheckTruePass)
 				}
 				itration = itration + 1
 			}
