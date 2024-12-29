@@ -107,8 +107,8 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 			RequestId: 33,
 			GetBlockHeadersRequest: &GetBlockHeadersRequest{
 				//Origin: HashOrNumber{Hash: s.chain.blocks[1].Hash()},
-				//Origin:  HashOrNumber{Number: uint64(1)},
-				Origin:  HashOrNumber{Hash: s.chain.blocks[1].Hash(), Number: uint64(1)},
+				Origin: HashOrNumber{Number: uint64(1)},
+				//Origin:  HashOrNumber{Hash: s.chain.blocks[1].Hash(), Number: uint64(1)},
 				Amount:  2,
 				Skip:    1,
 				Reverse: false,
@@ -125,7 +125,7 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 	case GetBlockBodiesMsg:
 		return &GetBlockBodiesPacket{
 			RequestId: 55,
-			GetBlockBodiesRequest: GetBlockBodiesRequest{
+			GetBlockBodiesRequest: &GetBlockBodiesRequest{
 				s.chain.blocks[54].Hash(),
 				s.chain.blocks[75].Hash(),
 			},

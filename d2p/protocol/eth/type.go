@@ -174,7 +174,7 @@ type GetBlockBodiesRequest []common.Hash
 // GetBlockBodiesPacket represents a block body query with request ID wrapping.
 type GetBlockBodiesPacket struct {
 	RequestId uint64
-	GetBlockBodiesRequest
+	*GetBlockBodiesRequest
 }
 
 // BlockBodiesResponse is the network packet for block content distribution.

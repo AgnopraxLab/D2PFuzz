@@ -339,89 +339,100 @@ func (m *Mutator) MutateRequestId(id *uint64) {
 
 // MutateOrigin 变异区块头的Origin字段
 func (m *Mutator) MutateOrigin(origin *eth.HashOrNumber, amount uint64, skip uint64, reverse bool, chain *eth.Chain) {
-	chainLen := uint64(chain.Len())
-
-	// 计算安全范围
-	if reverse {
-		// 反向查询时,Number必须大于等于 (Amount-1)*(Skip+1)
-		minRequired := (amount - 1) * (skip + 1)
-		origin.Number = uint64(m.Rand(max(int(chainLen-minRequired), 1))) + minRequired
-	} else {
-		// 正向查询时,Number+(Amount-1)*(Skip+1) 必须小于链长度
-		maxAllowed := chainLen - (amount-1)*(skip+1)
-		if maxAllowed > 0 {
-			origin.Number = uint64(m.Rand(int(maxAllowed)))
-		} else {
-			origin.Number = 0
-		}
-	}
-
-	// 清空Hash
-	origin.Hash = common.Hash{}
+	// 简单地生成一个随机区块号
+	origin.Number = uint64(m.Rand(int(chain.Len()) * 2)) // 允许超出链长度
+	origin.Hash = common.Hash{}                          // 清空Hash，使用Number
 }
 
 // MutateAmount 变异区块头请求的Amount字段
 func (m *Mutator) MutateAmount(amount *uint64, origin uint64, skip uint64, reverse bool, chain *eth.Chain) {
-	chainLen := uint64(chain.Len())
-
-	var maxAmount uint64
-	if reverse {
-		// 反向查询时,最大Amount取决于origin
-		maxAmount = (origin / (skip + 1)) + 1
-	} else {
-		// 正向查询时,最大Amount取决于剩余链长度
-		maxAmount = ((chainLen - origin) / (skip + 1)) + 1
-	}
-
-	if maxAmount > 0 {
-		*amount = uint64(m.Rand(int(maxAmount))) + 1 // 确保Amount至少为1
-	} else {
-		*amount = 1
-	}
-}
-
-// 验证函数
-func ValidateBlockHeaderRequest(origin uint64, amount uint64, skip uint64, reverse bool, chainLen uint64) bool {
-	if amount == 0 {
-		return false
-	}
-
-	// 计算最后一个区块的位置
-	var lastBlock int64
-	if reverse {
-		lastBlock = int64(origin) - int64((amount-1)*(skip+1))
-		return lastBlock >= 0
-	} else {
-		lastBlock = int64(origin) + int64((amount-1)*(skip+1))
-		return lastBlock < int64(chainLen)
+	switch m.Rand(3) {
+	case 0:
+		// 生成一个较小的值
+		*amount = uint64(m.Rand(100)) + 1
+	case 1:
+		// 生成一个较大的值
+		*amount = uint64(m.Rand(10000)) + 100
+	case 2:
+		// 边界值
+		*amount = uint64(m.Rand(2)) // 0 或 1
 	}
 }
 
 // MutateSkip 变异区块头请求的Skip字段
 func (m *Mutator) MutateSkip(skip *uint64, chain *eth.Chain) {
-	switch m.Rand(4) {
+	switch m.Rand(3) {
 	case 0:
-		// 随机增加
-		*skip += uint64(m.Rand(int(chain.Len() - 1)))
+		// 小值
+		*skip = uint64(m.Rand(10))
 	case 1:
-		// 随机减少
-		if *skip > 0 {
-			*skip -= uint64(m.Rand(min(int(*skip), int(chain.Len()-1))))
-		}
+		// 大值
+		*skip = uint64(m.Rand(1000)) + 100
 	case 2:
-		// 设置为边界值
+		// 极端值
 		if m.Bool() {
 			*skip = 0
 		} else {
-			*skip = uint64(chain.Len() - 1)
+			*skip = ^uint64(0) // 最大值
 		}
-	case 3:
-		// 完全随机值
-		*skip = uint64(m.Rand(int(chain.Len() - 1)))
 	}
 }
 
 // MutateReverse 变异区块头请求的Reverse字段
 func (m *Mutator) MutateReverse(reverse *bool) {
-	*reverse = !*reverse
+	*reverse = !*reverse // 保持简单的翻转即可
+}
+
+// MutateBlockBodiesRequest 变异区块体请求的哈希列表
+func (m *Mutator) MutateBlockBodiesRequest(request *eth.GetBlockBodiesRequest, chain *eth.Chain) {
+	switch m.Rand(4) {
+	case 0:
+		// 空列表
+		*request = eth.GetBlockBodiesRequest{}
+
+	case 1:
+		// 随机选择1-5个有效哈希
+		count := m.Rand(5) + 1
+		hashes := make(eth.GetBlockBodiesRequest, 0, count)
+		blocks := chain.Blocks()
+		for i := 0; i < count; i++ {
+			if len(blocks) > 0 {
+				idx := m.Rand(len(blocks))
+				hashes = append(hashes, blocks[idx].Hash())
+			}
+		}
+		*request = hashes
+
+	case 2:
+		// 生成1-5个随机哈希
+		count := m.Rand(5) + 1
+		hashes := make(eth.GetBlockBodiesRequest, 0, count)
+		for i := 0; i < count; i++ {
+			var hash common.Hash
+			hashBytes := make([]byte, common.HashLength)
+			m.MutateBytes(&hashBytes)
+			copy(hash[:], hashBytes)
+			hashes = append(hashes, hash)
+		}
+		*request = hashes
+
+	case 3:
+		// 混合有效和无效哈希
+		count := m.Rand(5) + 1
+		hashes := make(eth.GetBlockBodiesRequest, 0, count)
+		blocks := chain.Blocks()
+		for i := 0; i < count; i++ {
+			if m.Bool() && len(blocks) > 0 {
+				idx := m.Rand(len(blocks))
+				hashes = append(hashes, blocks[idx].Hash())
+			} else {
+				var hash common.Hash
+				hashBytes := make([]byte, common.HashLength)
+				m.MutateBytes(&hashBytes)
+				copy(hash[:], hashBytes)
+				hashes = append(hashes, hash)
+			}
+		}
+		*request = hashes
+	}
 }

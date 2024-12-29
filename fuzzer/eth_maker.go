@@ -178,18 +178,18 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 				Request:     currentReq,
 			}
 
+			result.CheckResults = m.checkRequestSemantics(currentReq, m.SuiteList[0].Chain())
+			result.Check = allTrue(result.CheckResults)
+
 			// 发送并等待响应
-			resp, err := m.handlePacketWithResponse(currentReq, m.SuiteList[0], traceOutput)
+			resp, err, newCheck := m.handlePacketWithResponse(currentReq, m.SuiteList[0], traceOutput)
 			if err != nil {
 				result.Error = err.Error()
 			} else {
 				result.Response = resp
 				result.Success = true
+				result.Check = newCheck
 			}
-
-			// 进行语义检查
-			result.CheckResults = checkRequestSemantics(currentReq, m.SuiteList[0].Chain())
-			result.Check = allTrue(result.CheckResults)
 
 			if result.Check && !result.Success {
 				mu.Lock()
@@ -466,21 +466,22 @@ func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, sui
 	// 先进行语义检查
 	checkResults := checkGetBlockHeadersSemantics(p, suite.Chain())
 
-	// 如果任何检查失败，直接返回错误
-	for i, passed := range checkResults {
+	// 记录是否通过所有检查
+	checkPassed := true
+	for _, passed := range checkResults {
 		if !passed {
-			return ethPacketTestResult{
-				Error:        fmt.Sprintf("semantic check %d failed for GetBlockHeaders request", i),
-				CheckResults: checkResults,
-			}
+			checkPassed = false
+			break
 		}
 	}
 
-	// 发送请求
+	// 发送请求（无论检查是否通过都发送）
 	if err := suite.SendMsg(eth.EthProto, eth.GetBlockHeadersMsg, p); err != nil {
 		return ethPacketTestResult{
 			Error:        fmt.Errorf("could not send GetBlockHeadersMsg: %v", err).Error(),
 			CheckResults: checkResults,
+			Check:        false,
+			Success:      false,
 		}
 	}
 
@@ -490,70 +491,157 @@ func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, sui
 		return ethPacketTestResult{
 			Error:        fmt.Errorf("error reading BlockHeadersMsg: %v", err).Error(),
 			CheckResults: checkResults,
+			Check:        checkPassed,
+			Success:      false,
 		}
 	}
 
+	// 处理检查未通过的情况
+	if !checkPassed {
+		// 如果是无效请求且返回空响应，这是正确的处理
+		if len(headers.BlockHeadersRequest) == 0 {
+			return ethPacketTestResult{
+				Response:     headers,
+				Success:      true,
+				CheckResults: checkResults,
+				Check:        true,
+			}
+		}
+		// 如果返回了非空响应，这是错误的处理
+		return ethPacketTestResult{
+			Response:     headers,
+			Success:      false,
+			CheckResults: checkResults,
+			Check:        false,
+		}
+	}
+
+	// 以下是检查通过的正常处理流程
 	// 检查请求ID
 	if got, want := headers.RequestId, p.RequestId; got != want {
 		return ethPacketTestResult{
-			Error:        fmt.Errorf("unexpected request id: got %d, want %d", headers.RequestId, p.RequestId).Error(),
+			Response:     headers,
+			Success:      false,
 			CheckResults: checkResults,
+			Check:        true,
+			Error:        fmt.Sprintf("unexpected request id: got %d, want %d", got, want),
 		}
 	}
 
-	// // 获取预期的headers
-	// expected, err := suite.GetHeaders(p)
-	// if err != nil {
-	// 	return ethPacketTestResult{
-	// 		Error:        fmt.Errorf("failed to get headers for given request: %v", err).Error(),
-	// 		CheckResults: checkResults,
-	// 	}
-	// }
+	// 获取预期的headers
+	expected, err := suite.GetHeaders(p)
+	if err != nil {
+		return ethPacketTestResult{
+			Response:     headers,
+			Success:      false,
+			CheckResults: checkResults,
+			Check:        true,
+			Error:        fmt.Sprintf("failed to get headers: %v", err),
+		}
+	}
 
-	// // 比较结果
-	// if !eth.HeadersMatch(expected, headers.BlockHeadersRequest) {
-	// 	return ethPacketTestResult{
-	// 		Error:        fmt.Errorf("header mismatch").Error(),
-	// 		CheckResults: checkResults,
-	// 	}
-	// }
+	// 比较结果
+	if !eth.HeadersMatch(expected, headers.BlockHeadersRequest) {
+		return ethPacketTestResult{
+			Response:     headers,
+			Success:      false,
+			CheckResults: checkResults,
+			Check:        true,
+			Error:        "header mismatch",
+		}
+	}
 
 	return ethPacketTestResult{
 		Response:     headers,
 		Success:      true,
 		CheckResults: checkResults,
+		Check:        true,
 	}
 }
 
 func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, suite *eth.Suite) ethPacketTestResult {
-	if err := suite.SendMsg(eth.EthProto, eth.GetBlockBodiesMsg, p); err != nil {
-		return ethPacketTestResult{
-			Error: fmt.Errorf("could not send GetBlockBodiesMsg: %v", err).Error(),
+	// 先进行语义检查
+	checkResults := checkGetBlockBodiesSemantics(p, suite.Chain())
+
+	// 记录是否通过所有检查
+	checkPassed := true
+	for _, passed := range checkResults {
+		if !passed {
+			checkPassed = false
+			break
 		}
 	}
 
+	// 发送请求（无论检查是否通过都发送）
+	if err := suite.SendMsg(eth.EthProto, eth.GetBlockBodiesMsg, p); err != nil {
+		return ethPacketTestResult{
+			Error:        fmt.Errorf("could not send GetBlockBodiesMsg: %v", err).Error(),
+			CheckResults: checkResults,
+			Check:        false,
+			Success:      false,
+		}
+	}
+
+	// 读取响应
 	resp := new(eth.BlockBodiesPacket)
 	if err := suite.ReadMsg(eth.EthProto, eth.BlockBodiesMsg, resp); err != nil {
 		return ethPacketTestResult{
-			Error: fmt.Errorf("error reading BlockBodiesMsg: %v", err).Error(),
+			Error:        fmt.Errorf("error reading BlockBodiesMsg: %v", err).Error(),
+			CheckResults: checkResults,
+			Check:        checkPassed,
+			Success:      false,
 		}
 	}
 
+	// 处理检查未通过的情况
+	if !checkPassed {
+		// 如果是无效请求且返回空响应，这是正确的处理
+		if len(resp.BlockBodiesResponse) == 0 {
+			return ethPacketTestResult{
+				Response:     resp,
+				Success:      true,
+				CheckResults: checkResults,
+				Check:        true,
+			}
+		}
+		// 如果返回了非空响应，这是错误的处理
+		return ethPacketTestResult{
+			Response:     resp,
+			Success:      false,
+			CheckResults: checkResults,
+			Check:        false,
+		}
+	}
+
+	// 以下是检查通过的正常处理流程
+	// 检查请求ID
 	if got, want := resp.RequestId, p.RequestId; got != want {
 		return ethPacketTestResult{
-			Error: fmt.Errorf("unexpected request id in response: got %d, want %d", got, want).Error(),
+			Response:     resp,
+			Success:      false,
+			CheckResults: checkResults,
+			Check:        true,
+			Error:        fmt.Sprintf("unexpected request id: got %d, want %d", got, want),
 		}
 	}
 
-	bodies := resp.BlockBodiesResponse
-	if len(bodies) != len(p.GetBlockBodiesRequest) {
+	// 检查响应长度
+	if len(resp.BlockBodiesResponse) != len(*p.GetBlockBodiesRequest) {
 		return ethPacketTestResult{
-			Error: fmt.Errorf("wrong bodies in response: expected %d bodies, got %d", len(p.GetBlockBodiesRequest), len(bodies)).Error(),
+			Response:     resp,
+			Success:      false,
+			CheckResults: checkResults,
+			Check:        true,
+			Error: fmt.Sprintf("wrong number of bodies: got %d, want %d",
+				len(resp.BlockBodiesResponse), len(*p.GetBlockBodiesRequest)),
 		}
 	}
 
 	return ethPacketTestResult{
-		Response: resp,
+		Response:     resp,
+		Success:      true,
+		CheckResults: checkResults,
+		Check:        true,
 	}
 }
 
@@ -755,52 +843,46 @@ func generateEthTestSeq() []int {
 }
 
 // packet test deal data
-func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, traceOutput io.Writer) (eth.Packet, error) {
+func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, traceOutput io.Writer) (eth.Packet, error, bool) {
 	switch p := req.(type) {
-	case *eth.StatusPacket:
-		result := m.handleStatusPacket(p, suite)
-		if result.Error != "" {
-			return nil, fmt.Errorf("%s", result.Error)
-		}
-		return result.Response, nil
-	case *eth.TransactionsPacket:
-		result := m.handleTransactionPacket(p, suite)
-		if result.Error != "" {
-			return nil, fmt.Errorf("%s", result.Error)
-		}
-		return result.Response, nil
+	// case *eth.StatusPacket:
+	// 	result := m.handleStatusPacket(p, suite)
+	// 	if result.Error != "" {
+	// 		return nil, fmt.Errorf("%s", result.Error)
+	// 	}
+	// 	return result.Response, nil
+	// case *eth.TransactionsPacket:
+	// 	result := m.handleTransactionPacket(p, suite)
+	// 	if result.Error != "" {
+	// 		return nil, fmt.Errorf("%s", result.Error)
+	// 	}
+	// 	return result.Response, nil
 	case *eth.GetBlockHeadersPacket:
 		result := m.handleGetBlockHeadersPacket(p, suite)
-		if result.Error != "" {
-			return nil, fmt.Errorf("%s", result.Error)
-		}
-		return result.Response, nil
+		return result.Response, nil, result.Check
 	case *eth.GetBlockBodiesPacket:
 		result := m.handleGetBlockBodiesPacket(p, suite)
-		if result.Error != "" {
-			return nil, fmt.Errorf("%s", result.Error)
-		}
-		return result.Response, nil
-	case *eth.GetPooledTransactionsPacket:
-		result := m.handleGetPooledTransactionsPacket(p, suite)
-		if result.Error != "" {
-			return nil, fmt.Errorf("%s", result.Error)
-		}
-		return result.Response, nil
-	case *eth.GetReceiptsPacket:
-		result := m.handleGetReceiptsPacket(p, suite)
-		if result.Error != "" {
-			return nil, fmt.Errorf("%s", result.Error)
-		}
-		return result.Response, nil
+		return result.Response, nil, result.Check
+	// case *eth.GetPooledTransactionsPacket:
+	// 	result := m.handleGetPooledTransactionsPacket(p, suite)
+	// 	if result.Error != "" {
+	// 		return nil, fmt.Errorf("%s", result.Error)
+	// 	}
+	// 	return result.Response, nil
+	// case *eth.GetReceiptsPacket:
+	// 	result := m.handleGetReceiptsPacket(p, suite)
+	// 	if result.Error != "" {
+	// 		return nil, fmt.Errorf("%s", result.Error)
+	// 	}
+	// 	return result.Response, nil
 	default:
 		err := m.handleSendOnlyPacket(p, suite, traceOutput)
-		return nil, err
+		return nil, err, false
 	}
 }
 
 // checkRequestSemantics 检查请求的语义正确性
-func checkRequestSemantics(req eth.Packet, chain *eth.Chain) []bool {
+func (m *EthMaker) checkRequestSemantics(req eth.Packet, chain *eth.Chain) []bool {
 	var results []bool
 
 	switch p := req.(type) {
@@ -808,7 +890,7 @@ func checkRequestSemantics(req eth.Packet, chain *eth.Chain) []bool {
 		results = checkGetBlockHeadersSemantics(p, chain)
 	case *eth.GetBlockBodiesPacket:
 		// TODO: 实现GetBlockBodies语义检查
-		results = []bool{true} // 临时返回
+		results = checkGetBlockBodiesSemantics(p, chain)
 	case *eth.GetReceiptsPacket:
 		// TODO: 实现GetReceipts语义检查
 		results = []bool{true} // 临时返回
@@ -821,28 +903,6 @@ func checkRequestSemantics(req eth.Packet, chain *eth.Chain) []bool {
 	}
 
 	return results
-}
-
-// MulUint64 返回两个uint64相乘的结果和是否发生溢出
-func MulUint64(a, b uint64) (uint64, bool) {
-	if a == 0 || b == 0 {
-		return 0, false
-	}
-
-	c := a * b
-	if c/a != b {
-		return 0, true // 发生溢出
-	}
-	return c, false
-}
-
-// AddUint64 返回两个uint64相加的结果和是否发生溢出
-func AddUint64(a, b uint64) (uint64, bool) {
-	c := a + b
-	if c < a {
-		return 0, true // 发生溢出
-	}
-	return c, false
 }
 
 // checkGetBlockHeadersSemantics 检查GetBlockHeaders请求的语义正确性
@@ -864,39 +924,65 @@ func checkGetBlockHeadersSemantics(p *eth.GetBlockHeadersPacket, chain *eth.Chai
 		results[0] = p.Origin.Number < chainLen
 	}
 
-	// 检查2: Amount 和 Skip 的基本有效性
-	results[1] = p.Amount > 0 && p.Amount <= 1024 // 限制最大请求数量
+	// 检查2: Amount 必须大于0且合理
+	results[1] = p.Amount > 0 && p.Amount <= 1024
 
-	// 检查3: 计算最终区块号，防止溢出
-	if p.Reverse {
-		// 检查乘法是否会溢出
-		if mul, overflow := MulUint64(p.Amount-1, p.Skip+1); !overflow {
-			if p.Origin.Number >= mul {
-				endBlock := p.Origin.Number - mul
-				results[2] = endBlock >= 0
-			} else {
-				results[2] = false
-			}
-		} else {
-			results[2] = false
-		}
+	// 如果Amount无效，后续检查都失败
+	if !results[1] {
+		results[2] = false
+		results[3] = false
+		return results
+	}
+
+	// 检查3: Skip和范围检查
+	if p.Amount == 1 {
+		// Amount为1时，Skip值不影响结果
+		results[2] = true
+	} else if p.Skip >= chainLen {
+		results[2] = false
+	} else if p.Reverse {
+		// 检查是否有足够的前置区块
+		minRequired := (p.Amount - 1) * (p.Skip + 1)
+		results[2] = p.Origin.Number >= minRequired
 	} else {
-		// 检查乘法是否会溢出
-		if mul, overflow := MulUint64(p.Amount-1, p.Skip+1); !overflow {
-			if sum, overflow := AddUint64(p.Origin.Number, mul); !overflow {
-				results[2] = sum < chainLen
-			} else {
-				results[2] = false
-			}
-		} else {
-			results[2] = false
-		}
+		// 检查是否超出链长度
+		maxRequired := p.Origin.Number + (p.Amount-1)*(p.Skip+1)
+		results[2] = maxRequired < chainLen
 	}
 
 	// 检查4: 预估响应大小
-	estimatedSize := p.Amount * 500           // 假设每个区块头约500字节
-	results[3] = estimatedSize <= 4*1024*1024 // 限制在4MB以内
+	estimatedSize := p.Amount * 500         // 每个区块头约500字节
+	results[3] = estimatedSize <= 1024*1024 // 限制在1MB以内
 
+	return results
+}
+
+func checkGetBlockBodiesSemantics(p *eth.GetBlockBodiesPacket, chain *eth.Chain) []bool {
+	results := make([]bool, 1) // 只需要一个检查项
+
+	// 检查1: 请求不能为空，且所有哈希必须有效
+	if p.GetBlockBodiesRequest == nil || len(*p.GetBlockBodiesRequest) == 0 {
+		results[0] = false
+		return results
+	}
+
+	// 构建区块哈希映射，用于快速查找
+	blockHashes := make(map[common.Hash]bool)
+	for _, block := range chain.Blocks() {
+		blockHashes[block.Hash()] = true
+	}
+
+	// 检查每个请求的哈希
+	for _, hash := range *p.GetBlockBodiesRequest {
+		if !blockHashes[hash] {
+			// 只要有一个无效哈希，整个请求就是无效的
+			results[0] = false
+			return results
+		}
+	}
+
+	// 所有哈希都有效
+	results[0] = true
 	return results
 }
 
@@ -943,7 +1029,10 @@ func cloneAndMutateEthPacket(mutator *fuzzing.Mutator, seed eth.Packet, chain *e
 		newPacket.GetBlockHeadersRequest = &newRequest
 		return mutateGetBlockHeadersPacket(mutator, &newPacket, chain)
 	case *eth.GetBlockBodiesPacket:
-		return mutateGetBlockBodiesPacket(mutator, p)
+		newPacket := *p
+		newRequest := *p.GetBlockBodiesRequest
+		newPacket.GetBlockBodiesRequest = &newRequest
+		return mutateGetBlockBodiesPacket(mutator, &newPacket, chain)
 	case *eth.GetPooledTransactionsPacket:
 		return mutateGetPooledTransactionsPacket(mutator, p)
 	case *eth.GetReceiptsPacket:
@@ -981,8 +1070,15 @@ func mutateGetBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.GetBloc
 	return &mutated
 }
 
-func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, p *eth.GetBlockBodiesPacket) eth.Packet {
-	panic("unimplemented")
+func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.GetBlockBodiesPacket, chain *eth.Chain) *eth.GetBlockBodiesPacket {
+	mutated := *original
+
+	// 各字段有30%的概率进行变异
+	if rand.Float32() < 0.5 {
+		mutator.MutateBlockBodiesRequest(mutated.GetBlockBodiesRequest, chain)
+	}
+
+	return &mutated
 }
 
 func mutateGetPooledTransactionsPacket(mutator *fuzzing.Mutator, p *eth.GetPooledTransactionsPacket) eth.Packet {

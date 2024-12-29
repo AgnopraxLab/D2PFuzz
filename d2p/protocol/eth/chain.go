@@ -6,7 +6,6 @@ import (
 	"crypto/ecdsa"
 	crand "crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -230,35 +229,56 @@ func (c *Chain) SignTx(from common.Address, tx *types.Transaction) (*types.Trans
 
 // GetHeaders returns the headers base on an ethGetPacketHeadersPacket.
 func (c *Chain) GetHeaders(req *GetBlockHeadersPacket) ([]*types.Header, error) {
-	if req.Amount < 1 {
-		return nil, errors.New("no block headers requested")
+	var headers []*types.Header
+	chainLen := uint64(c.Len())
+
+	// 1. 验证起始区块
+	startBlock := req.Origin.Number
+	if startBlock >= chainLen {
+		return nil, fmt.Errorf("start block %d exceeds chain length %d", startBlock, chainLen)
 	}
-	var (
-		headers     = make([]*types.Header, req.Amount)
-		blockNumber uint64
-	)
-	// Range over blocks to check if our chain has the requested header.
-	for _, block := range c.blocks {
-		if block.Hash() == req.Origin.Hash || block.Number().Uint64() == req.Origin.Number {
-			headers[0] = block.Header()
-			blockNumber = block.Number().Uint64()
+
+	// 2. 预先计算所有需要的区块号
+	var blockNums []uint64
+	for i := uint64(0); i < req.Amount; i++ {
+		var blockNum uint64
+		if req.Reverse {
+			// 检查是否会下溢
+			if i*(req.Skip+1) > startBlock {
+				break
+			}
+			blockNum = startBlock - i*(req.Skip+1)
+		} else {
+			// 检查是否会上溢
+			nextBlock := startBlock + i*(req.Skip+1)
+			if nextBlock >= chainLen {
+				break
+			}
+			blockNum = nextBlock
 		}
+		blockNums = append(blockNums, blockNum)
 	}
-	if headers[0] == nil {
-		return nil, fmt.Errorf("no headers found for given origin number %v, hash %v", req.Origin.Number, req.Origin.Hash)
-	}
-	if req.Reverse {
-		for i := 1; i < int(req.Amount); i++ {
-			blockNumber -= 1 - req.Skip
-			headers[i] = c.blocks[blockNumber].Header()
+
+	// 3. 获取所有区块头
+	for _, num := range blockNums {
+		header := c.GetHeaderByNumber(num)
+		if header == nil {
+			return nil, fmt.Errorf("block %d not found", num)
 		}
-		return headers, nil
+		headers = append(headers, header)
 	}
-	for i := 1; i < int(req.Amount); i++ {
-		blockNumber += 1 + req.Skip
-		headers[i] = c.blocks[blockNumber].Header()
-	}
+
 	return headers, nil
+}
+
+func (c *Chain) GetHeaderByNumber(number uint64) *types.Header {
+	// 检查区块号是否在有效范围内
+	if number >= uint64(len(c.blocks)) {
+		return nil
+	}
+
+	// 从blocks数组中获取区块，然后返回其区块头
+	return c.blocks[number].Header()
 }
 
 func MakeJWTSecret() (string, [32]byte, error) {
