@@ -226,7 +226,7 @@ type GetReceiptsRequest []common.Hash
 // GetReceiptsPacket represents a block receipts query with request ID wrapping.
 type GetReceiptsPacket struct {
 	RequestId uint64
-	GetReceiptsRequest
+	*GetReceiptsRequest
 }
 
 // ReceiptsResponse is the network packet for block receipts distribution.

@@ -107,8 +107,8 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 			RequestId: 33,
 			GetBlockHeadersRequest: &GetBlockHeadersRequest{
 				//Origin: HashOrNumber{Hash: s.chain.blocks[1].Hash()},
-				Origin: HashOrNumber{Number: uint64(1)},
-				//Origin:  HashOrNumber{Hash: s.chain.blocks[1].Hash(), Number: uint64(1)},
+				//Origin: HashOrNumber{Number: uint64(1)},
+				Origin:  HashOrNumber{Hash: s.chain.blocks[1].Hash(), Number: uint64(1)},
 				Amount:  2,
 				Skip:    1,
 				Reverse: false,
@@ -169,7 +169,7 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 	case GetPooledTransactionsMsg:
 		return &GetPooledTransactionsPacket{
 			RequestId: 99,
-			GetPooledTransactionsRequest: GetPooledTransactionsRequest{
+			GetPooledTransactionsRequest: &GetPooledTransactionsRequest{
 				s.chain.blocks[13].Transactions()[0].Hash(), // 假设我们要请求第13个区块的第一个交易
 				s.chain.blocks[7].Transactions()[0].Hash(),  // 假设我们要请求第7个区块的第一个交易
 			},
@@ -188,7 +188,7 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 	case GetReceiptsMsg:
 		packet := &GetReceiptsPacket{
 			RequestId: 110,
-			GetReceiptsRequest: GetReceiptsRequest{
+			GetReceiptsRequest: &GetReceiptsRequest{
 				s.chain.blocks[12].Hash(), // 请求第54个区块的收据
 				s.chain.blocks[3].Hash(),  // 请求第75个区块的收据
 			},

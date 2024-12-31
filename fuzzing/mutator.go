@@ -18,14 +18,17 @@ package fuzzing
 
 import (
 	"encoding/binary"
+	"math/big"
 	"math/rand"
 	"net"
 	"unsafe"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/holiman/uint256"
 )
 
 var (
@@ -435,4 +438,438 @@ func (m *Mutator) MutateBlockBodiesRequest(request *eth.GetBlockBodiesRequest, c
 		}
 		*request = hashes
 	}
+}
+
+// MutateReceiptsRequest 变异收据请求的哈希列表
+func (m *Mutator) MutateReceiptsRequest(request *eth.GetReceiptsRequest, chain *eth.Chain) {
+	switch m.Rand(4) {
+	case 0:
+		// 空列表
+		*request = eth.GetReceiptsRequest{}
+
+	case 1:
+		// 随机选择1-5个有效哈希
+		count := m.Rand(5) + 1
+		hashes := make(eth.GetReceiptsRequest, 0, count)
+		blocks := chain.Blocks()
+		for i := 0; i < count; i++ {
+			if len(blocks) > 0 {
+				idx := m.Rand(len(blocks))
+				hashes = append(hashes, blocks[idx].Hash())
+			}
+		}
+		*request = hashes
+
+	case 2:
+		// 生成1-5个随机哈希
+		count := m.Rand(5) + 1
+		hashes := make(eth.GetReceiptsRequest, 0, count)
+		for i := 0; i < count; i++ {
+			var hash common.Hash
+			hashBytes := make([]byte, common.HashLength)
+			m.MutateBytes(&hashBytes)
+			copy(hash[:], hashBytes)
+			hashes = append(hashes, hash)
+		}
+		*request = hashes
+
+	case 3:
+		// 混合有效和无效哈希
+		count := m.Rand(5) + 1
+		hashes := make(eth.GetReceiptsRequest, 0, count)
+		blocks := chain.Blocks()
+		for i := 0; i < count; i++ {
+			if m.Bool() && len(blocks) > 0 {
+				idx := m.Rand(len(blocks))
+				hashes = append(hashes, blocks[idx].Hash())
+			} else {
+				var hash common.Hash
+				hashBytes := make([]byte, common.HashLength)
+				m.MutateBytes(&hashBytes)
+				copy(hash[:], hashBytes)
+				hashes = append(hashes, hash)
+			}
+		}
+		*request = hashes
+	}
+}
+
+func (m *Mutator) MutateTransaction(original *types.Transaction) *types.Transaction {
+	// 选择交易类型
+	txType := byte(m.Rand(4)) // 0-3对应四种交易类型
+
+	switch txType {
+	case types.LegacyTxType:
+		return m.mutateLegacyTx(original)
+	case types.AccessListTxType:
+		return m.mutateAccessListTx(original)
+	case types.DynamicFeeTxType:
+		return m.mutateDynamicFeeTx(original)
+	case types.BlobTxType:
+		return m.mutateBlobTx(original)
+	default:
+		return m.mutateLegacyTx(original) // 默认使用Legacy类型
+	}
+}
+
+func (m *Mutator) mutateLegacyTx(original *types.Transaction) *types.Transaction {
+	if original == nil || m.Bool() {
+		// 创建新交易
+		nonce := uint64(m.r.Int63n(1000))
+		gasPrice := new(big.Int).SetUint64(uint64(m.r.Int63n(1000000000)))
+		gas := uint64(m.r.Int63n(1000000))
+
+		var to *common.Address
+		if m.Bool() {
+			addr := common.BytesToAddress(m.RandBytes(20))
+			to = &addr
+		}
+
+		value := new(big.Int).SetUint64(uint64(m.r.Int63n(1000000000)))
+		data := m.RandBytes(m.r.Int63n(100))
+
+		return types.NewTx(&types.LegacyTx{
+			Nonce:    nonce,
+			GasPrice: gasPrice,
+			Gas:      gas,
+			To:       to,
+			Value:    value,
+			Data:     data,
+		})
+	}
+
+	// 基于原始交易进行变异
+	if original.Type() != types.LegacyTxType {
+		return m.mutateLegacyTx(nil) // 如果不是Legacy类型，创建新交易
+	}
+
+	// 复制原始交易的值
+	nonce := original.Nonce()
+	gasPrice := new(big.Int).Set(original.GasPrice())
+	gas := original.Gas()
+	to := original.To()
+	value := new(big.Int).Set(original.Value())
+	data := make([]byte, len(original.Data()))
+	copy(data, original.Data())
+
+	// 随机选择要变异的字段
+	switch m.r.Int63n(6) {
+	case 0:
+		nonce = uint64(m.r.Int63n(1000))
+	case 1:
+		gasPrice.SetUint64(uint64(m.r.Int63n(1000000000)))
+	case 2:
+		gas = uint64(m.r.Int63n(1000000))
+	case 3:
+		if m.Bool() {
+			addr := common.BytesToAddress(m.RandBytes(20))
+			to = &addr
+		} else {
+			to = nil
+		}
+	case 4:
+		value.SetUint64(uint64(m.r.Int63n(1000000000)))
+	case 5:
+		data = m.RandBytes(m.r.Int63n(100))
+	}
+
+	return types.NewTx(&types.LegacyTx{
+		Nonce:    nonce,
+		GasPrice: gasPrice,
+		Gas:      gas,
+		To:       to,
+		Value:    value,
+		Data:     data,
+	})
+}
+
+func (m *Mutator) mutateAccessListTx(original *types.Transaction) *types.Transaction {
+	if original == nil || m.Bool() {
+		// 创建新交易
+		nonce := uint64(m.r.Int63n(1000))
+		gasPrice := new(big.Int).SetUint64(uint64(m.r.Int63n(1000000000)))
+		gas := uint64(m.r.Int63n(1000000))
+
+		var to *common.Address
+		if m.Bool() {
+			addr := common.BytesToAddress(m.RandBytes(20))
+			to = &addr
+		}
+
+		value := new(big.Int).SetUint64(uint64(m.r.Int63n(1000000000)))
+		data := m.RandBytes(m.r.Int63n(100))
+		accessList := m.generateAccessList()
+
+		return types.NewTx(&types.AccessListTx{
+			ChainID:    new(big.Int).SetUint64(1),
+			Nonce:      nonce,
+			GasPrice:   gasPrice,
+			Gas:        gas,
+			To:         to,
+			Value:      value,
+			Data:       data,
+			AccessList: accessList,
+		})
+	}
+
+	// 基于原始交易进行变异
+	if original.Type() != types.AccessListTxType {
+		return m.mutateAccessListTx(nil)
+	}
+
+	// 复制原始交易的值
+	nonce := original.Nonce()
+	gasPrice := new(big.Int).Set(original.GasPrice())
+	gas := original.Gas()
+	to := original.To()
+	value := new(big.Int).Set(original.Value())
+	data := make([]byte, len(original.Data()))
+	copy(data, original.Data())
+	accessList := original.AccessList()
+
+	// 随机选择要变异的字段
+	switch m.r.Int63n(8) {
+	case 0:
+		nonce = uint64(m.r.Int63n(1000))
+	case 1:
+		gasPrice.SetUint64(uint64(m.r.Int63n(1000000000)))
+	case 2:
+		gas = uint64(m.r.Int63n(1000000))
+	case 3:
+		if m.Bool() {
+			addr := common.BytesToAddress(m.RandBytes(20))
+			to = &addr
+		} else {
+			to = nil
+		}
+	case 4:
+		value.SetUint64(uint64(m.r.Int63n(1000000000)))
+	case 5:
+		data = m.RandBytes(m.r.Int63n(100))
+	case 6:
+		accessList = m.generateAccessList()
+	}
+
+	return types.NewTx(&types.AccessListTx{
+		ChainID:    new(big.Int).SetUint64(1),
+		Nonce:      nonce,
+		GasPrice:   gasPrice,
+		Gas:        gas,
+		To:         to,
+		Value:      value,
+		Data:       data,
+		AccessList: accessList,
+	})
+}
+
+// 辅助函数：生成随机访问列表
+func (m *Mutator) generateAccessList() types.AccessList {
+	var accessList types.AccessList
+	numEntries := m.r.Int63n(3)
+	for i := 0; i < int(numEntries); i++ {
+		addr := common.BytesToAddress(m.RandBytes(20))
+		numStorageKeys := m.r.Int63n(3)
+		storageKeys := make([]common.Hash, numStorageKeys)
+		for j := 0; j < int(numStorageKeys); j++ {
+			storageKeys[j] = common.BytesToHash(m.RandBytes(32))
+		}
+		accessList = append(accessList, types.AccessTuple{
+			Address:     addr,
+			StorageKeys: storageKeys,
+		})
+	}
+	return accessList
+}
+
+func (m *Mutator) mutateDynamicFeeTx(original *types.Transaction) *types.Transaction {
+	if original == nil || m.Bool() {
+		// 创建新交易
+		nonce := uint64(m.r.Int63n(1000))
+		gasTipCap := new(big.Int).SetUint64(uint64(m.r.Int63n(1000000000)))
+		gasFeeCap := new(big.Int).Add(gasTipCap, new(big.Int).SetUint64(uint64(m.r.Int63n(1000000000))))
+		gas := uint64(m.r.Int63n(1000000))
+
+		var to *common.Address
+		if m.Bool() {
+			addr := common.BytesToAddress(m.RandBytes(20))
+			to = &addr
+		}
+
+		value := new(big.Int).SetUint64(uint64(m.r.Int63n(1000000000)))
+		data := m.RandBytes(m.r.Int63n(100))
+		accessList := m.generateAccessList()
+
+		return types.NewTx(&types.DynamicFeeTx{
+			ChainID:    new(big.Int).SetUint64(1),
+			Nonce:      nonce,
+			GasTipCap:  gasTipCap,
+			GasFeeCap:  gasFeeCap,
+			Gas:        gas,
+			To:         to,
+			Value:      value,
+			Data:       data,
+			AccessList: accessList,
+		})
+	}
+
+	// 基于原始交易进行变异
+	if original.Type() != types.DynamicFeeTxType {
+		return m.mutateDynamicFeeTx(nil)
+	}
+
+	// 复制原始交易的值
+	nonce := original.Nonce()
+	gasTipCap := new(big.Int).Set(original.GasTipCap())
+	gasFeeCap := new(big.Int).Set(original.GasFeeCap())
+	gas := original.Gas()
+	to := original.To()
+	value := new(big.Int).Set(original.Value())
+	data := make([]byte, len(original.Data()))
+	copy(data, original.Data())
+	accessList := original.AccessList()
+
+	// 随机选择要变异的字段
+	switch m.r.Int63n(9) {
+	case 0:
+		nonce = uint64(m.r.Int63n(1000))
+	case 1:
+		gasTipCap.SetUint64(uint64(m.r.Int63n(1000000000)))
+	case 2:
+		gasFeeCap.SetUint64(uint64(m.r.Int63n(1000000000)))
+		if gasFeeCap.Cmp(gasTipCap) < 0 {
+			gasFeeCap.Add(gasFeeCap, gasTipCap)
+		}
+	case 3:
+		gas = uint64(m.r.Int63n(1000000))
+	case 4:
+		if m.Bool() {
+			addr := common.BytesToAddress(m.RandBytes(20))
+			to = &addr
+		} else {
+			to = nil
+		}
+	case 5:
+		value.SetUint64(uint64(m.r.Int63n(1000000000)))
+	case 6:
+		data = m.RandBytes(m.r.Int63n(100))
+	case 7:
+		accessList = m.generateAccessList()
+	}
+
+	return types.NewTx(&types.DynamicFeeTx{
+		ChainID:    new(big.Int).SetUint64(1),
+		Nonce:      nonce,
+		GasTipCap:  gasTipCap,
+		GasFeeCap:  gasFeeCap,
+		Gas:        gas,
+		To:         to,
+		Value:      value,
+		Data:       data,
+		AccessList: accessList,
+	})
+}
+
+func (m *Mutator) mutateBlobTx(original *types.Transaction) *types.Transaction {
+	if original == nil || m.Bool() {
+		// 创建新交易
+		nonce := uint64(m.r.Int63n(1000))
+		gasTipCap := uint256.NewInt(uint64(m.r.Int63n(1000000000)))
+		gasFeeCap := new(uint256.Int).Add(gasTipCap, uint256.NewInt(uint64(m.r.Int63n(1000000000))))
+		gas := uint64(m.r.Int63n(1000000))
+
+		to := common.BytesToAddress(m.RandBytes(20))
+		value := uint256.NewInt(uint64(m.r.Int63n(1000000000)))
+		data := m.RandBytes(m.r.Int63n(100))
+
+		blobFeeCap := uint256.NewInt(uint64(m.r.Int63n(1000000000)))
+		blobHashes := make([]common.Hash, m.r.Int63n(3)+1)
+		for i := range blobHashes {
+			blobHashes[i] = common.BytesToHash(m.RandBytes(32))
+		}
+
+		accessList := m.generateAccessList()
+
+		return types.NewTx(&types.BlobTx{
+			ChainID:    uint256.NewInt(1),
+			Nonce:      nonce,
+			GasTipCap:  gasTipCap,
+			GasFeeCap:  gasFeeCap,
+			Gas:        gas,
+			To:         to,
+			Value:      value,
+			Data:       data,
+			AccessList: accessList,
+			BlobFeeCap: blobFeeCap,
+			BlobHashes: blobHashes,
+		})
+	}
+
+	// 基于原始交易进行变异
+	if original.Type() != types.BlobTxType {
+		return m.mutateBlobTx(nil)
+	}
+
+	// 复制原始交易的值
+	nonce := original.Nonce()
+	gasTipCap := uint256.NewInt(0).SetBytes(original.GasTipCap().Bytes())
+	gasFeeCap := uint256.NewInt(0).SetBytes(original.GasFeeCap().Bytes())
+	gas := original.Gas()
+	to := original.To()
+	value := uint256.NewInt(0).SetBytes(original.Value().Bytes())
+	data := make([]byte, len(original.Data()))
+	copy(data, original.Data())
+	accessList := original.AccessList()
+	blobFeeCap := uint256.NewInt(0).SetBytes(original.BlobGasFeeCap().Bytes())
+	blobHashes := original.BlobHashes()
+
+	// 随机选择要变异的字段
+	switch m.r.Int63n(10) {
+	case 0:
+		nonce = uint64(m.r.Int63n(1000))
+	case 1:
+		gasTipCap = uint256.NewInt(uint64(m.r.Int63n(1000000000)))
+	case 2:
+		gasFeeCap = new(uint256.Int).Add(gasTipCap, uint256.NewInt(uint64(m.r.Int63n(1000000000))))
+	case 3:
+		gas = uint64(m.r.Int63n(1000000))
+	case 4:
+		to = &common.Address{}
+		copy(to[:], m.RandBytes(20))
+	case 5:
+		value = uint256.NewInt(uint64(m.r.Int63n(1000000000)))
+	case 6:
+		data = m.RandBytes(m.r.Int63n(100))
+	case 7:
+		accessList = m.generateAccessList()
+	case 8:
+		blobFeeCap = uint256.NewInt(uint64(m.r.Int63n(1000000000)))
+	case 9:
+		blobHashes = make([]common.Hash, m.r.Int63n(3)+1)
+		for i := range blobHashes {
+			blobHashes[i] = common.BytesToHash(m.RandBytes(32))
+		}
+	}
+
+	return types.NewTx(&types.BlobTx{
+		ChainID:    uint256.NewInt(1),
+		Nonce:      nonce,
+		GasTipCap:  gasTipCap,
+		GasFeeCap:  gasFeeCap,
+		Gas:        gas,
+		To:         *to,
+		Value:      value,
+		Data:       data,
+		AccessList: accessList,
+		BlobFeeCap: blobFeeCap,
+		BlobHashes: blobHashes,
+	})
+}
+
+// RandBytes 生成指定长度的随机字节数组
+func (m *Mutator) RandBytes(length int64) []byte {
+	bytes := make([]byte, length)
+	for i := range bytes {
+		bytes[i] = byte(m.r.Int63n(256))
+	}
+	return bytes
 }
