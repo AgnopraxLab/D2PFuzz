@@ -261,7 +261,7 @@ type GetPooledTransactionsRequest []common.Hash
 // GetPooledTransactionsPacket represents a transaction query with request ID wrapping.
 type GetPooledTransactionsPacket struct {
 	RequestId uint64
-	GetPooledTransactionsRequest
+	*GetPooledTransactionsRequest
 }
 
 // PooledTransactionsResponse is the network packet for transaction distribution.

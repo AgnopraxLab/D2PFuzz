@@ -25,6 +25,7 @@ import (
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -513,21 +514,32 @@ func (m *Mutator) MutateTransaction(original *types.Transaction) *types.Transact
 }
 
 func (m *Mutator) mutateLegacyTx(original *types.Transaction) *types.Transaction {
+	// 如果没有原始交易或随机决定创建新交易
 	if original == nil || m.Bool() {
-		// 创建新交易
+		// 创建新交易的各个字段
+		// nonce: 交易序号，范围0-999
 		nonce := uint64(m.r.Int63n(1000))
+
+		// gasPrice: 燃料价格，范围0-999999999 wei
 		gasPrice := new(big.Int).SetUint64(uint64(m.r.Int63n(1000000000)))
+
+		// gas: 燃料限制，范围0-999999
 		gas := uint64(m.r.Int63n(1000000))
 
+		// to: 接收地址，可能为nil（合约创建）
 		var to *common.Address
-		if m.Bool() {
-			addr := common.BytesToAddress(m.RandBytes(20))
+		if m.Bool() { // 50%概率设置接收地址
+			addr := common.BytesToAddress(m.RandBytes(20)) // 生成20字节的随机地址
 			to = &addr
 		}
 
+		// value: 转账金额，范围0-999999999 wei
 		value := new(big.Int).SetUint64(uint64(m.r.Int63n(1000000000)))
+
+		// data: 交易数据，0-99字节的随机数据
 		data := m.RandBytes(m.r.Int63n(100))
 
+		// 创建并返回新交易
 		return types.NewTx(&types.LegacyTx{
 			Nonce:    nonce,
 			GasPrice: gasPrice,
@@ -538,41 +550,42 @@ func (m *Mutator) mutateLegacyTx(original *types.Transaction) *types.Transaction
 		})
 	}
 
-	// 基于原始交易进行变异
+	// 检查原始交易类型
 	if original.Type() != types.LegacyTxType {
 		return m.mutateLegacyTx(nil) // 如果不是Legacy类型，创建新交易
 	}
 
-	// 复制原始交易的值
+	// 复制原始交易的所有字段
 	nonce := original.Nonce()
-	gasPrice := new(big.Int).Set(original.GasPrice())
+	gasPrice := new(big.Int).Set(original.GasPrice()) // 深拷贝
 	gas := original.Gas()
-	to := original.To()
-	value := new(big.Int).Set(original.Value())
+	to := original.To()                         // 指针复制
+	value := new(big.Int).Set(original.Value()) // 深拷贝
 	data := make([]byte, len(original.Data()))
-	copy(data, original.Data())
+	copy(data, original.Data()) // 深拷贝
 
-	// 随机选择要变异的字段
-	switch m.r.Int63n(6) {
-	case 0:
+	// 随机选择一个字段进行变异
+	switch m.r.Int63n(6) { // 随机选择0-5之间的数
+	case 0: // 变异nonce
 		nonce = uint64(m.r.Int63n(1000))
-	case 1:
+	case 1: // 变异gasPrice
 		gasPrice.SetUint64(uint64(m.r.Int63n(1000000000)))
-	case 2:
+	case 2: // 变异gas限制
 		gas = uint64(m.r.Int63n(1000000))
-	case 3:
+	case 3: // 变异接收地址
 		if m.Bool() {
 			addr := common.BytesToAddress(m.RandBytes(20))
 			to = &addr
 		} else {
-			to = nil
+			to = nil // 合约创建
 		}
-	case 4:
+	case 4: // 变异转账金额
 		value.SetUint64(uint64(m.r.Int63n(1000000000)))
-	case 5:
+	case 5: // 变异交易数据
 		data = m.RandBytes(m.r.Int63n(100))
 	}
 
+	// 创建并返回变异后的交易
 	return types.NewTx(&types.LegacyTx{
 		Nonce:    nonce,
 		GasPrice: gasPrice,
@@ -872,4 +885,31 @@ func (m *Mutator) RandBytes(length int64) []byte {
 		bytes[i] = byte(m.r.Int63n(256))
 	}
 	return bytes
+}
+
+// Mutator 中的公共方法
+func (m *Mutator) MutateProtocolVersion() uint32 {
+	return uint32(m.r.Int31n(68))
+}
+
+func (m *Mutator) MutateNetworkID() uint64 {
+	return uint64(m.r.Int63n(5))
+}
+
+func (m *Mutator) MutateTotalDifficulty() *big.Int {
+	return new(big.Int).SetUint64(uint64(m.r.Int63n(1000000)))
+}
+
+func (m *Mutator) MutateHash() common.Hash {
+	return common.BytesToHash(m.RandBytes(32))
+}
+
+func (m *Mutator) MutateForkID() forkid.ID {
+	var hash [4]byte
+	binary.BigEndian.PutUint32(hash[:], uint32(m.r.Uint64()))
+
+	return forkid.ID{
+		Hash: hash,
+		Next: uint64(m.r.Int63n(1000000)),
+	}
 }

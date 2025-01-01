@@ -25,11 +25,13 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
@@ -140,32 +142,18 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
 	currentSeed := seed
 
-	switch seed.Kind() {
-	case eth.StatusMsg:
-		// TODO: 实现 Status 处理函数
-		//return m.handleStatusOnly(seed.(*eth.StatusPacket))
-
-	case eth.GetBlockHeadersMsg, eth.GetBlockBodiesMsg, eth.GetReceiptsMsg:
-		// 这些消息类型需要建立连接并在结束时关闭
-		if err := m.SuiteList[0].SetupConn(); err != nil {
-			return fmt.Errorf("failed to setup connection: %v", err)
-		}
-		defer m.SuiteList[0].Conn().Close()
-
-	case eth.TransactionsMsg, eth.GetPooledTransactionsMsg:
-		// 这些消息类型不需要在这里建立连接
-		// 连接管理由各自的处理函数负责
-
-	default:
-		// 其他消息类型的默认处理
+	// 只有三个 get 消息类型需要特殊处理连接
+	if seed.Kind() == eth.GetBlockHeadersMsg ||
+		seed.Kind() == eth.GetBlockBodiesMsg ||
+		seed.Kind() == eth.GetReceiptsMsg {
 		if err := m.SuiteList[0].SetupConn(); err != nil {
 			return fmt.Errorf("failed to setup connection: %v", err)
 		}
 		defer m.SuiteList[0].Conn().Close()
 	}
 
-	//for i := 0; i < MutateCount; i++ {
-	for i := 0; i < 2; i++ {
+	for i := 0; i < MutateCount; i++ {
+		//for i := 0; i < 2; i++ {
 		wg.Add(1)
 
 		mutateSeed := cloneAndMutateEthPacket(mutator, currentSeed, m.SuiteList[0].Chain())
@@ -371,33 +359,72 @@ func (m *EthMaker) handlePacket(req eth.Packet, suite *eth.Suite, traceOutput io
 }
 
 func (m *EthMaker) handleStatusPacket(p *eth.StatusPacket, suite *eth.Suite) ethPacketTestResult {
+	// // 0. 先建立一个正确的连接作为对照
+	// if err := suite.SetupConn(); err != nil {
+	// 	return ethPacketTestResult{
+	// 		Error: fmt.Errorf("failed to setup control connection: %v", err).Error(),
+	// 	}
+	// }
+	//suite.Conn().Close()
 
-	if err := suite.SendMsg(eth.EthProto, eth.StatusMsg, p); err != nil {
+	// 1. 建立连接
+	conn, err := suite.Dial()
+	if err != nil {
 		return ethPacketTestResult{
-			Error: fmt.Errorf("could not send StatusMsg: %v", err).Error(),
+			Error: fmt.Errorf("dial failed: %v", err).Error(),
+		}
+	}
+	defer conn.Close()
+
+	// 2. 使用我们变异的状态包进行对等连接
+	if err := conn.Peer(suite.Chain(), p); err != nil {
+		return ethPacketTestResult{
+			Error: fmt.Errorf("peer failed: %v", err).Error(),
 		}
 	}
 
-	resp := new(eth.StatusPacket)
-	if err := suite.ReadMsg(eth.EthProto, eth.StatusMsg, resp); err != nil {
-		return ethPacketTestResult{
-			Error: fmt.Errorf("error reading StatusMsg: %v", err).Error(),
+	// 3. 检查状态包的语义
+	checkResults := checkStatusSemantics(p, suite.Chain())
+	allPassed := true
+	for _, result := range checkResults {
+		if !result {
+			allPassed = false
+			break
 		}
 	}
 
-	if resp.NetworkID != p.NetworkID {
-		return ethPacketTestResult{
-			Error: fmt.Errorf("unexpected network ID: got %d, want %d", resp.NetworkID, p.NetworkID).Error(),
+	// 4. 发送一个 GetReceipts 包来验证连接是否真正建立
+	testReq, _ := suite.GenPacket(eth.GetReceiptsMsg)
+	resp, err, _ := m.handlePacketWithResponse(testReq, suite, nil)
+
+	// 5. 根据语义检查结果和响应情况判断成功与否
+	if allPassed {
+		// 语义正确，应该能收到正常响应
+		if err != nil {
+			return ethPacketTestResult{
+				Error:        fmt.Errorf("correct status but failed to get response: %v", err).Error(),
+				CheckResults: checkResults,
+				Check:        true,
+				Success:      false,
+			}
+		}
+	} else {
+		// 语义错误，不应该收到正常响应
+		if err == nil {
+			return ethPacketTestResult{
+				Response:     resp,
+				CheckResults: checkResults,
+				Check:        false,
+				Success:      false,
+			}
 		}
 	}
 
-	if resp.Genesis != p.Genesis {
-		return ethPacketTestResult{
-			Error: fmt.Errorf("genesis hash mismatch: got %x, want %x", resp.Genesis, p.Genesis).Error(),
-		}
-	}
 	return ethPacketTestResult{
-		Response: resp,
+		Response:     resp,
+		Success:      allPassed && (err == nil),
+		CheckResults: checkResults,
+		Check:        true,
 	}
 }
 
@@ -830,7 +857,7 @@ func (m *EthMaker) handleGetReceiptsPacket(p *eth.GetReceiptsPacket, suite *eth.
 		Response:     resp,
 		Success:      true,
 		CheckResults: checkResults,
-		Check:        true, // 如果响应数量匹配且RequestId正确，则Check应为true
+		Check:        true,
 	}
 }
 
@@ -859,12 +886,9 @@ func generateEthTestSeq() []int {
 // packet test deal data
 func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, traceOutput io.Writer) (eth.Packet, error, bool) {
 	switch p := req.(type) {
-	// case *eth.StatusPacket:
-	// 	result := m.handleStatusPacket(p, suite)
-	// 	if result.Error != "" {
-	// 		return nil, fmt.Errorf("%s", result.Error)
-	// 	}
-	// 	return result.Response, nil
+	case *eth.StatusPacket:
+		result := m.handleStatusPacket(p, suite)
+		return result.Response, nil, result.Check
 	case *eth.TransactionsPacket:
 		result := m.handleTransactionPacket(p, suite)
 		return result.Response, nil, result.Check
@@ -891,6 +915,8 @@ func (m *EthMaker) checkRequestSemantics(req eth.Packet, chain *eth.Chain) []boo
 	var results []bool
 
 	switch p := req.(type) {
+	case *eth.StatusPacket:
+		results = checkStatusSemantics(p, chain)
 	case *eth.GetBlockHeadersPacket:
 		results = checkGetBlockHeadersSemantics(p, chain)
 	case *eth.GetBlockBodiesPacket:
@@ -906,6 +932,31 @@ func (m *EthMaker) checkRequestSemantics(req eth.Packet, chain *eth.Chain) []boo
 		// 对于其他类型的包，暂时返回true
 		results = []bool{true}
 	}
+
+	return results
+}
+
+func checkStatusSemantics(p *eth.StatusPacket, chain *eth.Chain) []bool {
+	results := make([]bool, 5) // 5个检查项
+
+	// 1. 检查 Head 是否是有效的区块哈希
+	blocks := chain.Blocks()
+	headBlock := blocks[len(blocks)-1]
+	results[0] = p.Head == headBlock.Hash()
+
+	// 2. 检查 TD (Total Difficulty) 是否正确
+	results[1] = p.TD != nil && p.TD.Cmp(chain.TD()) == 0
+
+	// 3. 检查 ForkID 是否匹配
+	expectedForkID := chain.ForkID()
+	results[2] = reflect.DeepEqual(p.ForkID, expectedForkID)
+
+	// 4. 检查协议版本是否在有效范围内
+	results[3] = p.ProtocolVersion >= 64 && p.ProtocolVersion <= 68
+
+	// 5. 检查 Genesis 哈希是否正确
+	genesisBlock := blocks[0]
+	results[4] = p.Genesis == genesisBlock.Hash()
 
 	return results
 }
@@ -1107,7 +1158,9 @@ func analyzeResultsEth(results []ethPacketTestResult, logger *log.Logger, output
 func cloneAndMutateEthPacket(mutator *fuzzing.Mutator, seed eth.Packet, chain *eth.Chain) eth.Packet {
 	switch p := seed.(type) {
 	case *eth.StatusPacket:
-		return mutateStatusPacket(mutator, p)
+		// 创建深拷贝
+		newPacket := *p
+		return mutateStatusPacket(mutator, &newPacket)
 	case *eth.TransactionsPacket:
 		// 创建深拷贝
 		newPacket := make(eth.TransactionsPacket, len(*p))
@@ -1139,8 +1192,30 @@ func cloneAndMutateEthPacket(mutator *fuzzing.Mutator, seed eth.Packet, chain *e
 	}
 }
 
-func mutateStatusPacket(mutator *fuzzing.Mutator, p *eth.StatusPacket) eth.Packet {
-	panic("unimplemented")
+func mutateStatusPacket(mutator *fuzzing.Mutator, original *eth.StatusPacket) *eth.StatusPacket {
+	mutated := *original
+
+	// 各字段有30%的概率进行变异
+	if rand.Float32() < 0.3 {
+		mutated.ProtocolVersion = mutator.MutateProtocolVersion()
+	}
+	if rand.Float32() < 0.3 {
+		mutated.NetworkID = mutator.MutateNetworkID()
+	}
+	if rand.Float32() < 0.3 {
+		mutated.TD = mutator.MutateTotalDifficulty()
+	}
+	if rand.Float32() < 0.3 {
+		mutated.Head = mutator.MutateHash()
+	}
+	if rand.Float32() < 0.3 {
+		mutated.Genesis = mutator.MutateHash()
+	}
+	if rand.Float32() < 0.3 {
+		mutated.ForkID = mutator.MutateForkID()
+	}
+
+	return &mutated
 }
 
 func mutateTransactionsPacket(mutator *fuzzing.Mutator, p *eth.TransactionsPacket) eth.Packet {
