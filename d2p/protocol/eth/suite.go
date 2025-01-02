@@ -86,8 +86,8 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 		return &StatusPacket{
 			ProtocolVersion: uint32(ETH68), // 使用固定的协议版本
 			NetworkID:       s.chain.config.ChainID.Uint64(),
-			TD:              new(big.Int).SetBytes(buf),
-			Head:            s.chain.Head().Hash(),
+			TD:              s.chain.TD(),
+			Head:            s.chain.blocks[s.chain.Len()-1].Hash(),
 			Genesis:         s.chain.GetBlock(0).Hash(),
 			ForkID:          s.chain.ForkID(),
 		}, nil

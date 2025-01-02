@@ -359,13 +359,12 @@ func (m *EthMaker) handlePacket(req eth.Packet, suite *eth.Suite, traceOutput io
 }
 
 func (m *EthMaker) handleStatusPacket(p *eth.StatusPacket, suite *eth.Suite) ethPacketTestResult {
-	// // 0. 先建立一个正确的连接作为对照
+	// 0. 先建立一个正确的连接作为对照
 	// if err := suite.SetupConn(); err != nil {
 	// 	return ethPacketTestResult{
 	// 		Error: fmt.Errorf("failed to setup control connection: %v", err).Error(),
 	// 	}
 	// }
-	//suite.Conn().Close()
 
 	// 1. 建立连接
 	conn, err := suite.Dial()
@@ -753,7 +752,15 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 	}
 	defer m.SuiteList[0].Conn().Close()
 
-	if err := m.SuiteList[0].Conn().Write(eth.EthProto, eth.GetPooledTransactionsMsg, p); err != nil {
+	// 修改：正确构造 GetPooledTransactionsPacket
+	request := eth.GetPooledTransactionsRequest(hashes) // 将 hashes 转换为 GetPooledTransactionsRequest 类型
+	newRequest := &eth.GetPooledTransactionsPacket{
+		RequestId:                    p.RequestId,
+		GetPooledTransactionsRequest: &request,
+	}
+
+	// 使用新的请求替换原有的请求
+	if err := m.SuiteList[0].Conn().Write(eth.EthProto, eth.GetPooledTransactionsMsg, newRequest); err != nil {
 		return ethPacketTestResult{
 			Error: fmt.Errorf("could not write to conn: %v", err).Error(),
 		}
@@ -778,9 +785,16 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 		}
 	}
 
+	// return ethPacketTestResult{
+	// 	Response: msg,
+	// 	Success:  true,
+	// }
+
 	return ethPacketTestResult{
+		Request:  newRequest, // 修改这里：使用新请求而不是原始的 p
 		Response: msg,
 		Success:  true,
+		Check:    true,
 	}
 }
 
@@ -1181,7 +1195,7 @@ func cloneAndMutateEthPacket(mutator *fuzzing.Mutator, seed eth.Packet, chain *e
 		newPacket := *p
 		newRequest := *p.GetPooledTransactionsRequest
 		newPacket.GetPooledTransactionsRequest = &newRequest
-		return mutateGetPooledTransactionsPacket(mutator, &newPacket)
+		return mutateGetPooledTransactionsPacket(mutator, &newPacket, chain)
 	case *eth.GetReceiptsPacket:
 		newPacket := *p
 		newRequest := *p.GetReceiptsRequest
@@ -1273,8 +1287,22 @@ func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.GetBlock
 	return &mutated
 }
 
-func mutateGetPooledTransactionsPacket(mutator *fuzzing.Mutator, p *eth.GetPooledTransactionsPacket) eth.Packet {
-	panic("unimplemented")
+func mutateGetPooledTransactionsPacket(mutator *fuzzing.Mutator, p *eth.GetPooledTransactionsPacket, chain *eth.Chain) *eth.GetPooledTransactionsPacket {
+	mutated := *p
+
+	// 30%的概率变异 RequestId
+	if rand.Float32() < 0.3 {
+		mutator.MutateRequestId(&mutated.RequestId)
+	}
+
+	// 50%的概率变异请求内容
+	if rand.Float32() < 0.5 {
+		request := *p.GetPooledTransactionsRequest
+		mutator.MutatePooledTransactionsRequest(&request, chain)
+		mutated.GetPooledTransactionsRequest = &request
+	}
+
+	return &mutated
 }
 
 func mutateGetReceiptsPacket(mutator *fuzzing.Mutator, original *eth.GetReceiptsPacket, chain *eth.Chain) *eth.GetReceiptsPacket {

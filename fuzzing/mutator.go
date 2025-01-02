@@ -913,3 +913,70 @@ func (m *Mutator) MutateForkID() forkid.ID {
 		Next: uint64(m.r.Int63n(1000000)),
 	}
 }
+
+// MutatePooledTransactionsRequest 变异交易池请求的哈希列表
+func (m *Mutator) MutatePooledTransactionsRequest(request *eth.GetPooledTransactionsRequest, chain *eth.Chain) {
+	switch m.Rand(4) {
+	case 0:
+		// 空列表
+		*request = eth.GetPooledTransactionsRequest{}
+
+	case 1:
+		// 随机选择1-5个有效哈希
+		blocks := chain.Blocks() // 使用区块中的交易
+		if len(blocks) == 0 {
+			// 如果没有区块，生成随机哈希
+			count := m.Rand(5) + 1
+			hashes := make(eth.GetPooledTransactionsRequest, count)
+			for i := 0; i < count; i++ {
+				hashes[i] = m.MutateHash()
+			}
+			*request = hashes
+			return
+		}
+
+		count := m.Rand(5) + 1
+		hashes := make(eth.GetPooledTransactionsRequest, count)
+		for i := 0; i < count; i++ {
+			if len(blocks) > 0 {
+				block := blocks[m.Rand(len(blocks))]
+				txs := block.Transactions()
+				if len(txs) > 0 {
+					hashes[i] = txs[m.Rand(len(txs))].Hash()
+				} else {
+					hashes[i] = m.MutateHash()
+				}
+			}
+		}
+		*request = hashes
+
+	case 2:
+		// 生成1-5个随机哈希
+		count := m.Rand(5) + 1
+		hashes := make(eth.GetPooledTransactionsRequest, count)
+		for i := 0; i < count; i++ {
+			hashes[i] = m.MutateHash()
+		}
+		*request = hashes
+
+	case 3:
+		// 混合有效和无效哈希
+		blocks := chain.Blocks()
+		count := m.Rand(5) + 1
+		hashes := make(eth.GetPooledTransactionsRequest, count)
+		for i := 0; i < count; i++ {
+			if m.Bool() && len(blocks) > 0 {
+				block := blocks[m.Rand(len(blocks))]
+				txs := block.Transactions()
+				if len(txs) > 0 {
+					hashes[i] = txs[m.Rand(len(txs))].Hash()
+				} else {
+					hashes[i] = m.MutateHash()
+				}
+			} else {
+				hashes[i] = m.MutateHash()
+			}
+		}
+		*request = hashes
+	}
+}
