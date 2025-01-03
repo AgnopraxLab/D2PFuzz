@@ -105,9 +105,13 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 					CheckTruePass:  0,
 				}
 				testMaker.PacketStart(os.Stdout, packet, globalEthStats[packet.Name()])
-				fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
-					packet.Name(), globalEthStats[packet.Name()].ExecuteCount, globalEthStats[packet.Name()].CheckTrueFail,
-					globalEthStats[packet.Name()].CheckFalsePass, globalEthStats[packet.Name()].CheckTruePass)
+				fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePassOK: %d, CheckFalsePassBad: %d, CheckTruePass: %d\n",
+					packet.Name(),
+					globalEthStats[packet.Name()].ExecuteCount,
+					globalEthStats[packet.Name()].CheckTrueFail,
+					globalEthStats[packet.Name()].CheckFalsePassOK,
+					globalEthStats[packet.Name()].CheckFalsePassBad,
+					globalEthStats[packet.Name()].CheckTruePass)
 			}
 		}
 	}

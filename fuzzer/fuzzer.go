@@ -42,10 +42,12 @@ var (
 )
 
 type UDPPacketStats struct {
-	ExecuteCount   int // Execute count
-	CheckTrueFail  int // First type of exception: Check is true but Success is false
-	CheckFalsePass int // Second type of exception: Check is false but Success is true
-	CheckTruePass  int // Third type of exception: Check is true but Success is true
+	ExecuteCount      int // Execute count
+	CheckTrueFail     int // First type of exception: Check is true but Success is false
+	CheckFalsePass    int // Second type of exception: Check is false but Success is true
+	CheckFalsePassOK  int
+	CheckFalsePassBad int
+	CheckTruePass     int // Third type of exception: Check is true but Success is true
 }
 
 // SetFuzzyVMDir sets the output directory for FuzzyVM
@@ -175,7 +177,7 @@ func discv4Fuzzer(engine int, target string) error {
 		for _, packetType := range v4options {
 			req := testMaker.Client.GenPacket(packetType, testMaker.TargetList[0])
 			testMaker.PakcetSeed = append(testMaker.PakcetSeed, req)
-			globalV4Stats[req.Name()] = &UDPPacketStats{0, 0, 0, 0}
+			globalV4Stats[req.Name()] = &UDPPacketStats{0, 0, 0, 0, 0, 0}
 		}
 
 		// for seed
@@ -292,7 +294,7 @@ func discv5Fuzzer(engine int, target string) error {
 		for _, packetType := range v5options {
 			req := testMaker.Client.GenPacket(packetType, testMaker.TargetList[0])
 			testMaker.PakcetSeed = append(testMaker.PakcetSeed, req)
-			globalV5Stats[req.Name()] = &UDPPacketStats{0, 0, 0, 0}
+			globalV5Stats[req.Name()] = &UDPPacketStats{0, 0, 0, 0, 0, 0}
 		}
 
 		// for seed
@@ -413,7 +415,7 @@ func ethFuzzer(engine int, target, chain string) error {
 				return err
 			}
 			testMaker.PakcetSeed[0] = append(testMaker.PakcetSeed[0], req)
-			globalEthStats[req.Name()] = &UDPPacketStats{0, 0, 0, 0}
+			globalEthStats[req.Name()] = &UDPPacketStats{0, 0, 0, 0, 0, 0}
 		}
 
 		// for seed
