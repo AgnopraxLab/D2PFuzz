@@ -21,7 +21,6 @@ import (
 	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
-	"math/rand"
 	"net"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -29,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+	"golang.org/x/exp/rand"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p"
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/discv4"
@@ -97,12 +97,12 @@ func InitDiscv5() *discv5.UDPv5 {
 }
 
 func ReplaceNodeIP(n *enode.Node, newIP net.IP) *enode.Node {
-	// 创建一个新的节点记录，保持原始节点的所有其他信息
+	// Create a new node record while keeping all other information from the original node
 	newNode := enode.NewV4(
-		n.Pubkey(), // 保持原始公钥
-		newIP,      // 使用新的 IP
-		n.UDP(),    // 保持原始 UDP 端口
-		n.TCP(),    // 保持原始 TCP 端口
+		n.Pubkey(), // keep original public key
+		newIP,      // use new IP
+		n.UDP(),    // keep original UDP port
+		n.TCP(),    // keep original TCP port
 	)
 	return newNode
 }
@@ -124,14 +124,13 @@ func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 		geth.Close()
 	}
 
-	// 生成私钥
 	// pri, err := crypto.GenerateKey()
 	// if err != nil {
 	// 	cleanup()
 	// 	return nil, fmt.Errorf("failed to generate private key: %v", err)
 	// }
 
-	// 创建 Suite
+	// Create Suite
 	client, err := eth.NewSuite(dest, dir, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
 	if err != nil {
 		cleanup()
@@ -147,12 +146,6 @@ func RunGenerate(protocol, targetDir, chainDir, ptype string) error {
 	node := nodeList[0]
 	bytes := make([]byte, 1000)
 	crand.Read(bytes)
-	options := []int{
-		eth.StatusMsg, eth.NewBlockHashesMsg, eth.TransactionsMsg, eth.GetBlockHeadersMsg,
-		eth.BlockHeadersMsg, eth.GetBlockBodiesMsg, eth.BlockBodiesMsg, eth.NewBlockMsg,
-		eth.NewPooledTransactionHashesMsg, eth.GetPooledTransactionsMsg, eth.PooledTransactionsMsg,
-		eth.GetReceiptsMsg, eth.ReceiptsMsg,
-	}
 
 	switch protocol {
 	case "discv4":
@@ -176,7 +169,8 @@ func RunGenerate(protocol, targetDir, chainDir, ptype string) error {
 		if err != nil {
 			return fmt.Errorf("error init eth client")
 		}
-		packet, err := client.GenPacket(options[rand.Intn(len(options))])
+		packetTypeInt := getEthPacketType(ptype)
+		packet, err := client.GenPacket(packetTypeInt)
 		if err != nil {
 			return fmt.Errorf("error gen eth packet")
 		}
@@ -189,4 +183,45 @@ func RunGenerate(protocol, targetDir, chainDir, ptype string) error {
 		return fmt.Errorf("unsupported protocol: %s", protocol)
 	}
 	return nil
+}
+
+func getEthPacketType(packetType string) int {
+	options := []int{
+		eth.StatusMsg, eth.NewBlockHashesMsg, eth.TransactionsMsg, eth.GetBlockHeadersMsg,
+		eth.BlockHeadersMsg, eth.GetBlockBodiesMsg, eth.BlockBodiesMsg, eth.NewBlockMsg,
+		eth.NewPooledTransactionHashesMsg, eth.GetPooledTransactionsMsg, eth.PooledTransactionsMsg,
+		eth.GetReceiptsMsg, eth.ReceiptsMsg,
+	}
+	switch packetType {
+	case "Status":
+		return eth.StatusMsg // 0x00-F
+	case "NewBlockHashes":
+		return eth.NewBlockHashesMsg // 0x01
+	case "Transactions":
+		return eth.TransactionsMsg // 0x02
+	case "GetBlockHeaders":
+		return eth.GetBlockHeadersMsg // 0x03-T
+	case "BlockHeaders":
+		return eth.BlockHeadersMsg // 0x04
+	case "GetBlockBodies":
+		return eth.GetBlockBodiesMsg // 0x05-T
+	case "BlockBodies":
+		return eth.BlockBodiesMsg // 0x06
+	case "NewBlock":
+		return eth.NewBlockMsg // 0x07
+	case "NewPooledTransactionHashes":
+		return eth.NewPooledTransactionHashesMsg // 0x08
+	case "GetPooledTransactions":
+		return eth.GetPooledTransactionsMsg // 0x09
+	case "PooledTransactions":
+		return eth.PooledTransactionsMsg // 0x0a
+	case "GetReceipts":
+		return eth.GetReceiptsMsg // 0x0f-T
+	case "Receipts":
+		return eth.ReceiptsMsg // 0x10
+	case "random":
+		return rand.Intn(len(options))
+	default:
+		return -1
+	}
 }

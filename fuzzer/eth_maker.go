@@ -31,7 +31,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
@@ -143,7 +142,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
 	currentSeed := seed
 
-	// 只有三个 get 消息类型需要特殊处理连接
+	// Only three 'get' message types need special connection handling
 	if seed.Kind() == eth.GetBlockHeadersMsg ||
 		seed.Kind() == eth.GetBlockBodiesMsg ||
 		seed.Kind() == eth.GetReceiptsMsg {
@@ -377,14 +376,14 @@ func (m *EthMaker) handlePacket(req eth.Packet, suite *eth.Suite, traceOutput io
 }
 
 func (m *EthMaker) handleStatusPacket(p *eth.StatusPacket, suite *eth.Suite) ethPacketTestResult {
-	// 0. 先建立一个正确的连接作为对照
+	// First establish a correct connection as a control
 	// if err := suite.SetupConn(); err != nil {
-	// 	return ethPacketTestResult{
-	// 		Error: fmt.Errorf("failed to setup control connection: %v", err).Error(),
-	// 	}
+	//     return ethPacketTestResult{
+	//         Error: fmt.Errorf("failed to setup control connection: %v", err).Error(),
+	//     }
 	// }
 
-	// 1. 建立连接
+	// 1. Establish connection
 	conn, err := suite.Dial()
 	if err != nil {
 		return ethPacketTestResult{
@@ -395,7 +394,7 @@ func (m *EthMaker) handleStatusPacket(p *eth.StatusPacket, suite *eth.Suite) eth
 	}
 	defer conn.Close()
 
-	// 2. 使用我们变异的状态包进行对等连接
+	// 2. Use our mutated status packet for peer connection
 	if err := conn.Peer(suite.Chain(), p); err != nil {
 		return ethPacketTestResult{
 			Error:   fmt.Errorf("peer failed: %v", err).Error(),
@@ -404,7 +403,7 @@ func (m *EthMaker) handleStatusPacket(p *eth.StatusPacket, suite *eth.Suite) eth
 		}
 	}
 
-	// 3. 发送一个 GetReceipts 包来验证连接
+	// 3. Send a GetReceipts packet to verify the connection
 	testReq, _ := suite.GenPacket(eth.GetReceiptsMsg)
 	resp, err, _, testValid := m.handlePacketWithResponse(testReq, suite, nil)
 
@@ -714,14 +713,14 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 	}
 	defer m.SuiteList[0].Conn().Close()
 
-	// 修改：正确构造 GetPooledTransactionsPacket
-	request := eth.GetPooledTransactionsRequest(hashes) // 将 hashes 转换为 GetPooledTransactionsRequest 类型
+	// Modify: Correctly construct GetPooledTransactionsPacket
+	request := eth.GetPooledTransactionsRequest(hashes) // Convert hashes to GetPooledTransactionsRequest type
 	newRequest := &eth.GetPooledTransactionsPacket{
 		RequestId:                    p.RequestId,
 		GetPooledTransactionsRequest: &request,
 	}
 
-	// 使用新的请求替换原有的请求
+	// Use new request to replace original request
 	if err := m.SuiteList[0].Conn().Write(eth.EthProto, eth.GetPooledTransactionsMsg, newRequest); err != nil {
 		return ethPacketTestResult{
 			Error:   fmt.Errorf("could not write to conn: %v", err).Error(),
@@ -1194,10 +1193,10 @@ func mutateStatusPacket(mutator *fuzzing.Mutator, original *eth.StatusPacket) *e
 }
 
 func mutateTransactionsPacket(mutator *fuzzing.Mutator, p *eth.TransactionsPacket) eth.Packet {
-	// 决定是修改现有交易还是创建新交易
+	// Decide whether to modify existing transactions or create new ones
 	if p == nil || len(*p) == 0 || mutator.Bool() {
-		// 创建新交易
-		count := mutator.Rand(5) + 1 // 1-5个交易
+		// Create new transactions
+		count := mutator.Rand(5) + 1 // 1-5 transactions
 		newTxs := make(eth.TransactionsPacket, count)
 		for i := 0; i < count; i++ {
 			newTxs[i] = mutator.MutateTransaction(nil)
@@ -1205,7 +1204,7 @@ func mutateTransactionsPacket(mutator *fuzzing.Mutator, p *eth.TransactionsPacke
 		return &newTxs
 	}
 
-	// 修改现有交易
+	// Modify existing transactions
 	mutated := make(eth.TransactionsPacket, len(*p))
 	for i, tx := range *p {
 		if mutator.Bool() {

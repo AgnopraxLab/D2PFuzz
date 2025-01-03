@@ -523,7 +523,6 @@ func cloneAndMutateV5Packet(mutator *fuzzing.Mutator, seed discv5.Packet) discv5
 func mutatePingV5(mutator *fuzzing.Mutator, original *discv5.Ping) *discv5.Ping {
 	mutated := *original
 
-	// 使用已有的变异方法
 	mutator.MutateBytes(&mutated.ReqID)
 	mutator.MutateENRSeq(&mutated.ENRSeq)
 
