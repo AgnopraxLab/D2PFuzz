@@ -414,7 +414,7 @@ func ethFuzzer(engine int, target, chain string) error {
 				fmt.Printf("Packet generate failed: %v\n", err)
 				return err
 			}
-			testMaker.PakcetSeed[0] = append(testMaker.PakcetSeed[0], req)
+			testMaker.PakcetSeed = append(testMaker.PakcetSeed, req)
 			globalEthStats[req.Name()] = &UDPPacketStats{0, 0, 0, 0, 0, 0}
 		}
 
@@ -426,8 +426,8 @@ func ethFuzzer(engine int, target, chain string) error {
 				return nil
 			default:
 				// Original loop logic
-				randomIndex := rand.Intn(len(testMaker.PakcetSeed[0]))
-				seed := testMaker.PakcetSeed[0][randomIndex]
+				randomIndex := rand.Intn(len(testMaker.PakcetSeed))
+				seed := testMaker.PakcetSeed[randomIndex]
 				elapsed := time.Since(startTime)
 				fmt.Printf("[%s] Round %d of testing, seed queue: %d, now seed type: %s\n",
 					elapsed.Round(time.Second),
@@ -460,7 +460,7 @@ func saveEthPacketSeed(testMaker *EthMaker) {
 	filename := filepath.Join(savePath, fmt.Sprintf("%s-seed.json", time.Now().Format("2006-01-02_15-04-05")))
 	seeds := make([]map[string]interface{}, 0, len(testMaker.PakcetSeed))
 
-	for _, seed := range testMaker.PakcetSeed[0] {
+	for _, seed := range testMaker.PakcetSeed {
 		seedMap := map[string]interface{}{
 			"type": seed.Name(),
 			"data": seed,

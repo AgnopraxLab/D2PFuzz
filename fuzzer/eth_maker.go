@@ -52,7 +52,7 @@ type EthMaker struct {
 	testSeq  []int // testcase sequence
 	stateSeq []int // steate sequence
 
-	PakcetSeed [][]eth.Packet // Use store packet seed to mutator
+	PakcetSeed []eth.Packet // Use store packet seed to mutator
 
 	Series []StateSeries
 	forks  []string
@@ -171,7 +171,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 			result.Check = allTrue(result.CheckResults)
 
 			// 发送并等待响应
-			resp, err, success, valid := m.handlePacketWithResponse(currentReq, m.SuiteList[0], traceOutput)
+			resp, err, success, valid := m.handlePacketWithResponse(currentReq, m.SuiteList[0], logger)
 			if err != nil {
 				result.Error = err.Error()
 				result.Success = false
@@ -268,13 +268,13 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 			// First round: sending testSeq packets
 			for i, packetType := range m.testSeq {
 				req, _ := target.GenPacket(packetType)
-				m.handlePacket(req, target, traceOutput)
+				m.handlePacket(req, target, logger)
 				logger.Printf("Sent test packet to target: %s, packet: %v, using suite: %d", target.DestList.String(), req.Kind(), i)
 			}
 			// Round 2: sending stateSeq packets
 			for i, packetType := range m.stateSeq {
 				req, _ := target.GenPacket(packetType)
-				m.handlePacket(req, target, traceOutput)
+				m.handlePacket(req, target, logger)
 				logger.Printf("Sent state packet to target: %s, packet: %v, using suite: %d", target.DestList.String(), req.Kind(), i)
 			}
 			resultCh <- result
@@ -301,7 +301,7 @@ func (m *EthMaker) Start(traceOutput io.Writer) error {
 	return nil
 }
 
-func (m *EthMaker) handlePacket(req eth.Packet, suite *eth.Suite, traceOutput io.Writer) error {
+func (m *EthMaker) handlePacket(req eth.Packet, suite *eth.Suite, logger *log.Logger) error {
 	switch p := req.(type) {
 	case *eth.StatusPacket:
 		return suite.InitializeAndConnect()
@@ -336,7 +336,7 @@ func (m *EthMaker) handlePacket(req eth.Packet, suite *eth.Suite, traceOutput io
 		if err := suite.InitializeAndConnect(); err != nil {
 			return fmt.Errorf("initialization and connection failed: %v", err)
 		}
-		return m.handleSendOnlyPacket(p, suite, traceOutput)
+		return m.handleSendOnlyPacket(p, suite, logger)
 	case *eth.NewPooledTransactionHashesPacket:
 		if err := suite.SendForkchoiceUpdated(); err != nil {
 			return fmt.Errorf("failed to send next block: %v", err)
@@ -344,7 +344,7 @@ func (m *EthMaker) handlePacket(req eth.Packet, suite *eth.Suite, traceOutput io
 		if err := suite.InitializeAndConnect(); err != nil {
 			return fmt.Errorf("initialization and connection failed: %v", err)
 		}
-		return m.handlePooledTransactionHashesPacket(p, suite, traceOutput)
+		return m.handlePooledTransactionHashesPacket(p, suite, logger)
 	case *eth.GetPooledTransactionsPacket:
 		if err := suite.InitializeAndConnect(); err != nil {
 			return fmt.Errorf("initialization and connection failed: %v", err)
@@ -364,8 +364,8 @@ func (m *EthMaker) handlePacket(req eth.Packet, suite *eth.Suite, traceOutput io
 		}
 		return nil
 	default:
-		if traceOutput != nil {
-			_, err := fmt.Fprintf(traceOutput, "Unsupported packet type: %T\n", req)
+		if logger != nil {
+			_, err := fmt.Printf("Unsupported packet type: %T\n", req)
 			if err != nil {
 				// Handle the error, maybe log it or return it
 				log.Printf("Error writing to trace output: %v", err)
@@ -420,40 +420,28 @@ func (m *EthMaker) handleStatusPacket(p *eth.StatusPacket, suite *eth.Suite) eth
 	}
 }
 
-func (m *EthMaker) handleSendOnlyPacket(packet interface{}, suite *eth.Suite, traceOutput io.Writer) error {
+func (m *EthMaker) handleSendOnlyPacket(packet interface{}, suite *eth.Suite, logger *log.Logger) error {
 	var msgcode uint64
 
 	switch packet.(type) {
 	case *eth.NewBlockHashesPacket:
 		msgcode = eth.NewBlockHashesMsg
-		if traceOutput != nil {
-			fmt.Println(traceOutput, "Sending NewBlockHashesPacket")
-		}
+		logger.Println(logger, "Sending NewBlockHashesPacket")
 	case *eth.BlockHeadersPacket:
 		msgcode = eth.BlockHeadersMsg
-		if traceOutput != nil {
-			fmt.Println(traceOutput, "Sending BlockHeadersPacket")
-		}
+		logger.Println(logger, "Sending BlockHeadersPacket")
 	case *eth.BlockBodiesPacket:
 		msgcode = eth.BlockBodiesMsg
-		if traceOutput != nil {
-			fmt.Println(traceOutput, "Sending BlockBodiesPacket")
-		}
+		logger.Println(logger, "Sending BlockBodiesPacket")
 	case *eth.NewBlockPacket:
 		msgcode = eth.NewBlockMsg
-		if traceOutput != nil {
-			fmt.Println(traceOutput, "Sending NewBlockPacket")
-		}
+		logger.Println(logger, "Sending NewBlockPacket")
 	case *eth.PooledTransactionsPacket:
 		msgcode = eth.PooledTransactionsMsg
-		if traceOutput != nil {
-			fmt.Println(traceOutput, "Sending PooledTransactionsPacket")
-		}
+		logger.Println(logger, "Sending PooledTransactionsPacket")
 	case *eth.ReceiptsPacket:
 		msgcode = eth.ReceiptsMsg
-		if traceOutput != nil {
-			fmt.Println(traceOutput, "Sending ReceiptsPacket")
-		}
+		logger.Println(logger, "Sending ReceiptsPacket")
 	default:
 		return fmt.Errorf("unsupported packet type: %T", packet)
 	}
@@ -624,10 +612,9 @@ func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, suite
 	}
 }
 
-func (m *EthMaker) handlePooledTransactionHashesPacket(p *eth.NewPooledTransactionHashesPacket, suite *eth.Suite, traceOutput io.Writer) error {
-	if traceOutput != nil {
-		fmt.Println(traceOutput, "Sending NewPooledTransactionHashesPacket")
-	}
+func (m *EthMaker) handlePooledTransactionHashesPacket(p *eth.NewPooledTransactionHashesPacket, suite *eth.Suite, logger *log.Logger) error {
+
+	logger.Println("Sending NewPooledTransactionHashesPacket")
 
 	if err := suite.SendMsg(eth.EthProto, eth.NewPooledTransactionHashesMsg, p); err != nil {
 		return fmt.Errorf("could not send GetBlockBodiesMsg: %v", err)
@@ -638,16 +625,12 @@ func (m *EthMaker) handlePooledTransactionHashesPacket(p *eth.NewPooledTransacti
 		return fmt.Errorf("error reading BlockBodiesMsg: %v", err)
 	}
 
-	if traceOutput != nil {
-		fmt.Fprintf(traceOutput, "Received GetPooledTransactions packet: %+v\n", resp)
-	}
+	logger.Println("Received GetPooledTransactions packet: %+v\n", resp)
 
 	if got, want := len(*resp.GetPooledTransactionsRequest), len(p.Hashes); got != want {
 		return fmt.Errorf("unexpected number of txs requested: got %d, want %d", got, want)
 	}
-	if traceOutput != nil {
-		fmt.Println(traceOutput, "Received block bodies for request %d\n", resp.RequestId)
-	}
+	logger.Println("Received block bodies for request %d\n", resp.RequestId)
 
 	return nil
 }
@@ -858,7 +841,7 @@ func generateEthTestSeq() []int {
 }
 
 // packet test deal data
-func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, traceOutput io.Writer) (eth.Packet, error, bool, bool) {
+func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, logger *log.Logger) (eth.Packet, error, bool, bool) {
 	switch p := req.(type) {
 	case *eth.StatusPacket:
 		result := m.handleStatusPacket(p, suite)
@@ -879,7 +862,7 @@ func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite, tr
 		result := m.handleGetReceiptsPacket(p, suite)
 		return result.Response, nil, true, result.Valid
 	default:
-		err := m.handleSendOnlyPacket(p, suite, traceOutput)
+		err := m.handleSendOnlyPacket(p, suite, logger)
 		return nil, err, false, false
 	}
 }
