@@ -79,22 +79,22 @@ func (t *UDPv4) verifyPing(h *packetHandlerV4, from *net.UDPAddr, fromID enode.I
 func (t *UDPv4) handlePing(h *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, mac []byte) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Recovered in handlePing: %v", r)
+			// log.Printf("Recovered in handlePing: %v", r)
 		}
 	}()
 
 	// 打印接收到 Ping 包的信息
-	log.Printf("Received Ping packet from %s (ID: %s)", from.String(), fromID.String())
+	// log.Printf("Received Ping packet from %s (ID: %s)", from.String(), fromID.String())
 
 	// 获取并打印 Ping 包的内容
 	req := h.Packet.(*Ping)
-	log.Printf("Ping packet content: From: %v, To: %v", req.From, req.To)
+	// log.Printf("Ping packet content: From: %v, To: %v", req.From, req.To)
 
 	// Reply with Pong.
 	if err := t.sendPong(fromID, from, req, mac); err != nil {
 		log.Printf("Error sending Pong: %v", err)
 	} else {
-		log.Printf("Successfully replied to peer's PING request")
+		// log.Printf("Successfully replied to peer's PING request")
 	}
 
 	// Ping back if our last pong on file is too far in the past.
@@ -159,16 +159,16 @@ func (t *UDPv4) verifyFindnode(h *packetHandlerV4, from *net.UDPAddr, fromID eno
 func (t *UDPv4) handleFindnode(h *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, mac []byte) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Recovered in handleFindnode: %v", r)
+			// log.Printf("Recovered in handleFindnode: %v", r)
 		}
 	}()
 
 	// 打印接收到 Findnode 包的信息
-	log.Printf("Received Findnode packet from %s (ID: %s)", from.String(), fromID.String())
+	// log.Printf("Received Findnode packet from %s (ID: %s)", from.String(), fromID.String())
 
 	// 获取并打印 Findnode 包的内容
-	req := h.Packet.(*Findnode)
-	log.Printf("Findnode packet content: Target: %x", req.Target)
+	// req := h.Packet.(*Findnode)
+	// log.Printf("Findnode packet content: Target: %x", req.Target)
 
 	//// 生成新的私钥
 	//key, err := crypto.GenerateKey()
@@ -251,16 +251,16 @@ func (t *UDPv4) verifyENRRequest(h *packetHandlerV4, from *net.UDPAddr, fromID e
 func (t *UDPv4) handleENRRequest(h *packetHandlerV4, from *net.UDPAddr, fromID enode.ID, mac []byte) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Recovered in handleENRRequest: %v", r)
+			// log.Printf("Recovered in handleENRRequest: %v", r)
 		}
 	}()
 
 	// 打印接收到 ENRRequest 包的信息
-	log.Printf("Received ENRRequest packet from %s (ID: %s)", from.String(), fromID.String())
+	// log.Printf("Received ENRRequest packet from %s (ID: %s)", from.String(), fromID.String())
 
 	// 获取并打印 ENRRequest 包的内容
-	req := h.Packet.(*ENRRequest)
-	log.Printf("ENRRequest packet content: %+v", req)
+	// req := h.Packet.(*ENRRequest)
+	// log.Printf("ENRRequest packet content: %+v", req)
 
 	//t.sendENRResponse(from, fromID, mac)
 

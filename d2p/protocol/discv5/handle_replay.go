@@ -35,7 +35,7 @@ func (t *UDPv5) handlePacket(rawpacket []byte, fromAddr *net.UDPAddr) error {
 		return err
 	}
 
-	fmt.Printf("Successfully decoded packet type: %s\n", packet.Name())
+	t.log.Info("Successfully decoded packet type: %s\n", packet.Name())
 
 	if packet.Kind() != v5wire.WhoareyouPacket {
 		t.logcontext = append(t.logcontext[:0], "id", fromID, "addr", addr)
@@ -130,7 +130,7 @@ func (t *UDPv5) send(toID enode.ID, toAddr *net.UDPAddr, packet Packet, c *Whoar
 
 	enc, nonce, err := t.codec.Encode(toID, addr, packet, c)
 	if err != nil {
-		fmt.Printf("Encoding failed: %v\n", err)
+		// fmt.Printf("Encoding failed: %v\n", err)
 		t.logcontext = append(t.logcontext, "err", err)
 		t.log.Warn(">> "+packet.Name(), t.logcontext...)
 		return nonce, err
@@ -139,9 +139,9 @@ func (t *UDPv5) send(toID enode.ID, toAddr *net.UDPAddr, packet Packet, c *Whoar
 	_, err = t.conn.WriteToUDP(enc, toAddr)
 
 	if err != nil {
-		fmt.Printf("Send failed: %v\n", err)
+		t.log.Warn("Send failed: %v\n", err)
 	} else {
-		fmt.Printf("Packet sent successfully\n")
+		t.log.Info("Packet sent successfully\n")
 	}
 
 	t.log.Trace(">> "+packet.Name(), t.logcontext...)

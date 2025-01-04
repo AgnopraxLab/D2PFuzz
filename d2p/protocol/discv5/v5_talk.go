@@ -13,7 +13,7 @@ const maxActiveTalkRequests = 1024
 
 // This is the timeout for acquiring a handler execution slot for a talk request.
 // The timeout should be short enough to fit within the request timeout.
-const talkHandlerLaunchTimeout = 400 * time.Millisecond
+const talkHandlerLaunchTimeout = 100 * time.Millisecond
 
 // TalkRequestHandler callback processes a talk request and returns a response.
 //

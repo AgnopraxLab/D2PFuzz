@@ -21,7 +21,7 @@ import (
 
 const (
 	findnodeResultLimit = 16 // applies in FINDNODE handler
-	respTimeoutV5       = 700 * time.Millisecond
+	respTimeoutV5       = 100 * time.Millisecond
 )
 
 // codecV5 is implemented by wire.Codec (and testCodec).
@@ -149,7 +149,7 @@ func (t *UDPv5) Send(n *enode.Node, p Packet, challenge *Whoareyou) (Nonce, erro
 		return nonce, err
 	}
 	// print test
-	fmt.Printf("Generated %s packet with nonce: %x\n", p.Name(), nonce)
+	t.log.Info("Generated %s packet with nonce: %x\n", p.Name(), nonce)
 
 	_, err = t.conn.WriteToUDP(enc, addr)
 	t.log.Trace(">> "+p.Name(), t.logcontext...)
@@ -217,7 +217,7 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		crand.Read(reqID)
 		pingPacket.SetRequestID(reqID)
 		// 添加打印信息
-		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
+		// fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return pingPacket
 
 	case "pong":
@@ -230,7 +230,7 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		crand.Read(reqID)
 		pongPacket.SetRequestID(reqID)
 		// 添加打印信息
-		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
+		// fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return pongPacket
 
 	case "findnode":
@@ -241,7 +241,7 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		crand.Read(reqID)
 		findnodePacket.SetRequestID(reqID)
 		// 添加打印信息
-		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
+		// fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return findnodePacket
 
 	case "nodes":
@@ -267,7 +267,7 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		crand.Read(reqID)
 		nodesPacket.SetRequestID(reqID)
 		// 添加打印信息
-		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
+		// fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return nodesPacket
 
 	case "talkrequest":
@@ -279,7 +279,7 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		crand.Read(reqID)
 		talkReqPacket.SetRequestID(reqID)
 		// 添加打印信息
-		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
+		// fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return talkReqPacket
 
 	case "talkresponse":
@@ -290,7 +290,7 @@ func (t *UDPv5) GenPacket(packetType string, n *enode.Node) Packet {
 		crand.Read(reqID)
 		talkRespPacket.SetRequestID(reqID)
 		// 添加打印信息
-		fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
+		// fmt.Printf("Generated %s packet with ReqID: %x\n", packetType, reqID)
 		return talkRespPacket
 	/*case "whoareyou":
 	whoareyouPacket := &Whoareyou{

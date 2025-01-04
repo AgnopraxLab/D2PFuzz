@@ -316,8 +316,8 @@ func discv5Fuzzer(engine int, target string) error {
 				if err = testMaker.PacketStart(traceFile, seed, globalV5Stats[seed.Name()]); err != nil {
 					return err
 				}
-				globalV5Stats[seed.Name()].ExecuteCount = globalV4Stats[seed.Name()].ExecuteCount + 1
-				for name, stats := range globalV4Stats {
+				globalV5Stats[seed.Name()].ExecuteCount = globalV5Stats[seed.Name()].ExecuteCount + 1
+				for name, stats := range globalV5Stats {
 					fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
 						name, stats.ExecuteCount, stats.CheckTrueFail, stats.CheckFalsePass, stats.CheckTruePass)
 				}

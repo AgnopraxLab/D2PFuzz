@@ -28,7 +28,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -463,7 +462,7 @@ func (m *V5Maker) checkWhoareyouSemantics(w *discv5.Whoareyou) []bool {
 	if w.Node != m.TargetList[0] {
 		validityResults = append(validityResults, false)
 	} else {
-		fmt.Println("Node is invalid")
+		// fmt.Println("Node is invalid")
 		validityResults = append(validityResults, true)
 	}
 
@@ -598,8 +597,15 @@ func mutateTalkResponseV5(mutator *fuzzing.Mutator, original *discv5.TalkRespons
 func mutateWhoareyouV5(mutator *fuzzing.Mutator, original *discv5.Whoareyou) *discv5.Whoareyou {
 	mutated := *original
 
+	// 安全地修改 ChallengeData
 	mutator.MutateBytes(&mutated.ChallengeData)
-	mutator.FillBytes((*[]byte)(unsafe.Pointer(&mutated.IDNonce)))
+
+	// 安全地修改 IDNonce
+	nonce := make([]byte, len(mutated.IDNonce))
+	mutator.FillBytes(&nonce)
+	copy(mutated.IDNonce[:], nonce)
+
+	// 修改 RecordSeq
 	mutator.MutateENRSeq(&mutated.RecordSeq)
 
 	return &mutated
