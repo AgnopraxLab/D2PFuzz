@@ -140,6 +140,39 @@ func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 	return client, nil
 }
 
+func Initsnap(dest *enode.Node, dir string) (*eth.Suite, error) {
+	jwtPath, secret, err := eth.MakeJWTSecret()
+	if err != nil {
+		return nil, fmt.Errorf("failed to make jwt secret: %v", err)
+	}
+
+	geth, err := eth.RunGeth(dir, jwtPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run geth: %v", err)
+	}
+
+	// 创建一个用于清理资源的函数
+	cleanup := func() {
+		fmt.Println("clear sources")
+		geth.Close()
+	}
+
+	// pri, err := crypto.GenerateKey()
+	// if err != nil {
+	// 	cleanup()
+	// 	return nil, fmt.Errorf("failed to generate private key: %v", err)
+	// }
+
+	// Create Suite
+	client, err := eth.NewSuite(dest, dir, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
+	if err != nil {
+		cleanup()
+		return nil, fmt.Errorf("failed to create suite: %v", err)
+	}
+
+	return client, nil
+}
+
 func RunGenerate(protocol, targetDir, chainDir, ptype string) error {
 	// Parse the target into an enode
 	nodeList, _ := getList(targetDir)

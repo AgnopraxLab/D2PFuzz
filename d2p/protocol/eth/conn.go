@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/snap"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -82,6 +83,17 @@ func (s *Suite) dialAs(key *ecdsa.PrivateKey) (*Conn, error) {
 	conn.ourHighestProtoVersion = 68
 
 	return &conn, nil
+}
+
+// dialSnap creates a connection with snap/1 capability.
+func (s *Suite) dialSnap() (*Conn, error) {
+	conn, err := s.dial()
+	if err != nil {
+		return nil, fmt.Errorf("dial failed: %v", err)
+	}
+	conn.caps = append(conn.caps, p2p.Cap{Name: "snap", Version: 1})
+	conn.ourHighestSnapProtoVersion = 1
+	return conn, nil
 }
 
 type Conn struct {
@@ -305,4 +317,53 @@ loop:
 		return fmt.Errorf("write to connection failed: %v", err)
 	}
 	return nil
+}
+
+func (c *Conn) snapRequest(code uint64, msg any) (any, error) {
+	if err := c.Write(snapProto, code, msg); err != nil {
+		return nil, fmt.Errorf("could not write to connection: %v", err)
+	}
+	return c.ReadSnap()
+}
+
+// ReadSnap reads a snap/1 response with the given id from the connection.
+func (c *Conn) ReadSnap() (any, error) {
+	c.SetReadDeadline(time.Now().Add(timeout))
+	for {
+		code, data, _, err := c.Conn.Read()
+		if err != nil {
+			return nil, err
+		}
+		if getProto(code) != snapProto {
+			// Read until snap message.
+			continue
+		}
+		code -= baseProtoLen + ethProtoLen
+
+		var msg any
+		switch int(code) {
+		case snap.GetAccountRangeMsg:
+			msg = new(snap.GetAccountRangePacket)
+		case snap.AccountRangeMsg:
+			msg = new(snap.AccountRangePacket)
+		case snap.GetStorageRangesMsg:
+			msg = new(snap.GetStorageRangesPacket)
+		case snap.StorageRangesMsg:
+			msg = new(snap.StorageRangesPacket)
+		case snap.GetByteCodesMsg:
+			msg = new(snap.GetByteCodesPacket)
+		case snap.ByteCodesMsg:
+			msg = new(snap.ByteCodesPacket)
+		case snap.GetTrieNodesMsg:
+			msg = new(snap.GetTrieNodesPacket)
+		case snap.TrieNodesMsg:
+			msg = new(snap.TrieNodesPacket)
+		default:
+			panic(fmt.Errorf("unhandled snap code: %d", code))
+		}
+		if err := rlp.DecodeBytes(data, msg); err != nil {
+			return nil, fmt.Errorf("could not rlp decode message: %v", err)
+		}
+		return msg, nil
+	}
 }

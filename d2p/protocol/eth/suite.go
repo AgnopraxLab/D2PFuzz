@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/snap"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -219,6 +220,74 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 		}, nil
 	default:
 		return nil, errors.New("unknown packet type")
+	}
+}
+
+// GenPacket 生成指定类型的 snap 协议数据包
+func (s *Suite) GenSnapPacket(packetType int) (Packet, error) {
+	switch packetType {
+	case snap.GetAccountRangeMsg:
+		return &snap.GetAccountRangePacket{
+			ID:     uint64(1),
+			Root:   common.Hash{},
+			Origin: common.Hash{},
+			Limit:  common.MaxHash,
+			Bytes:  4000,
+		}, nil
+
+	case snap.AccountRangeMsg:
+		return &snap.AccountRangePacket{
+			ID:       uint64(1),
+			Accounts: []*snap.AccountData{},
+			Proof:    [][]byte{},
+		}, nil
+
+	case snap.GetStorageRangesMsg:
+		return &snap.GetStorageRangesPacket{
+			ID:       uint64(1),
+			Root:     common.Hash{},
+			Accounts: []common.Hash{},
+			Origin:   []byte{},
+			Limit:    []byte{},
+			Bytes:    4000,
+		}, nil
+
+	case snap.StorageRangesMsg:
+		return &snap.StorageRangesPacket{
+			ID:    uint64(1),
+			Slots: [][]*snap.StorageData{},
+			Proof: [][]byte{},
+		}, nil
+
+	case snap.GetByteCodesMsg:
+		return &snap.GetByteCodesPacket{
+			ID:     uint64(1),
+			Hashes: []common.Hash{},
+			Bytes:  4000,
+		}, nil
+
+	case snap.ByteCodesMsg:
+		return &snap.ByteCodesPacket{
+			ID:    uint64(1),
+			Codes: [][]byte{},
+		}, nil
+
+	case snap.GetTrieNodesMsg:
+		return &snap.GetTrieNodesPacket{
+			ID:    uint64(1),
+			Root:  common.Hash{},
+			Paths: []snap.TrieNodePathSet{},
+			Bytes: 4000,
+		}, nil
+
+	case snap.TrieNodesMsg:
+		return &snap.TrieNodesPacket{
+			ID:    uint64(1),
+			Nodes: [][]byte{},
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown snap packet type: %d", packetType)
 	}
 }
 
@@ -529,6 +598,25 @@ func (s *Suite) InitializeAndConnect() error {
 	return nil
 }
 
+// InitializeAndConnect 封装了初始化、连接和对等过程
+func (s *Suite) SnapInitializeAndConnect() error {
+	conn, err := s.dialSnap()
+	if err != nil {
+		return fmt.Errorf("dial failed: %v", err)
+	}
+	//defer func() {
+	//	conn.Close()
+	//}()
+	//defer conn.Close()
+	if err := conn.peer(s.chain, nil); err != nil {
+		return fmt.Errorf("peer failed: %v", err)
+	}
+	////
+
+	///
+	return nil
+}
+
 func (s *Suite) SendForkchoiceUpdated() error {
 	return s.engine.sendForkchoiceUpdated()
 }
@@ -666,4 +754,14 @@ func (s *Suite) SetupConn() error {
 // Conn returns the connection of the suite
 func (s *Suite) Conn() *Conn {
 	return s.conn
+}
+
+func (s *Suite) SetupSnapConn() error {
+	s.conn, _ = s.dialSnap()
+	//defer s.conn.Close()
+	if err := s.conn.Peer(s.Chain(), nil); err != nil {
+		return fmt.Errorf("peer failed: %v", err)
+	}
+
+	return nil
 }
