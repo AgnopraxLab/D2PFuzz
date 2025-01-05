@@ -363,3 +363,11 @@ func (c *Chain) Config() *params.ChainConfig {
 func (c *Chain) Blocks() []*types.Block {
 	return c.blocks
 }
+
+// RootAt returns the state root for the block at the given height.
+func (c *Chain) RootAt(height int) common.Hash {
+	if height < c.Len() {
+		return c.blocks[height].Root()
+	}
+	return common.Hash{}
+}

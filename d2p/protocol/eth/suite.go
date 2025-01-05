@@ -223,67 +223,162 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 	}
 }
 
+var (
+	acct   = common.HexToAddress("0x8bebc8ba651aee624937e7d897853ac30c95a067")
+	ffHash = common.MaxHash
+	zero   = common.Hash{}
+)
+
 // GenPacket 生成指定类型的 snap 协议数据包
 func (s *Suite) GenSnapPacket(packetType int) (Packet, error) {
 	switch packetType {
 	case snap.GetAccountRangeMsg:
 		return &snap.GetAccountRangePacket{
 			ID:     uint64(1),
-			Root:   common.Hash{},
-			Origin: common.Hash{},
-			Limit:  common.MaxHash,
+			Root:   s.chain.Head().Root(),
+			Origin: zero,
+			Limit:  ffHash,
 			Bytes:  4000,
 		}, nil
 
 	case snap.AccountRangeMsg:
+		accounts := []*snap.AccountData{
+			{
+				Hash: common.Hash{0x1},
+				Body: []byte{0x1, 0x2, 0x3},
+			},
+			{
+				Hash: common.Hash{0x2},
+				Body: []byte{0x4, 0x5, 0x6},
+			},
+		}
+
+		// 创建一些示例证明数据
+		proofs := [][]byte{
+			{0x1, 0x2, 0x3},
+			{0x4, 0x5, 0x6},
+		}
+
 		return &snap.AccountRangePacket{
 			ID:       uint64(1),
-			Accounts: []*snap.AccountData{},
-			Proof:    [][]byte{},
+			Accounts: accounts,
+			Proof:    proofs,
 		}, nil
 
 	case snap.GetStorageRangesMsg:
 		return &snap.GetStorageRangesPacket{
 			ID:       uint64(1),
-			Root:     common.Hash{},
-			Accounts: []common.Hash{},
-			Origin:   []byte{},
-			Limit:    []byte{},
-			Bytes:    4000,
+			Root:     s.chain.Head().Root(),
+			Accounts: []common.Hash{common.BytesToHash(s.chain.state[acct].AddressHash)},
+			Origin:   zero[:],
+			Limit:    ffHash[:],
+			Bytes:    1000,
 		}, nil
 
 	case snap.StorageRangesMsg:
+		// 创建多个账户的存储槽数据
+		slots := [][]*snap.StorageData{
+			{ // 第一个账户的存储槽
+				{
+					Hash: common.Hash{0x1},
+					Body: []byte{0x1, 0x2, 0x3},
+				},
+				{
+					Hash: common.Hash{0x2},
+					Body: []byte{0x4, 0x5, 0x6},
+				},
+			},
+			{ // 第二个账户的存储槽
+				{
+					Hash: common.Hash{0x3},
+					Body: []byte{0x7, 0x8, 0x9},
+				},
+				{
+					Hash: common.Hash{0x4},
+					Body: []byte{0xa, 0xb, 0xc},
+				},
+			},
+		}
+
+		// 创建一些示例证明数据
+		proofs := [][]byte{
+			{0x1, 0x2, 0x3},
+			{0x4, 0x5, 0x6},
+		}
+
 		return &snap.StorageRangesPacket{
 			ID:    uint64(1),
-			Slots: [][]*snap.StorageData{},
-			Proof: [][]byte{},
+			Slots: slots,
+			Proof: proofs, // 最后一个存储槽范围的默克尔证明
 		}, nil
 
 	case snap.GetByteCodesMsg:
 		return &snap.GetByteCodesPacket{
 			ID:     uint64(1),
-			Hashes: []common.Hash{},
-			Bytes:  4000,
+			Hashes: []common.Hash{s.chain.RootAt(0), s.chain.Head().Root()},
+			Bytes:  10000,
 		}, nil
 
 	case snap.ByteCodesMsg:
+		// 创建一些示例合约字节码
+		codes := [][]byte{
+			// 一个简单的合约字节码
+			{
+				0x60, 0x80, 0x60, 0x40, 0x52, // PUSH1 80 PUSH1 40 MSTORE
+				0x34, 0x80, 0x15, // CALLVALUE DUP1 ISZERO
+				0x60, 0x04, // PUSH1 04
+			},
+			// 另一个合约字节码
+			{
+				0x60, 0x20, 0x60, 0x40, 0x52, // PUSH1 20 PUSH1 40 MSTORE
+				0x60, 0x40, 0x51, // PUSH1 40 MLOAD
+				0x80, 0x91, 0x03, // DUP1 SWAP2 SUB
+			},
+		}
+
 		return &snap.ByteCodesPacket{
 			ID:    uint64(1),
-			Codes: [][]byte{},
+			Codes: codes, // 返回请求的合约字节码列表
 		}, nil
 
 	case snap.GetTrieNodesMsg:
 		return &snap.GetTrieNodesPacket{
-			ID:    uint64(1),
-			Root:  common.Hash{},
-			Paths: []snap.TrieNodePathSet{},
-			Bytes: 4000,
+			ID:   uint64(1),
+			Root: s.chain.Head().Root(),
+			Paths: []snap.TrieNodePathSet{
+				{[]byte{0}},
+				{[]byte{1}, []byte{0}},
+			},
+			Bytes: 5000,
 		}, nil
 
 	case snap.TrieNodesMsg:
+		// 创建一些示例 trie 节点数据
+		nodes := [][]byte{
+			// 第一个 trie 节点（分支节点示例）
+			{
+				0xf8, 0x91, // RLP 列表前缀
+				0x80, // 空值
+				0x80, // 空值
+				0x80,
+				0x94, 0x12, 0x34, // 某个分支的值
+				0x80,
+				0x80,
+				0x80,
+				0x80,
+			},
+			// 第二个 trie 节点（叶子节点示例）
+			{
+				0xe2,             // RLP 列表前缀
+				0x20,             // 路径长度
+				0x01, 0x02, 0x03, // 路径
+				0x56, 0x78, // 值
+			},
+		}
+
 		return &snap.TrieNodesPacket{
 			ID:    uint64(1),
-			Nodes: [][]byte{},
+			Nodes: nodes, // 返回请求的 trie 节点列表
 		}, nil
 
 	default:
