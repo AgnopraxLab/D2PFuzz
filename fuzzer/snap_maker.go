@@ -912,25 +912,16 @@ func mutateGetByteCodesPacket(mutator *fuzzing.Mutator, original *snap.GetByteCo
 }
 
 // mutateGetTrieNodesPacket 变异 GetTrieNodes 请求包
-func mutateGetTrieNodesPacket(mutator *fuzzing.Mutator, original *snap.GetTrieNodesPacket, chain *eth.Chain) *snap.GetTrieNodesPacket {
-	if mutator == nil || original == nil {
-		return original
-	}
-
+func mutateGetTrieNodesPacket(mutator *fuzzing.Mutator, original *snap.GetTrieNodesPacket) *snap.GetTrieNodesPacket {
 	mutated := *original
 
-	// 随机选择一个字段进行变异
-	switch mutator.Rand(4) {
-	case 0: // 变异 ID
+	if rand.Float32() < 0.3 {
 		mutator.MutateSnapRequestId(&mutated.ID)
-
-	case 1: // 变异 Root
-		mutator.MutateSnapRoot(&mutated.Root, chain)
-
-	case 2: // 变异 Paths
+	}
+	if rand.Float32() < 0.3 {
 		mutated.Paths = mutator.MutateSnapTrieNodePaths()
-
-	case 3: // 变异 Bytes
+	}
+	if rand.Float32() < 0.3 {
 		mutator.MutateSnapBytes(&mutated.Bytes)
 	}
 

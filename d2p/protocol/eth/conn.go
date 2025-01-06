@@ -165,7 +165,7 @@ func (s *Suite) SendMsg(proto Proto, code uint64, msg interface{}) error {
 
 	err := s.conn.Write(proto, code, msg)
 	if err != nil {
-		fmt.Printf(">>> 写入失败: %v\n", err)
+		fmt.Printf(">>> Write failed: %v\n", err)
 		return err
 	}
 

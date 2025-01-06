@@ -139,8 +139,8 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
-	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
-	currentSeed := seed
+	//mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
+	//currentSeed := seed
 
 	// Only three 'get' message types need special connection handling
 	if seed.Kind() == eth.GetBlockHeadersMsg ||
@@ -153,11 +153,11 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 	}
 
 	for i := 0; i < MutateCount; i++ {
-		//for i := 0; i < 2; i++ {
+		//for i := 0; i < 1; i++ {
 		wg.Add(1)
 
-		mutateSeed := cloneAndMutateEthPacket(mutator, currentSeed, m.SuiteList[0].Chain())
-		//mutateSeed := seed
+		//mutateSeed := cloneAndMutateEthPacket(mutator, currentSeed, m.SuiteList[0].Chain())
+		mutateSeed := seed
 		go func(iteration int, currentReq eth.Packet, packetStats *UDPPacketStats) {
 			defer wg.Done()
 
@@ -217,7 +217,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 			}
 
 		}(i, mutateSeed, stats)
-		currentSeed = mutateSeed
+		//currentSeed = mutateSeed
 		time.Sleep(PacketSleepTime)
 	}
 
@@ -481,7 +481,7 @@ func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, sui
 	// 修改包内容进行测试
 	// p.Origin.Number = 300
 	// p.Amount = 3000
-	// p.Skip = 200
+	// p.Skip = 18446744073709551300
 	// //p.Skip = 18446744073709551615
 	// p.Reverse = false
 	// p.Origin.Hash = common.Hash{} // 确保使用Number而不是Hash
