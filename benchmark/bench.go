@@ -21,13 +21,15 @@ import (
 	"time"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
+	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/snap"
 	"github.com/AgnopraxLab/D2PFuzz/fuzzer"
 )
 
 var (
-	globalV4Stats  = make(map[string]*fuzzer.UDPPacketStats)
-	globalV5Stats  = make(map[string]*fuzzer.UDPPacketStats)
-	globalEthStats = make(map[string]*fuzzer.UDPPacketStats)
+	globalV4Stats   = make(map[string]*fuzzer.UDPPacketStats)
+	globalV5Stats   = make(map[string]*fuzzer.UDPPacketStats)
+	globalEthStats  = make(map[string]*fuzzer.UDPPacketStats)
+	globalSnapStats = make(map[string]*fuzzer.UDPPacketStats)
 )
 
 // RunFullBench runs a full benchmark with N runs.
@@ -113,6 +115,31 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 					globalEthStats[packet.Name()].CheckFalsePassBad,
 					globalEthStats[packet.Name()].CheckTruePass)
 			}
+		case "snap":
+			testMaker := fuzzer.NewSnapMaker(target, chainDir)
+			if engine == 1 {
+				testMaker.Start(os.Stdout)
+			} else {
+				packetTypeInt := getSnapPacketType(packetType)
+				packet, err := testMaker.SuiteList[0].GenSnapPacket(packetTypeInt)
+				if err != nil {
+					fmt.Printf("Failed to generate packet: %v\n", err)
+				}
+				globalSnapStats[packet.Name()] = &fuzzer.UDPPacketStats{
+					ExecuteCount:   0,
+					CheckTrueFail:  0,
+					CheckFalsePass: 0,
+					CheckTruePass:  0,
+				}
+				testMaker.PacketStart(os.Stdout, packet, globalSnapStats[packet.Name()])
+				fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePassOK: %d, CheckFalsePassBad: %d, CheckTruePass: %d\n",
+					packet.Name(),
+					globalSnapStats[packet.Name()].ExecuteCount,
+					globalSnapStats[packet.Name()].CheckTrueFail,
+					globalSnapStats[packet.Name()].CheckFalsePassOK,
+					globalSnapStats[packet.Name()].CheckFalsePassBad,
+					globalSnapStats[packet.Name()].CheckTruePass)
+			}
 		}
 	}
 	return time.Since(start), nil
@@ -146,6 +173,29 @@ func getEthPacketType(packetType string) int {
 		return eth.GetReceiptsMsg // 0x0f-T
 	case "Receipts":
 		return eth.ReceiptsMsg // 0x10
+	default:
+		return -1
+	}
+}
+
+func getSnapPacketType(packetType string) int {
+	switch packetType {
+	case "GetAccountRange":
+		return snap.GetAccountRangeMsg // 0x00
+	case "AccountRangeMsg":
+		return snap.AccountRangeMsg // 0x01
+	case "GetStorageRangesMsg":
+		return snap.GetStorageRangesMsg // 0x02
+	case "StorageRangesMsg":
+		return snap.StorageRangesMsg // 0x03
+	case "GetByteCodesMsg":
+		return snap.GetByteCodesMsg // 0x04
+	case "ByteCodesMsg":
+		return snap.ByteCodesMsg // 0x05
+	case "GetTrieNodesMsg":
+		return snap.GetTrieNodesMsg // 0x06
+	case "TrieNodesMsg ":
+		return snap.TrieNodesMsg // 0x07
 	default:
 		return -1
 	}

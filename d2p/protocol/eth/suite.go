@@ -315,7 +315,7 @@ func (s *Suite) GenSnapPacket(packetType int) (Packet, error) {
 	case snap.GetByteCodesMsg:
 		return &snap.GetByteCodesPacket{
 			ID:     uint64(1),
-			Hashes: []common.Hash{s.chain.RootAt(0), s.chain.Head().Root()},
+			Hashes: s.chain.CodeHashes(),
 			Bytes:  10000,
 		}, nil
 
@@ -342,12 +342,15 @@ func (s *Suite) GenSnapPacket(packetType int) (Packet, error) {
 		}, nil
 
 	case snap.GetTrieNodesMsg:
+		storageAcctHash := common.BytesToHash(s.chain.state[acct].AddressHash)
 		return &snap.GetTrieNodesPacket{
 			ID:   uint64(1),
 			Root: s.chain.Head().Root(),
 			Paths: []snap.TrieNodePathSet{
-				{[]byte{0}},
-				{[]byte{1}, []byte{0}},
+				{
+					storageAcctHash[:],
+					[]byte{0},
+				},
 			},
 			Bytes: 5000,
 		}, nil

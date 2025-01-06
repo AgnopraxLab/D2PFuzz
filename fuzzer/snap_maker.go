@@ -17,6 +17,7 @@
 package fuzzer
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,6 +34,9 @@ import (
 	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/AgnopraxLab/D2PFuzz/generator"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/trienode"
 )
 
 var (
@@ -117,6 +121,7 @@ func (m *SnapMaker) ToSubTest() *stJSON {
 }
 
 func (m *SnapMaker) PacketStart(traceOutput io.Writer, seed snap.Packet, stats *UDPPacketStats) error {
+
 	var (
 		wg      sync.WaitGroup
 		logger  *log.Logger
@@ -137,10 +142,9 @@ func (m *SnapMaker) PacketStart(traceOutput io.Writer, seed snap.Packet, stats *
 	defer m.SuiteList[0].Conn().Close()
 
 	for i := 0; i < MutateCount; i++ {
-		//for i := 0; i < 2; i++ {
 		wg.Add(1)
 
-		mutateSeed := cloneAndMutateSnapPacket(mutator, currentSeed, m.SuiteList[0].Chain())
+		mutateSeed := cloneAndMutateSnapPacket(mutator, currentSeed)
 		//mutateSeed := seed
 		go func(iteration int, currentReq snap.Packet, packetStats *UDPPacketStats) {
 			defer wg.Done()
@@ -156,8 +160,8 @@ func (m *SnapMaker) PacketStart(traceOutput io.Writer, seed snap.Packet, stats *
 
 			// 发送并等待响应
 			resp, err, success, valid := m.handlePacketWithResponse(currentReq, m.SuiteList[0], logger)
-			if err != nil {
-				result.Error = err.Error()
+			if err != "" {
+				result.Error = err
 				result.Success = false
 				result.Valid = false
 			} else {
@@ -344,49 +348,273 @@ func (m *SnapMaker) handlePacket(req snap.Packet, suite *eth.Suite, logger *log.
 
 // 处理 GetAccountRange 请求
 func (m *SnapMaker) handleGetAccountRangePacket(p *snap.GetAccountRangePacket, suite *eth.Suite) *snapPacketTestResult {
-	// TODO: 实现具体逻辑
-	return &snapPacketTestResult{}
+
+	msg, err := suite.SnapRequest(snap.GetAccountRangeMsg, p)
+	if err != nil {
+		return &snapPacketTestResult{
+			Response: nil,
+			Error:    err.Error(),
+			Success:  false,
+			Valid:    false,
+		}
+	}
+	res, ok := msg.(*snap.AccountRangePacket)
+	if !ok {
+		return &snapPacketTestResult{
+			Response: res,
+			Error:    fmt.Sprintf("account range response wrong: %T %v", msg, msg),
+			Success:  false,
+			Valid:    false,
+		}
+	}
+	// Check that the encoding order is correct
+	for i := 1; i < len(res.Accounts); i++ {
+		if bytes.Compare(res.Accounts[i-1].Hash[:], res.Accounts[i].Hash[:]) >= 0 {
+			return &snapPacketTestResult{
+				Response: res,
+				Error:    fmt.Sprintf("accounts not monotonically increasing: #%d [%x] vs #%d [%x]", i-1, res.Accounts[i-1].Hash[:], i, res.Accounts[i].Hash[:]),
+				Success:  false,
+				Valid:    false,
+			}
+		}
+	}
+	var (
+		hashes   []common.Hash
+		accounts [][]byte
+		proof    = res.Proof
+	)
+	hashes, accounts, err = res.Unpack()
+	if err != nil {
+		return &snapPacketTestResult{
+			Response: res,
+			Error:    err.Error(),
+			Success:  false,
+			Valid:    false,
+		}
+	}
+	if len(hashes) == 0 && len(accounts) == 0 && len(proof) == 0 {
+		return nil
+	}
+	// Reconstruct a partial trie from the response and verify it
+	keys := make([][]byte, len(hashes))
+	for i, key := range hashes {
+		keys[i] = common.CopyBytes(key[:])
+	}
+	nodes := make(trienode.ProofList, len(proof))
+	for i, node := range proof {
+		nodes[i] = node
+	}
+	proofdb := nodes.Set()
+
+	startingHash := common.Hash{}
+	_, err = trie.VerifyRangeProof(suite.Chain().Head().Root(), startingHash[:], keys, accounts, proofdb)
+	if err != nil {
+		return &snapPacketTestResult{
+			Response: res,
+			Error:    err.Error(),
+			Success:  true,
+			Valid:    false,
+		}
+	}
+
+	return &snapPacketTestResult{
+		Response: res,
+		Success:  true,
+		Valid:    true,
+	}
 }
 
 // 处理 AccountRange 响应
 func (m *SnapMaker) handleAccountRangePacket(p *snap.AccountRangePacket, suite *eth.Suite, logger *log.Logger) error {
-	// TODO: 实现具体逻辑
+	_, err := suite.SnapRequest(snap.AccountRangeMsg, p)
+	if err != nil {
+		return fmt.Errorf("failed to handle account range packet: %v", err)
+	}
 	return nil
 }
 
 // 处理 GetStorageRanges 请求
 func (m *SnapMaker) handleGetStorageRangesPacket(p *snap.GetStorageRangesPacket, suite *eth.Suite) *snapPacketTestResult {
-	// TODO: 实现具体逻辑
-	return &snapPacketTestResult{}
+	msg, err := suite.SnapRequest(snap.GetStorageRangesMsg, p)
+	if err != nil {
+		return &snapPacketTestResult{
+			Error:   fmt.Sprintf("account range request failed: %v", err),
+			Success: false,
+			Valid:   false,
+		}
+	}
+	res, ok := msg.(*snap.StorageRangesPacket)
+	if !ok {
+		return &snapPacketTestResult{
+			Error:   fmt.Sprintf("account range response wrong: %T %v", msg, msg),
+			Success: false,
+			Valid:   false,
+		}
+	}
+
+	// Ensure the ranges are monotonically increasing
+	for i, slots := range res.Slots {
+		for j := 1; j < len(slots); j++ {
+			if bytes.Compare(slots[j-1].Hash[:], slots[j].Hash[:]) >= 0 {
+				return &snapPacketTestResult{
+					Error:   fmt.Sprintf("storage slots not monotonically increasing for account #%d: #%d [%x] vs #%d [%x]", i, j-1, slots[j-1].Hash[:], j, slots[j].Hash[:]),
+					Success: false,
+					Valid:   false,
+				}
+			}
+		}
+	}
+	return &snapPacketTestResult{
+		Response: res,
+		Success:  true,
+		Valid:    true,
+	}
 }
 
 // 处理 StorageRanges 响应
 func (m *SnapMaker) handleStorageRangesPacket(p *snap.StorageRangesPacket, suite *eth.Suite, logger *log.Logger) error {
-	// TODO: 实现具体逻辑
+	_, err := suite.SnapRequest(snap.StorageRangesMsg, p)
+	if err != nil {
+		return fmt.Errorf("failed to handle account range packet: %v", err)
+	}
 	return nil
 }
 
 // 处理 GetByteCodes 请求
 func (m *SnapMaker) handleGetByteCodesPacket(p *snap.GetByteCodesPacket, suite *eth.Suite) *snapPacketTestResult {
-	// TODO: 实现具体逻辑
-	return &snapPacketTestResult{}
+	msg, err := suite.SnapRequest(snap.GetByteCodesMsg, p)
+	if err != nil {
+		return &snapPacketTestResult{
+			Error:   fmt.Sprintf("getBytecodes request failed: %v", err),
+			Success: false,
+			Valid:   false,
+		}
+	}
+	res, ok := msg.(*snap.ByteCodesPacket)
+	if !ok {
+		return &snapPacketTestResult{
+			Error:   fmt.Sprintf("bytecodes response wrong: %T %v", msg, msg),
+			Success: false,
+			Valid:   false,
+		}
+	}
+	if exp, got := len(p.Hashes), len(res.Codes); exp != got {
+		for i, c := range res.Codes {
+			fmt.Printf("%d. %#x\n", i, c)
+		}
+		return &snapPacketTestResult{
+			Error:   fmt.Sprintf("expected %d bytecodes, got %d", exp, got),
+			Success: false,
+			Valid:   false,
+		}
+	}
+	// Cross reference the requested bytecodes with the response to find gaps
+	// that the serving node is missing
+	var (
+		bytecodes = res.Codes
+		hasher    = crypto.NewKeccakState()
+		hash      = make([]byte, 32)
+		codes     = make([][]byte, len(p.Hashes))
+	)
+
+	for i, j := 0, 0; i < len(bytecodes); i++ {
+		// Find the next hash that we've been served, leaving misses with nils
+		hasher.Reset()
+		hasher.Write(bytecodes[i])
+		hasher.Read(hash)
+
+		for j < len(p.Hashes) && !bytes.Equal(hash, p.Hashes[j][:]) {
+			j++
+		}
+		if j < len(p.Hashes) {
+			codes[j] = bytecodes[i]
+			j++
+			continue
+		}
+		// We've either ran out of hashes, or got unrequested data
+		return &snapPacketTestResult{
+			Error:   "unexpected bytecode",
+			Success: false,
+			Valid:   false,
+		}
+	}
+
+	return &snapPacketTestResult{
+		Response: res,
+		Success:  true,
+		Valid:    true,
+	}
 }
 
 // 处理 ByteCodes 响应
 func (m *SnapMaker) handleByteCodesPacket(p *snap.ByteCodesPacket, suite *eth.Suite, logger *log.Logger) error {
-	// TODO: 实现具体逻辑
+	_, err := suite.SnapRequest(snap.ByteCodesMsg, p)
+	if err != nil {
+		return fmt.Errorf("failed to handle bytecodes packet: %v", err)
+	}
 	return nil
 }
 
 // 处理 GetTrieNodes 请求
 func (m *SnapMaker) handleGetTrieNodesPacket(p *snap.GetTrieNodesPacket, suite *eth.Suite) *snapPacketTestResult {
-	// TODO: 实现具体逻辑
-	return &snapPacketTestResult{}
+	msg, err := suite.SnapRequest(snap.GetTrieNodesMsg, p)
+	if err != nil {
+		fmt.Printf("Debug - GetTrieNodes - Request failed: %v\n", err)
+		return &snapPacketTestResult{
+			Error:   fmt.Sprintf("trienodes request failed: %v", err),
+			Success: false,
+			Valid:   false,
+		}
+	}
+	res, ok := msg.(*snap.TrieNodesPacket)
+	if !ok {
+		return &snapPacketTestResult{
+			Error:   fmt.Sprintf("trienodes response wrong: %T %v", msg, msg),
+			Success: false,
+			Valid:   false,
+		}
+	}
+
+	// Check the correctness
+
+	// Cross reference the requested trienodes with the response to find gaps
+	// that the serving node is missing
+	// hasher := crypto.NewKeccakState()
+	// hash := make([]byte, 32)
+	// trienodes := res.Nodes
+
+	// if got, want := len(trienodes), len(p.Paths); got != want {
+	// 	return &snapPacketTestResult{
+	// 		Error:   fmt.Sprintf("wrong trienode count, got %d, want %d", got, want),
+	// 		Success: false,
+	// 		Valid:   false,
+	// 	}
+	// }
+	// for i, trienode := range trienodes {
+	// 	hasher.Reset()
+	// 	hasher.Write(trienode)
+	// 	hasher.Read(hash)
+	// 	if got, want := hash, p.Paths[i][0]; !bytes.Equal(got, want) {
+	// 		return &snapPacketTestResult{
+	// 			Error:   fmt.Sprintf("hash %d wrong, got %#x, want %#x", i, got, want),
+	// 			Success: false,
+	// 			Valid:   false,
+	// 		}
+	// 	}
+	// }
+	return &snapPacketTestResult{
+		Response: res,
+		Success:  true,
+		Valid:    true,
+	}
 }
 
 // 处理 TrieNodes 响应
 func (m *SnapMaker) handleTrieNodesPacket(p *snap.TrieNodesPacket, suite *eth.Suite, logger *log.Logger) error {
-	// TODO: 实现具体逻辑
+	_, err := suite.SnapRequest(snap.TrieNodesMsg, p)
+	if err != nil {
+		return fmt.Errorf("failed to handle trie nodes packet: %v", err)
+	}
 	return nil
 }
 
@@ -406,22 +634,23 @@ func generateSnapTestSeq() []int {
 }
 
 // packet test deal data
-func (m *SnapMaker) handlePacketWithResponse(req snap.Packet, suite *eth.Suite, logger *log.Logger) (snap.Packet, error, bool, bool) {
+func (m *SnapMaker) handlePacketWithResponse(req snap.Packet, suite *eth.Suite, logger *log.Logger) (snap.Packet, string, bool, bool) {
+
 	switch p := req.(type) {
 	case *snap.GetAccountRangePacket:
 		result := m.handleGetAccountRangePacket(p, suite)
-		return result.Response, nil, result.Success, result.Valid
+		return result.Response, result.Error, result.Success, result.Valid
 	case *snap.GetStorageRangesPacket:
 		result := m.handleGetStorageRangesPacket(p, suite)
-		return result.Response, nil, true, result.Valid
+		return result.Response, result.Error, result.Success, result.Valid
 	case *snap.GetByteCodesPacket:
 		result := m.handleGetByteCodesPacket(p, suite)
-		return result.Response, nil, true, result.Valid
+		return result.Response, result.Error, result.Success, result.Valid
 	case *snap.GetTrieNodesPacket:
 		result := m.handleGetTrieNodesPacket(p, suite)
-		return result.Response, nil, true, result.Valid
+		return result.Response, result.Error, result.Success, result.Valid
 	default:
-		return nil, nil, false, false
+		return nil, "", false, false
 	}
 }
 
@@ -448,38 +677,112 @@ func (m *SnapMaker) checkRequestSemantics(req snap.Packet, chain *eth.Chain) []b
 
 // 检查 GetAccountRange 请求的语义
 func checkGetAccountRangeSemantics(p *snap.GetAccountRangePacket, chain *eth.Chain) []bool {
-	// TODO: 实现语义检查
-	// 1. 检查 Root 是否有效
-	// 2. 检查 Origin 和 Limit 是否合法
-	// 3. 检查 Bytes 是否在合理范围内
-	return []bool{true}
+	results := make([]bool, 3)
+
+	// 1. 检查 Root 是否有效（是否是链上某个区块的状态根）
+	results[0] = false
+	for i := 0; i <= int(chain.Head().NumberU64()); i++ {
+		if p.Root == chain.RootAt(i) {
+			results[0] = true
+			break
+		}
+	}
+
+	// 2. 检查 Origin 是否小于等于 Limit
+	results[1] = bytes.Compare(p.Origin.Bytes(), p.Limit.Bytes()) <= 0
+
+	// 3. 检查 Bytes 是否在合理范围内 (例如：不能为0，且不能过大)
+	results[2] = p.Bytes > 0 && p.Bytes <= 500*1024 // 最大 500KB
+
+	return results
 }
 
 // 检查 GetStorageRanges 请求的语义
 func checkGetStorageRangesSemantics(p *snap.GetStorageRangesPacket, chain *eth.Chain) []bool {
-	// TODO: 实现语义检查
-	// 1. 检查 Root 是否有效
-	// 2. 检查 Accounts 是否存在
-	// 3. 检查 Origin 和 Limit 是否合法
+	results := make([]bool, 4)
+
+	// 1. 检查 Root 是否有效（是否是链上某个区块的状态根）
+	results[0] = false
+	for i := 0; i <= int(chain.Head().NumberU64()); i++ {
+		if p.Root == chain.RootAt(i) {
+			results[0] = true
+			break
+		}
+	}
+
+	// 2. 检查 Accounts 数组是否有效
+	results[1] = len(p.Accounts) > 0 && len(p.Accounts) <= 128 // 限制账户数量在合理范围内
+
+	// 3. 检查 Origin 是否小于等于 Limit
+	results[2] = bytes.Compare(p.Origin, p.Limit) <= 0
+
 	// 4. 检查 Bytes 是否在合理范围内
-	return []bool{true}
+	results[3] = p.Bytes > 0 && p.Bytes <= 500*1024 // 最大 500KB
+
+	return results
 }
 
 // 检查 GetByteCodes 请求的语义
 func checkGetByteCodesSemantics(p *snap.GetByteCodesPacket, chain *eth.Chain) []bool {
-	// TODO: 实现语义检查
-	// 1. 检查 Hashes 是否有效
-	// 2. 检查 Bytes 是否在合理范围内
-	return []bool{true}
+	results := make([]bool, 3)
+
+	// 1. 检查 Hashes 数组是否非空且长度合理
+	results[0] = len(p.Hashes) > 0 && len(p.Hashes) <= 1024 // 限制哈希数量在合理范围内
+
+	// 2. 检查 Hashes 中是否有重复
+	seen := make(map[common.Hash]bool)
+	results[1] = true
+	for _, hash := range p.Hashes {
+		if seen[hash] {
+			results[1] = false
+			break
+		}
+		seen[hash] = true
+	}
+
+	// 3. 检查 Bytes 是否在合理范围内
+	results[2] = p.Bytes > 0 && p.Bytes <= 1024*1024 // 最大 1MB
+
+	return results
 }
 
 // 检查 GetTrieNodes 请求的语义
 func checkGetTrieNodesSemantics(p *snap.GetTrieNodesPacket, chain *eth.Chain) []bool {
-	// TODO: 实现语义检查
-	// 1. 检查 Root 是否有效
-	// 2. 检查 Paths 是否合法
-	// 3. 检查 Bytes 是否在合理范围内
-	return []bool{true}
+	results := make([]bool, 4)
+
+	// 1. 检查 Root 是否有效（是否是链上某个区块的状态根）
+	results[0] = false
+	for i := 0; i <= int(chain.Head().NumberU64()); i++ {
+		if p.Root == chain.RootAt(i) {
+			results[0] = true
+			break
+		}
+	}
+
+	// 2. 检查 Paths 数组是否非空且长度合理
+	results[1] = len(p.Paths) > 0 && len(p.Paths) <= 1024 // 限制路径集合数量
+
+	// 3. 检查每个 PathSet 的有效性
+	results[2] = true
+	for _, pathSet := range p.Paths {
+		// 检查路径集合是否为空
+		if len(pathSet) == 0 {
+			results[2] = false
+			break
+		}
+		// 检查每个路径的长度是否合理（通常不会超过64字节）
+		for _, path := range pathSet {
+			if len(path) == 0 || len(path) > 64 {
+				results[2] = false
+				break
+			}
+		}
+	}
+
+	// 4. 检查 Bytes 是否在合理范围内
+	results[3] = p.Bytes > 0 && p.Bytes <= 1024*1024 // 最大 1MB
+
+	return results
 }
 
 // analyzeResultsEth 分析测试结果并保存到文件
@@ -489,9 +792,9 @@ func analyzeResultsSnap(results []snapPacketTestResult, logger *log.Logger, outp
 		return fmt.Errorf("failed to create output directory: %v", err)
 	}
 
-	fullPath := filepath.Join(outputDir, "eth")
+	fullPath := filepath.Join(outputDir, "snap")
 	if err := os.MkdirAll(fullPath, 0755); err != nil {
-		return fmt.Errorf("failed to create eth directory: %v", err)
+		return fmt.Errorf("failed to create snap directory: %v", err)
 	}
 
 	filename := filepath.Join(fullPath, fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
@@ -512,27 +815,27 @@ func analyzeResultsSnap(results []snapPacketTestResult, logger *log.Logger, outp
 }
 
 // cloneAndMutateSnapPacket clones and mutates the packet
-func cloneAndMutateSnapPacket(mutator *fuzzing.Mutator, seed snap.Packet, chain *eth.Chain) snap.Packet {
+func cloneAndMutateSnapPacket(mutator *fuzzing.Mutator, seed snap.Packet) snap.Packet {
 	switch p := seed.(type) {
 	case *snap.GetAccountRangePacket:
 		// 创建深拷贝
 		newPacket := *p
-		return mutateGetAccountRangePacket(mutator, &newPacket, chain)
+		return mutateGetAccountRangePacket(mutator, &newPacket)
 
 	case *snap.GetStorageRangesPacket:
 		// 创建深拷贝
 		newPacket := *p
-		return mutateGetStorageRangesPacket(mutator, &newPacket, chain)
+		return mutateGetStorageRangesPacket(mutator, &newPacket)
 
 	case *snap.GetByteCodesPacket:
 		// 创建深拷贝
 		newPacket := *p
-		return mutateGetByteCodesPacket(mutator, &newPacket, chain)
+		return mutateGetByteCodesPacket(mutator, &newPacket)
 
 	case *snap.GetTrieNodesPacket:
 		// 创建深拷贝
 		newPacket := *p
-		return mutateGetTrieNodesPacket(mutator, &newPacket, chain)
+		return mutateGetTrieNodesPacket(mutator, &newPacket)
 
 	default:
 		return seed
@@ -540,37 +843,96 @@ func cloneAndMutateSnapPacket(mutator *fuzzing.Mutator, seed snap.Packet, chain 
 }
 
 // mutateGetAccountRangePacket 变异 GetAccountRange 请求包
-func mutateGetAccountRangePacket(mutator *fuzzing.Mutator, p *snap.GetAccountRangePacket, chain *eth.Chain) snap.Packet {
-	// TODO: 实现变异逻辑
-	// 1. 变异 Root
-	// 2. 变异 Origin 和 Limit
-	// 3. 变异 Bytes
-	return p
+func mutateGetAccountRangePacket(mutator *fuzzing.Mutator, original *snap.GetAccountRangePacket) *snap.GetAccountRangePacket {
+	if mutator == nil || original == nil {
+		return original
+	}
+
+	mutated := *original
+
+	// // 变异 Root 时增加错误处理
+	// if rand.Float32() < 0.3 {
+	// 	oldRoot := mutated.Root // 保存原始值
+	// 	mutator.MutateSnapRoot(&mutated.Root, chain)
+
+	// 	// 如果变异后的 Root 无效，回退到原始值
+	// 	if (mutated.Root == common.Hash{}) {
+	// 		mutated.Root = oldRoot
+	// 	}
+	// }
+
+	if rand.Float32() < 0.3 {
+		mutator.MutateRequestId(&mutated.ID)
+	}
+	if rand.Float32() < 0.3 {
+		mutator.MutateSnapOriginAndLimit(&mutated.Origin, &mutated.Limit)
+	}
+	if rand.Float32() < 0.3 {
+		mutator.MutateSnapBytes(&mutated.Bytes)
+	}
+
+	return &mutated
 }
 
 // mutateGetStorageRangesPacket 变异 GetStorageRanges 请求包
-func mutateGetStorageRangesPacket(mutator *fuzzing.Mutator, p *snap.GetStorageRangesPacket, chain *eth.Chain) snap.Packet {
-	// TODO: 实现变异逻辑
-	// 1. 变异 Root
-	// 2. 变异 Accounts
-	// 3. 变异 Origin 和 Limit
-	// 4. 变异 Bytes
-	return p
+func mutateGetStorageRangesPacket(mutator *fuzzing.Mutator, original *snap.GetStorageRangesPacket) *snap.GetStorageRangesPacket {
+	mutated := *original
+
+	if rand.Float32() < 0.3 {
+		mutator.MutateRequestId(&mutated.ID)
+	}
+	if rand.Float32() < 0.3 {
+		mutator.MutateSnapStorageRangeOriginAndLimit(&mutated.Origin, &mutated.Limit)
+	}
+	if rand.Float32() < 0.3 {
+		mutator.MutateSnapBytes(&mutated.Bytes)
+	}
+	if rand.Float32() < 0.3 {
+		mutated.Accounts = mutator.MutateSnapAccounts()
+	}
+
+	return &mutated
 }
 
 // mutateGetByteCodesPacket 变异 GetByteCodes 请求包
-func mutateGetByteCodesPacket(mutator *fuzzing.Mutator, p *snap.GetByteCodesPacket, chain *eth.Chain) snap.Packet {
-	// TODO: 实现变异逻辑
-	// 1. 变异 Hashes
-	// 2. 变异 Bytes
-	return p
+func mutateGetByteCodesPacket(mutator *fuzzing.Mutator, original *snap.GetByteCodesPacket) *snap.GetByteCodesPacket {
+	mutated := *original
+
+	if rand.Float32() < 0.3 {
+		mutator.MutateRequestId(&mutated.ID)
+	}
+	if rand.Float32() < 0.3 {
+		mutated.Hashes = mutator.MutateSnapHashes()
+	}
+	if rand.Float32() < 0.3 {
+		mutator.MutateSnapBytes(&mutated.Bytes)
+	}
+
+	return &mutated
 }
 
 // mutateGetTrieNodesPacket 变异 GetTrieNodes 请求包
-func mutateGetTrieNodesPacket(mutator *fuzzing.Mutator, p *snap.GetTrieNodesPacket, chain *eth.Chain) snap.Packet {
-	// TODO: 实现变异逻辑
-	// 1. 变异 Root
-	// 2. 变异 Paths
-	// 3. 变异 Bytes
-	return p
+func mutateGetTrieNodesPacket(mutator *fuzzing.Mutator, original *snap.GetTrieNodesPacket, chain *eth.Chain) *snap.GetTrieNodesPacket {
+	if mutator == nil || original == nil {
+		return original
+	}
+
+	mutated := *original
+
+	// 随机选择一个字段进行变异
+	switch mutator.Rand(4) {
+	case 0: // 变异 ID
+		mutator.MutateSnapRequestId(&mutated.ID)
+
+	case 1: // 变异 Root
+		mutator.MutateSnapRoot(&mutated.Root, chain)
+
+	case 2: // 变异 Paths
+		mutated.Paths = mutator.MutateSnapTrieNodePaths()
+
+	case 3: // 变异 Bytes
+		mutator.MutateSnapBytes(&mutated.Bytes)
+	}
+
+	return &mutated
 }

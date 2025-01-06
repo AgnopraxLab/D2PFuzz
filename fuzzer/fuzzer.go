@@ -87,6 +87,8 @@ func RunFuzzer(protocol, target, chainDir string, engine int, threads int) error
 				err = discv5Fuzzer(engine, target)
 			case "eth":
 				err = ethFuzzer(engine, target, chainDir)
+			case "snap":
+				err = snapFuzzer(engine, target, chainDir)
 			default:
 				err = fmt.Errorf("unsupported protocol: %v", protocol)
 			}
@@ -488,4 +490,125 @@ func hash(test *GeneralStateTest) []byte {
 		panic(fmt.Sprintf("Could not hash state test: %v", err))
 	}
 	return h.Sum(nil)
+}
+
+func snapFuzzer(engine int, target, chain string) error {
+	testMaker := NewSnapMaker(target, chain)
+	if testMaker == nil {
+		return fmt.Errorf("failed to create V4Maker")
+	}
+	startTime := time.Now()
+
+	// Channel to listen for interrupt signals
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Ensure resources are cleaned up when function returns
+	defer func() {
+		testMaker.SuiteList[0].Close()
+		saveSnapPacketSeed(testMaker) // Ensure seeds are saved in any case
+		signal.Stop(sigChan)          // Stop signal listening
+	}()
+
+	// Separate goroutine for handling signals
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-sigChan:
+			fmt.Println("\nReceived interrupt signal, saving PacketSeed and exiting...")
+			close(done)
+		case <-done:
+			// Normal exit case
+		}
+	}()
+
+	hashed := hash(testMaker.ToGeneralStateTest("hashName"))
+	finalName := fmt.Sprintf("FuzzD2P-%v", common.Bytes2Hex(hashed))
+
+	var traceFile *os.File
+	if ShouldTrace {
+		traceFile = setupTrace(finalName)
+		defer traceFile.Close()
+	}
+	var err error
+
+	fmt.Println("Snap protocol Fuzzing start!!!")
+	if engine == 1 {
+		if err = testMaker.Start(traceFile); err != nil {
+			return err
+		}
+	} else {
+		// seed init
+		fmt.Println("Seed init...")
+		for _, packetType := range snapoptions {
+			req, err := testMaker.SuiteList[0].GenSnapPacket(packetType)
+			if err != nil {
+				fmt.Printf("Packet generate failed: %v\n", err)
+				return err
+			}
+			testMaker.PakcetSeed = append(testMaker.PakcetSeed, req)
+			globalEthStats[req.Name()] = &UDPPacketStats{0, 0, 0, 0, 0, 0}
+		}
+
+		// for seed
+		itration := 1
+		for {
+			select {
+			case <-done:
+				return nil
+			default:
+				// Original loop logic
+				randomIndex := rand.Intn(len(testMaker.PakcetSeed))
+				seed := testMaker.PakcetSeed[randomIndex]
+				elapsed := time.Since(startTime)
+				fmt.Printf("[%s] Round %d of testing, seed queue: %d, now seed type: %s\n",
+					elapsed.Round(time.Second),
+					itration,
+					len(testMaker.PakcetSeed),
+					seed.Name())
+				if err = testMaker.PacketStart(traceFile, seed, globalEthStats[seed.Name()]); err != nil {
+					return err
+				}
+				globalEthStats[seed.Name()].ExecuteCount = globalEthStats[seed.Name()].ExecuteCount + 1
+				for name, stats := range globalEthStats {
+					fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
+						name, stats.ExecuteCount, stats.CheckTrueFail, stats.CheckFalsePass, stats.CheckTruePass)
+				}
+				itration = itration + 1
+			}
+		}
+	}
+
+	return nil
+}
+
+func saveSnapPacketSeed(testMaker *SnapMaker) {
+	savePath := filepath.Join(OutputDir, "snap")
+	if err := os.MkdirAll(savePath, 0755); err != nil {
+		fmt.Printf("Failed to create directory: %v\n", err)
+		return
+	}
+
+	filename := filepath.Join(savePath, fmt.Sprintf("%s-seed.json", time.Now().Format("2006-01-02_15-04-05")))
+	seeds := make([]map[string]interface{}, 0, len(testMaker.PakcetSeed))
+
+	for _, seed := range testMaker.PakcetSeed {
+		seedMap := map[string]interface{}{
+			"type": seed.Name(),
+			"data": seed,
+		}
+		seeds = append(seeds, seedMap)
+	}
+
+	data, err := json.MarshalIndent(seeds, "", "    ")
+	if err != nil {
+		fmt.Printf("Failed to marshal seeds: %v\n", err)
+		return
+	}
+
+	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+		fmt.Printf("Failed to save seeds: %v\n", err)
+		return
+	}
+	fmt.Printf("Seeds saved to: %s\n", filename)
 }

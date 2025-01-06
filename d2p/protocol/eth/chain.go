@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -370,4 +371,21 @@ func (c *Chain) RootAt(height int) common.Hash {
 		return c.blocks[height].Root()
 	}
 	return common.Hash{}
+}
+
+// CodeHashes returns all bytecode hashes contained in the head state.
+func (c *Chain) CodeHashes() []common.Hash {
+	var hashes []common.Hash
+	seen := make(map[common.Hash]struct{})
+	seen[types.EmptyCodeHash] = struct{}{}
+	for _, acc := range c.state {
+		h := common.BytesToHash(acc.CodeHash)
+		if _, ok := seen[h]; ok {
+			continue
+		}
+		hashes = append(hashes, h)
+		seen[h] = struct{}{}
+	}
+	slices.SortFunc(hashes, (common.Hash).Cmp)
+	return hashes
 }

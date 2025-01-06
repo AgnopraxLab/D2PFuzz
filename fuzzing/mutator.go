@@ -17,6 +17,7 @@
 package fuzzing
 
 import (
+	"bytes"
 	"encoding/binary"
 	"math/big"
 	"math/rand"
@@ -24,6 +25,7 @@ import (
 	"unsafe"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
+	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/snap"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -979,4 +981,142 @@ func (m *Mutator) MutatePooledTransactionsRequest(request *eth.GetPooledTransact
 		}
 		*request = hashes
 	}
+}
+
+// // MutateSnapRoot 变异 snap 协议中的 Root 字段
+// func (m *Mutator) MutateSnapRoot(root *common.Hash, chain *eth.Chain) {
+// 	// 参数检查
+// 	if root == nil {
+// 		return
+// 	}
+
+// 	if chain != nil && chain.Len() > 0 {
+// 		// 增加安全检查
+// 		head := chain.Head()
+// 		if head == nil {
+// 			*root = m.MutateHash()
+// 			return
+// 		}
+
+// 		// 确保 blockNum 在有效范围内
+// 		maxBlock := int(chain.Len() - 1)
+// 		if maxBlock < 0 {
+// 			maxBlock = 0
+// 		}
+// 		blockNum := m.Rand(maxBlock)
+
+// 		// 获取状态根并验证
+// 		validRoot := chain.RootAt(blockNum)
+// 		if (validRoot != common.Hash{}) { // 确保不是空哈希
+// 			*root = validRoot
+// 			return
+// 		}
+// 	}
+
+// 	// 在以下情况使用随机哈希：
+// 	// 1. chain 为 nil
+// 	// 2. chain.Len() 为 0
+// 	// 3. 获取有效状态根失败
+// 	*root = m.MutateHash()
+// }
+
+// MutateSnapOriginAndLimit 变异 snap 协议中的 Origin 和 Limit 字段
+func (m *Mutator) MutateSnapOriginAndLimit(origin, limit *common.Hash) {
+	switch m.Rand(3) {
+	case 0: // 只变异 Origin
+		*origin = m.MutateHash()
+	case 1: // 只变异 Limit
+		*limit = m.MutateHash()
+	case 2: // 同时变异两者
+		*origin = m.MutateHash()
+		*limit = m.MutateHash()
+	}
+	// 确保 Origin <= Limit
+	if bytes.Compare(origin.Bytes(), limit.Bytes()) > 0 {
+		*origin, *limit = *limit, *origin
+	}
+}
+
+// MutateSnapBytes 变异 snap 协议中的 Bytes 字段
+func (m *Mutator) MutateSnapBytes(bytes *uint64) {
+	switch m.Rand(3) {
+	case 0: // 小值
+		*bytes = uint64(m.Rand(256) + 1)
+	case 1: // 中等值
+		*bytes = uint64(m.Rand(512) + 256)
+	case 2: // 较大值
+		*bytes = uint64(m.Rand(1024) + 512)
+	}
+}
+
+// MutateSnapAccounts 变异 snap 协议中的 Accounts 数组
+func (m *Mutator) MutateSnapAccounts() []common.Hash {
+	// 控制账户数量在合理范围内 (1-128)
+	accountCount := m.Rand(128) + 1
+	accounts := make([]common.Hash, accountCount)
+
+	for i := 0; i < accountCount; i++ {
+		accounts[i] = m.MutateHash()
+	}
+
+	return accounts
+}
+
+// MutateSnapRequestId 变异请求 ID
+func (m *Mutator) MutateSnapRequestId(id *uint64) {
+	*id = uint64(m.Rand(1000000))
+}
+
+// MutateSnapStorageRangeOriginAndLimit 变异 GetStorageRanges 中的 Origin 和 Limit 字段
+func (m *Mutator) MutateSnapStorageRangeOriginAndLimit(origin, limit *[]byte) {
+	switch m.Rand(3) {
+	case 0: // 只变异 Origin
+		*origin = common.Hex2Bytes(m.MutateHash().Hex()[2:]) // 去掉"0x"前缀
+	case 1: // 只变异 Limit
+		*limit = common.Hex2Bytes(m.MutateHash().Hex()[2:])
+	case 2: // 同时变异两者
+		*origin = common.Hex2Bytes(m.MutateHash().Hex()[2:])
+		*limit = common.Hex2Bytes(m.MutateHash().Hex()[2:])
+	}
+
+	// 确保 Origin <= Limit
+	if bytes.Compare(*origin, *limit) > 0 {
+		*origin, *limit = *limit, *origin
+	}
+}
+
+// MutateSnapHashes 变异哈希数组
+func (m *Mutator) MutateSnapHashes() []common.Hash {
+	// 控制哈希数量在合理范围内 (1-64)
+	hashCount := m.Rand(64) + 1
+	hashes := make([]common.Hash, hashCount)
+
+	for i := 0; i < hashCount; i++ {
+		hashes[i] = m.MutateHash()
+	}
+
+	return hashes
+}
+
+// MutateSnapTrieNodePaths 变异 TrieNodePathSet 数组
+func (m *Mutator) MutateSnapTrieNodePaths() []snap.TrieNodePathSet {
+	// 控制路径集合的数量在合理范围内 (1-32)
+	pathSetCount := m.Rand(32) + 1
+	paths := make([]snap.TrieNodePathSet, pathSetCount)
+
+	for i := 0; i < pathSetCount; i++ {
+		// 每个路径集合包含 1-4 个路径
+		pathCount := m.Rand(4) + 1
+		paths[i] = make([][]byte, pathCount)
+
+		for j := 0; j < pathCount; j++ {
+			// 每个路径的长度在 1-64 字节之间
+			pathLen := m.Rand(64) + 1
+			path := make([]byte, pathLen)
+			m.FillBytes(&path)
+			paths[i][j] = path
+		}
+	}
+
+	return paths
 }

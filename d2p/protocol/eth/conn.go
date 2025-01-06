@@ -172,6 +172,13 @@ func (s *Suite) SendMsg(proto Proto, code uint64, msg interface{}) error {
 	return nil
 }
 
+func (s *Suite) SnapRequest(code uint64, msg any) (any, error) {
+	if err := s.conn.Write(snapProto, code, msg); err != nil {
+		return nil, fmt.Errorf("could not write to connection: %v", err)
+	}
+	return s.conn.ReadSnap()
+}
+
 // peer performs both the protocol handshake and the status message
 // exchange with the node to peer with it.
 func (c *Conn) peer(chain *Chain, status *StatusPacket) error {
@@ -317,13 +324,6 @@ loop:
 		return fmt.Errorf("write to connection failed: %v", err)
 	}
 	return nil
-}
-
-func (c *Conn) snapRequest(code uint64, msg any) (any, error) {
-	if err := c.Write(snapProto, code, msg); err != nil {
-		return nil, fmt.Errorf("could not write to connection: %v", err)
-	}
-	return c.ReadSnap()
 }
 
 // ReadSnap reads a snap/1 response with the given id from the connection.
