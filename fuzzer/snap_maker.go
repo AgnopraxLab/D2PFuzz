@@ -40,9 +40,8 @@ import (
 )
 
 var (
-	snapoptions = []int{snap.GetAccountRangeMsg, snap.AccountRangeMsg, snap.GetStorageRangesMsg, snap.StorageRangesMsg,
-		snap.GetByteCodesMsg, snap.ByteCodesMsg, snap.GetTrieNodesMsg, snap.TrieNodesMsg}
-	snapstate = []int{snap.GetAccountRangeMsg, snap.AccountRangeMsg}
+	snapoptions = []int{snap.GetAccountRangeMsg, snap.GetStorageRangesMsg, snap.GetByteCodesMsg, snap.GetTrieNodesMsg}
+	snapstate   = []int{snap.GetAccountRangeMsg, snap.AccountRangeMsg}
 )
 
 type SnapMaker struct {

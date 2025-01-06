@@ -441,8 +441,8 @@ func ethFuzzer(engine int, target, chain string) error {
 				}
 				globalEthStats[seed.Name()].ExecuteCount = globalEthStats[seed.Name()].ExecuteCount + 1
 				for name, stats := range globalEthStats {
-					fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
-						name, stats.ExecuteCount, stats.CheckTrueFail, stats.CheckFalsePass, stats.CheckTruePass)
+					fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePassOK: %d, CheckFalsePassBad: %d, CheckTruePass: %d\n",
+						name, stats.ExecuteCount, stats.CheckTrueFail, stats.CheckFalsePassOK, stats.CheckFalsePassBad, stats.CheckTruePass)
 				}
 				itration = itration + 1
 			}

@@ -39,11 +39,8 @@ import (
 )
 
 var (
-	ethoptions = []int{eth.StatusMsg, eth.NewBlockHashesMsg, eth.TransactionsMsg, eth.GetBlockHeadersMsg,
-		eth.BlockHeadersMsg, eth.GetBlockBodiesMsg, eth.BlockBodiesMsg, eth.NewBlockMsg,
-		eth.NewPooledTransactionHashesMsg, eth.GetPooledTransactionsMsg, eth.PooledTransactionsMsg,
-		eth.GetReceiptsMsg, eth.ReceiptsMsg}
-	ethstate = []int{eth.StatusMsg, eth.GetReceiptsMsg}
+	ethoptions = []int{eth.StatusMsg, eth.GetBlockHeadersMsg, eth.GetBlockBodiesMsg, eth.GetReceiptsMsg}
+	ethstate   = []int{eth.StatusMsg, eth.GetReceiptsMsg}
 )
 
 type EthMaker struct {
@@ -139,8 +136,8 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
-	//mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
-	//currentSeed := seed
+	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
+	currentSeed := seed
 
 	// Only three 'get' message types need special connection handling
 	if seed.Kind() == eth.GetBlockHeadersMsg ||
@@ -156,8 +153,8 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 		//for i := 0; i < 1; i++ {
 		wg.Add(1)
 
-		//mutateSeed := cloneAndMutateEthPacket(mutator, currentSeed, m.SuiteList[0].Chain())
-		mutateSeed := seed
+		mutateSeed := cloneAndMutateEthPacket(mutator, currentSeed, m.SuiteList[0].Chain())
+		// mutateSeed := seed
 		go func(iteration int, currentReq eth.Packet, packetStats *UDPPacketStats) {
 			defer wg.Done()
 
@@ -217,7 +214,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 			}
 
 		}(i, mutateSeed, stats)
-		//currentSeed = mutateSeed
+		currentSeed = mutateSeed
 		time.Sleep(PacketSleepTime)
 	}
 
