@@ -758,7 +758,7 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 			return fmt.Errorf("failed to read connection: %w", err)
 		}
 		switch msg := msg.(type) {
-		case *eth.TransactionsPacket:
+		case *TransactionsPacket:
 			for _, tx := range *msg {
 				got[tx.Hash()] = true
 			}
@@ -766,6 +766,15 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 			for _, hash := range msg.Hashes {
 				got[hash] = true
 			}
+		case *GetBlockHeadersPacket:
+			headers, err := s.chain.GetHeaders(msg)
+			if err != nil {
+				return fmt.Errorf("invalid GetBlockHeaders request: %v", err)
+			}
+			recvConn.Write(ethProto, BlockHeadersMsg, &BlockHeadersPacket{
+				RequestId:           msg.RequestId,
+				BlockHeadersRequest: headers,
+			})
 		default:
 			return fmt.Errorf("unexpected eth wire msg: %s", pretty.Sdump(msg))
 		}

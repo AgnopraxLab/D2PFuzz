@@ -1120,3 +1120,463 @@ func (m *Mutator) MutateSnapTrieNodePaths() []snap.TrieNodePathSet {
 
 	return paths
 }
+
+// MutateBlockHashElement 变异区块哈希公告中的随机元素
+func (m *Mutator) MutateBlockHashElement(packet *eth.NewBlockHashesPacket) {
+	if len(*packet) > 0 {
+		idx := m.Rand(len(*packet))
+		if m.Bool() {
+			// 变异哈希
+			(*packet)[idx].Hash = m.MutateHash()
+		} else {
+			// 变异区块号
+			(*packet)[idx].Number = uint64(m.Rand(1000000))
+		}
+	}
+}
+
+// AddBlockHashElement 添加新的区块哈希公告元素
+func (m *Mutator) AddBlockHashElement(packet *eth.NewBlockHashesPacket) {
+	*packet = append(*packet, struct {
+		Hash   common.Hash
+		Number uint64
+	}{
+		Hash:   m.MutateHash(),
+		Number: uint64(m.Rand(1000000)),
+	})
+}
+
+// RemoveBlockHashElement 删除随机的区块哈希公告元素
+func (m *Mutator) RemoveBlockHashElement(packet *eth.NewBlockHashesPacket) {
+	if len(*packet) > 1 {
+		idx := m.Rand(len(*packet))
+		*packet = append((*packet)[:idx], (*packet)[idx+1:]...)
+	}
+}
+
+// MutateBlockHeader 变异区块头
+func (m *Mutator) MutateBlockHeader(header *types.Header) {
+	if m.Bool() {
+		header.ParentHash = m.MutateHash()
+	}
+	if m.Bool() {
+		header.UncleHash = m.MutateHash()
+	}
+	if m.Bool() {
+		header.Coinbase = m.MutateAddress()
+	}
+	if m.Bool() {
+		header.Root = m.MutateHash()
+	}
+	if m.Bool() {
+		header.TxHash = m.MutateHash()
+	}
+	if m.Bool() {
+		header.ReceiptHash = m.MutateHash()
+	}
+	if m.Bool() {
+		header.Number = new(big.Int).SetUint64(uint64(m.Rand(1000000)))
+	}
+	if m.Bool() {
+		header.GasLimit = uint64(m.Rand(1000000))
+	}
+	if m.Bool() {
+		header.GasUsed = uint64(m.Rand(int(header.GasLimit)))
+	}
+	if m.Bool() {
+		header.Time = uint64(m.Rand(1000000))
+	}
+}
+
+// AddBlockHeader 添加新的区块头
+func (m *Mutator) AddBlockHeader(headers *eth.BlockHeadersRequest, chain *eth.Chain) {
+	newHeader := &types.Header{
+		ParentHash:  m.MutateHash(),
+		UncleHash:   m.MutateHash(),
+		Coinbase:    m.MutateAddress(),
+		Root:        m.MutateHash(),
+		TxHash:      m.MutateHash(),
+		ReceiptHash: m.MutateHash(),
+		Number:      new(big.Int).SetUint64(uint64(m.Rand(1000000))),
+		GasLimit:    uint64(m.Rand(1000000)),
+		Time:        uint64(m.Rand(1000000)),
+	}
+	newHeader.GasUsed = uint64(m.Rand(int(newHeader.GasLimit)))
+	*headers = append(*headers, newHeader)
+}
+
+// RemoveBlockHeader 删除随机的区块头
+func (m *Mutator) RemoveBlockHeader(headers *eth.BlockHeadersRequest) {
+	if len(*headers) > 1 {
+		idx := m.Rand(len(*headers))
+		*headers = append((*headers)[:idx], (*headers)[idx+1:]...)
+	}
+}
+
+// MutateAddress 生成随机的以太坊地址
+func (m *Mutator) MutateAddress() common.Address {
+	var addr common.Address
+	// 以太坊地址是20字节
+	addrBytes := make([]byte, common.AddressLength)
+	m.MutateBytes(&addrBytes)
+	copy(addr[:], addrBytes)
+	return addr
+}
+
+// MutateBlockBody 变异区块体
+func (m *Mutator) MutateBlockBody(body *eth.BlockBody) {
+	// 变异交易列表
+	if m.Bool() && len(body.Transactions) > 0 {
+		// 变异随机交易
+		idx := m.Rand(len(body.Transactions))
+		body.Transactions[idx] = m.MutateTransaction(body.Transactions[idx])
+	}
+
+	// 变异叔块列表
+	if m.Bool() && len(body.Uncles) > 0 {
+		// 变异随机叔块头
+		idx := m.Rand(len(body.Uncles))
+		m.MutateBlockHeader(body.Uncles[idx])
+	}
+
+	// 变异提款列表（如果存在）
+	if m.Bool() && len(body.Withdrawals) > 0 {
+		// 变异随机提款
+		idx := m.Rand(len(body.Withdrawals))
+		m.MutateWithdrawal(body.Withdrawals[idx])
+	}
+}
+
+// AddBlockBody 添加新的区块体
+func (m *Mutator) AddBlockBody(bodies *eth.BlockBodiesResponse) {
+	// 创建新的区块体
+	newBody := &eth.BlockBody{
+		Transactions: make([]*types.Transaction, m.Rand(5)+1), // 1-5个交易
+		Uncles:       make([]*types.Header, m.Rand(2)),        // 0-1个叔块
+		Withdrawals:  make([]*types.Withdrawal, m.Rand(3)),    // 0-2个提款
+	}
+
+	// 填充交易
+	for i := range newBody.Transactions {
+		newBody.Transactions[i] = m.MutateTransaction(nil)
+	}
+
+	// 填充叔块
+	for i := range newBody.Uncles {
+		uncle := &types.Header{}
+		m.MutateBlockHeader(uncle)
+		newBody.Uncles[i] = uncle
+	}
+
+	// 填充提款
+	for i := range newBody.Withdrawals {
+		withdrawal := &types.Withdrawal{}
+		m.MutateWithdrawal(withdrawal)
+		newBody.Withdrawals[i] = withdrawal
+	}
+
+	*bodies = append(*bodies, newBody)
+}
+
+// RemoveBlockBody 删除随机的区块体
+func (m *Mutator) RemoveBlockBody(bodies *eth.BlockBodiesResponse) {
+	if len(*bodies) > 1 {
+		idx := m.Rand(len(*bodies))
+		*bodies = append((*bodies)[:idx], (*bodies)[idx+1:]...)
+	}
+}
+
+// MutateWithdrawal 变异提款数据
+func (m *Mutator) MutateWithdrawal(withdrawal *types.Withdrawal) {
+	if m.Bool() {
+		withdrawal.Index = uint64(m.Rand(1000000))
+	}
+	if m.Bool() {
+		withdrawal.Validator = uint64(m.Rand(1000000))
+	}
+	if m.Bool() {
+		withdrawal.Address = m.MutateAddress()
+	}
+	if m.Bool() {
+		withdrawal.Amount = uint64(m.Rand(1000000))
+	}
+}
+
+// MutateNewBlock 变异 NewBlockPacket 中的字段
+func (m *Mutator) MutateNewBlock(block *types.Block) {
+	if m.Bool() {
+		// 变异区块头
+		m.MutateBlockHeader(block.Header())
+	}
+	if m.Bool() {
+		// 变异交易列表
+		for i := range block.Transactions() {
+			block.Transactions()[i] = m.MutateTransaction(block.Transactions()[i])
+		}
+	}
+	if m.Bool() {
+		// 变异叔块列表
+		for i := range block.Uncles() {
+			m.MutateBlockHeader(block.Uncles()[i])
+		}
+	}
+	if m.Bool() {
+		// 变异提款列表
+		for i := range block.Withdrawals() {
+			m.MutateWithdrawal(block.Withdrawals()[i])
+		}
+	}
+}
+
+// MutatePooledTransactionHash 变异交易哈希
+func (m *Mutator) MutatePooledTransactionHash(hashes *eth.NewPooledTransactionHashesPacket) {
+	if len(hashes.Hashes) > 0 {
+		idx := m.Rand(len(hashes.Hashes))
+		hashes.Hashes[idx] = m.MutateHash()
+	}
+}
+
+// AddPooledTransactionHash 添加新的交易哈希
+func (m *Mutator) AddPooledTransactionHash(hashes *eth.NewPooledTransactionHashesPacket) {
+	hashes.Hashes = append(hashes.Hashes, m.MutateHash())
+}
+
+// RemovePooledTransactionHash 删除随机的交易哈希
+func (m *Mutator) RemovePooledTransactionHash(hashes *eth.NewPooledTransactionHashesPacket) {
+	if len(hashes.Hashes) > 1 {
+		idx := m.Rand(len(hashes.Hashes))
+		hashes.Hashes = append(hashes.Hashes[:idx], hashes.Hashes[idx+1:]...)
+	}
+}
+
+// MutatePooledTransaction 变异交易池中的随机交易
+func (m *Mutator) MutatePooledTransaction(txs *eth.PooledTransactionsResponse) {
+	if len(*txs) > 0 {
+		idx := m.Rand(len(*txs))
+		(*txs)[idx] = m.MutateTransaction((*txs)[idx])
+	}
+}
+
+// AddPooledTransaction 添加新的交易到交易池
+func (m *Mutator) AddPooledTransaction(txs *eth.PooledTransactionsResponse) {
+	newTx := m.MutateTransaction(nil)
+	*txs = append(*txs, newTx)
+}
+
+// RemovePooledTransaction 从交易池中删除随机交易
+func (m *Mutator) RemovePooledTransaction(txs *eth.PooledTransactionsResponse) {
+	if len(*txs) > 1 {
+		idx := m.Rand(len(*txs))
+		*txs = append((*txs)[:idx], (*txs)[idx+1:]...)
+	}
+}
+
+// MutateReceipt 变异收据中的随机字段
+func (m *Mutator) MutateReceipt(receipt *types.Receipt) {
+	if m.Bool() {
+		receipt.Status = uint64(m.Rand(2)) // 0 或 1
+	}
+	if m.Bool() {
+		receipt.CumulativeGasUsed = uint64(m.Rand(1000000))
+	}
+	if m.Bool() {
+		receipt.Bloom = types.BytesToBloom(m.MutateHash().Bytes())
+	}
+	if m.Bool() {
+		receipt.TxHash = m.MutateHash()
+	}
+	if m.Bool() {
+		receipt.ContractAddress = m.MutateAddress()
+	}
+	if m.Bool() {
+		receipt.GasUsed = uint64(m.Rand(int(receipt.CumulativeGasUsed + 1)))
+	}
+}
+
+// MutateReceiptResponse 变异收据响应中的随机收据
+func (m *Mutator) MutateReceiptResponse(receipts *eth.ReceiptsResponse) {
+	if len(*receipts) > 0 {
+		idx := m.Rand(len(*receipts))
+		m.MutateReceipt((*receipts)[idx][0])
+	}
+}
+
+// AddReceipt 添加新的收据
+func (m *Mutator) AddReceipt(receipts *eth.ReceiptsResponse) {
+	newReceipt := &types.Receipt{
+		Status:            uint64(m.Rand(2)),
+		CumulativeGasUsed: uint64(m.Rand(1000000)),
+		Bloom:             types.BytesToBloom(m.MutateHash().Bytes()),
+		TxHash:            m.MutateHash(),
+		ContractAddress:   m.MutateAddress(),
+	}
+	newReceipt.GasUsed = uint64(m.Rand(int(newReceipt.CumulativeGasUsed + 1)))
+	*receipts = append(*receipts, []*types.Receipt{newReceipt})
+}
+
+// RemoveReceipt 删除随机收据
+func (m *Mutator) RemoveReceipt(receipts *eth.ReceiptsResponse) {
+	if len(*receipts) > 1 {
+		idx := m.Rand(len(*receipts))
+		*receipts = append((*receipts)[:idx], (*receipts)[idx+1:]...)
+	}
+}
+
+// MutateAccountData 变异单个账户数据
+func (m *Mutator) MutateAccountData(account *snap.AccountData) {
+	if m.Bool() {
+		account.Hash = m.MutateHash()
+	}
+	if m.Bool() {
+		account.Body = m.MutateRawValue()
+	}
+}
+
+// MutateAccountProof 变异账户证明
+func (m *Mutator) MutateAccountProof(proof *[][]byte) {
+	if len(*proof) > 0 {
+		// 变异随机证明节点
+		idx := m.Rand(len(*proof))
+		m.MutateBytes(&(*proof)[idx])
+	}
+}
+
+// AddAccountData 添加新的账户数据
+func (m *Mutator) AddAccountData(accounts *[]*snap.AccountData) {
+	newAccount := &snap.AccountData{
+		Hash: m.MutateHash(),
+		Body: m.MutateRawValue(),
+	}
+	*accounts = append(*accounts, newAccount)
+}
+
+// RemoveAccountData 删除随机账户数据
+func (m *Mutator) RemoveAccountData(accounts *[]*snap.AccountData) {
+	if len(*accounts) > 1 {
+		idx := m.Rand(len(*accounts))
+		*accounts = append((*accounts)[:idx], (*accounts)[idx+1:]...)
+	}
+}
+
+// MutateRawValue 生成随机的 RLP 编码值
+func (m *Mutator) MutateRawValue() rlp.RawValue {
+	// 生成随机长度的字节数组 (4-128字节)
+	length := m.Rand(124) + 4
+	value := make([]byte, length)
+
+	// 填充随机字节
+	m.FillBytes(&value)
+
+	// 转换为 RLP 编码值
+	return rlp.RawValue(value)
+}
+
+// MutateStorageData 变异单个存储数据
+func (m *Mutator) MutateStorageData(storage *snap.StorageData) {
+	if m.Bool() {
+		storage.Hash = m.MutateHash()
+	}
+	if m.Bool() {
+		m.MutateBytes(&storage.Body)
+	}
+}
+
+// MutateStorageSlots 变异存储槽列表中的随机存储槽
+func (m *Mutator) MutateStorageSlots(slots *[][]*snap.StorageData) {
+	if len(*slots) > 0 {
+		accountIdx := m.Rand(len(*slots))
+		if len((*slots)[accountIdx]) > 0 {
+			slotIdx := m.Rand(len((*slots)[accountIdx]))
+			m.MutateStorageData((*slots)[accountIdx][slotIdx])
+		}
+	}
+}
+
+// AddStorageSlot 添加新的存储槽
+func (m *Mutator) AddStorageSlot(slots *[][]*snap.StorageData) {
+	if len(*slots) > 0 {
+		accountIdx := m.Rand(len(*slots))
+		newSlot := &snap.StorageData{
+			Hash: m.MutateHash(),
+			Body: m.MutateRawValue(),
+		}
+		(*slots)[accountIdx] = append((*slots)[accountIdx], newSlot)
+	}
+}
+
+// RemoveStorageSlot 删除随机存储槽
+func (m *Mutator) RemoveStorageSlot(slots *[][]*snap.StorageData) {
+	if len(*slots) > 0 {
+		accountIdx := m.Rand(len(*slots))
+		if len((*slots)[accountIdx]) > 1 {
+			slotIdx := m.Rand(len((*slots)[accountIdx]))
+			(*slots)[accountIdx] = append((*slots)[accountIdx][:slotIdx],
+				(*slots)[accountIdx][slotIdx+1:]...)
+		}
+	}
+}
+
+// MutateByteCode 变异单个字节码
+func (m *Mutator) MutateByteCode(code *[]byte) {
+	if len(*code) > 0 {
+		// 变异随机字节
+		m.MutateBytes(code)
+	}
+}
+
+// MutateByteCodesResponse 变异字节码响应中的随机字节码
+func (m *Mutator) MutateByteCodesResponse(codes *[][]byte) {
+	if len(*codes) > 0 {
+		idx := m.Rand(len(*codes))
+		m.MutateByteCode(&(*codes)[idx])
+	}
+}
+
+// AddByteCode 添加新的字节码
+func (m *Mutator) AddByteCode(codes *[][]byte) {
+	// 生成随机长度的新字节码 (32-1024字节)
+	length := m.Rand(992) + 32
+	newCode := make([]byte, length)
+	m.FillBytes(&newCode)
+	*codes = append(*codes, newCode)
+}
+
+// RemoveByteCode 删除随机字节码
+func (m *Mutator) RemoveByteCode(codes *[][]byte) {
+	if len(*codes) > 1 {
+		idx := m.Rand(len(*codes))
+		*codes = append((*codes)[:idx], (*codes)[idx+1:]...)
+	}
+}
+
+// MutateTrieNode 变异单个Trie节点
+func (m *Mutator) MutateTrieNode(node *[]byte) {
+	if len(*node) > 0 {
+		m.MutateBytes(node)
+	}
+}
+
+// MutateTrieNodesResponse 变异Trie节点响应中的随机节点
+func (m *Mutator) MutateTrieNodesResponse(nodes *[][]byte) {
+	if len(*nodes) > 0 {
+		idx := m.Rand(len(*nodes))
+		m.MutateTrieNode(&(*nodes)[idx])
+	}
+}
+
+// AddTrieNode 添加新的Trie节点
+func (m *Mutator) AddTrieNode(nodes *[][]byte) {
+	// 生成随机长度的新节点 (32-532字节)
+	length := m.Rand(500) + 32
+	newNode := make([]byte, length)
+	m.FillBytes(&newNode)
+	*nodes = append(*nodes, newNode)
+}
+
+// RemoveTrieNode 删除随机Trie节点
+func (m *Mutator) RemoveTrieNode(nodes *[][]byte) {
+	if len(*nodes) > 1 {
+		idx := m.Rand(len(*nodes))
+		*nodes = append((*nodes)[:idx], (*nodes)[idx+1:]...)
+	}
+}

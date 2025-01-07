@@ -159,7 +159,7 @@ func (m *SnapMaker) PacketStart(traceOutput io.Writer, seed snap.Packet, stats *
 			result.Check = allTrue(result.CheckResults)
 
 			// 发送并等待响应
-			resp, err, success, valid := m.handlePacketWithResponse(currentReq, m.SuiteList[0], logger)
+			resp, err, success, valid := m.handlePacketWithResponse(currentReq, m.SuiteList[0])
 			if err != "" {
 				result.Error = err
 				result.Success = false
@@ -285,7 +285,11 @@ func (m *SnapMaker) handlePacket(req snap.Packet, suite *eth.Suite, logger *log.
 		if err := suite.SnapInitializeAndConnect(); err != nil {
 			return fmt.Errorf("initialization and connection failed: %v", err)
 		}
-		return m.handleAccountRangePacket(p, suite, logger)
+		result := m.handleAccountRangePacket(p, suite)
+		if result.Error != "" {
+			return fmt.Errorf("failed to handle account range packet: %v", result.Error)
+		}
+		return nil
 
 	case *snap.GetStorageRangesPacket:
 		if err := suite.SnapInitializeAndConnect(); err != nil {
@@ -301,7 +305,11 @@ func (m *SnapMaker) handlePacket(req snap.Packet, suite *eth.Suite, logger *log.
 		if err := suite.SnapInitializeAndConnect(); err != nil {
 			return fmt.Errorf("initialization and connection failed: %v", err)
 		}
-		return m.handleStorageRangesPacket(p, suite, logger)
+		result := m.handleStorageRangesPacket(p, suite)
+		if result.Error != "" {
+			return fmt.Errorf("failed to handle storage ranges packet: %v", result.Error)
+		}
+		return nil
 
 	case *snap.GetByteCodesPacket:
 		if err := suite.SnapInitializeAndConnect(); err != nil {
@@ -317,7 +325,11 @@ func (m *SnapMaker) handlePacket(req snap.Packet, suite *eth.Suite, logger *log.
 		if err := suite.SnapInitializeAndConnect(); err != nil {
 			return fmt.Errorf("initialization and connection failed: %v", err)
 		}
-		return m.handleByteCodesPacket(p, suite, logger)
+		result := m.handleByteCodesPacket(p, suite)
+		if result.Error != "" {
+			return fmt.Errorf("failed to handle bytecodes packet: %v", result.Error)
+		}
+		return nil
 
 	case *snap.GetTrieNodesPacket:
 		if err := suite.SnapInitializeAndConnect(); err != nil {
@@ -333,7 +345,11 @@ func (m *SnapMaker) handlePacket(req snap.Packet, suite *eth.Suite, logger *log.
 		if err := suite.SnapInitializeAndConnect(); err != nil {
 			return fmt.Errorf("initialization and connection failed: %v", err)
 		}
-		return m.handleTrieNodesPacket(p, suite, logger)
+		result := m.handleTrieNodesPacket(p, suite)
+		if result.Error != "" {
+			return fmt.Errorf("failed to handle trie nodes packet: %v", result.Error)
+		}
+		return nil
 
 	default:
 		if logger != nil {
@@ -425,12 +441,20 @@ func (m *SnapMaker) handleGetAccountRangePacket(p *snap.GetAccountRangePacket, s
 }
 
 // 处理 AccountRange 响应
-func (m *SnapMaker) handleAccountRangePacket(p *snap.AccountRangePacket, suite *eth.Suite, logger *log.Logger) error {
+func (m *SnapMaker) handleAccountRangePacket(p *snap.AccountRangePacket, suite *eth.Suite) *snapPacketTestResult {
 	_, err := suite.SnapRequest(snap.AccountRangeMsg, p)
 	if err != nil {
-		return fmt.Errorf("failed to handle account range packet: %v", err)
+		return &snapPacketTestResult{
+			Error:   fmt.Sprintf("account range request failed: %v", err),
+			Success: false,
+			Valid:   false,
+		}
 	}
-	return nil
+	return &snapPacketTestResult{
+		Response: nil,
+		Success:  true,
+		Valid:    true,
+	}
 }
 
 // 处理 GetStorageRanges 请求
@@ -472,12 +496,20 @@ func (m *SnapMaker) handleGetStorageRangesPacket(p *snap.GetStorageRangesPacket,
 }
 
 // 处理 StorageRanges 响应
-func (m *SnapMaker) handleStorageRangesPacket(p *snap.StorageRangesPacket, suite *eth.Suite, logger *log.Logger) error {
+func (m *SnapMaker) handleStorageRangesPacket(p *snap.StorageRangesPacket, suite *eth.Suite) *snapPacketTestResult {
 	_, err := suite.SnapRequest(snap.StorageRangesMsg, p)
 	if err != nil {
-		return fmt.Errorf("failed to handle account range packet: %v", err)
+		return &snapPacketTestResult{
+			Error:   fmt.Sprintf("failed to handle account range packet: %v", err),
+			Success: false,
+			Valid:   false,
+		}
 	}
-	return nil
+	return &snapPacketTestResult{
+		Response: nil,
+		Success:  true,
+		Valid:    true,
+	}
 }
 
 // 处理 GetByteCodes 请求
@@ -547,12 +579,20 @@ func (m *SnapMaker) handleGetByteCodesPacket(p *snap.GetByteCodesPacket, suite *
 }
 
 // 处理 ByteCodes 响应
-func (m *SnapMaker) handleByteCodesPacket(p *snap.ByteCodesPacket, suite *eth.Suite, logger *log.Logger) error {
+func (m *SnapMaker) handleByteCodesPacket(p *snap.ByteCodesPacket, suite *eth.Suite) *snapPacketTestResult {
 	_, err := suite.SnapRequest(snap.ByteCodesMsg, p)
 	if err != nil {
-		return fmt.Errorf("failed to handle bytecodes packet: %v", err)
+		return &snapPacketTestResult{
+			Error:   fmt.Sprintf("failed to handle bytecodes packet: %v", err),
+			Success: false,
+			Valid:   false,
+		}
 	}
-	return nil
+	return &snapPacketTestResult{
+		Response: nil,
+		Success:  true,
+		Valid:    true,
+	}
 }
 
 // 处理 GetTrieNodes 请求
@@ -610,12 +650,20 @@ func (m *SnapMaker) handleGetTrieNodesPacket(p *snap.GetTrieNodesPacket, suite *
 }
 
 // 处理 TrieNodes 响应
-func (m *SnapMaker) handleTrieNodesPacket(p *snap.TrieNodesPacket, suite *eth.Suite, logger *log.Logger) error {
+func (m *SnapMaker) handleTrieNodesPacket(p *snap.TrieNodesPacket, suite *eth.Suite) *snapPacketTestResult {
 	_, err := suite.SnapRequest(snap.TrieNodesMsg, p)
 	if err != nil {
-		return fmt.Errorf("failed to handle trie nodes packet: %v", err)
+		return &snapPacketTestResult{
+			Error:   fmt.Sprintf("failed to handle trie nodes packet: %v", err),
+			Success: false,
+			Valid:   false,
+		}
 	}
-	return nil
+	return &snapPacketTestResult{
+		Response: nil,
+		Success:  true,
+		Valid:    true,
+	}
 }
 
 func generateSnapTestSeq() []int {
@@ -634,20 +682,32 @@ func generateSnapTestSeq() []int {
 }
 
 // packet test deal data
-func (m *SnapMaker) handlePacketWithResponse(req snap.Packet, suite *eth.Suite, logger *log.Logger) (snap.Packet, string, bool, bool) {
+func (m *SnapMaker) handlePacketWithResponse(req snap.Packet, suite *eth.Suite) (snap.Packet, string, bool, bool) {
 
 	switch p := req.(type) {
 	case *snap.GetAccountRangePacket:
 		result := m.handleGetAccountRangePacket(p, suite)
 		return result.Response, result.Error, result.Success, result.Valid
+	case *snap.AccountRangePacket:
+		result := m.handleAccountRangePacket(p, suite)
+		return result.Response, result.Error, result.Success, result.Valid
 	case *snap.GetStorageRangesPacket:
 		result := m.handleGetStorageRangesPacket(p, suite)
+		return result.Response, result.Error, result.Success, result.Valid
+	case *snap.StorageRangesPacket:
+		result := m.handleStorageRangesPacket(p, suite)
 		return result.Response, result.Error, result.Success, result.Valid
 	case *snap.GetByteCodesPacket:
 		result := m.handleGetByteCodesPacket(p, suite)
 		return result.Response, result.Error, result.Success, result.Valid
+	case *snap.ByteCodesPacket:
+		result := m.handleByteCodesPacket(p, suite)
+		return result.Response, result.Error, result.Success, result.Valid
 	case *snap.GetTrieNodesPacket:
 		result := m.handleGetTrieNodesPacket(p, suite)
+		return result.Response, result.Error, result.Success, result.Valid
+	case *snap.TrieNodesPacket:
+		result := m.handleTrieNodesPacket(p, suite)
 		return result.Response, result.Error, result.Success, result.Valid
 	default:
 		return nil, "", false, false
@@ -661,12 +721,20 @@ func (m *SnapMaker) checkRequestSemantics(req snap.Packet, chain *eth.Chain) []b
 	switch p := req.(type) {
 	case *snap.GetAccountRangePacket:
 		results = checkGetAccountRangeSemantics(p, chain)
+	case *snap.AccountRangePacket:
+		results = checkAccountRangeSemantics(p)
 	case *snap.GetStorageRangesPacket:
 		results = checkGetStorageRangesSemantics(p, chain)
+	case *snap.StorageRangesPacket:
+		results = checkStorageRangesSemantics(p)
 	case *snap.GetByteCodesPacket:
-		results = checkGetByteCodesSemantics(p, chain)
+		results = checkGetByteCodesSemantics(p)
+	case *snap.ByteCodesPacket:
+		results = checkByteCodesSemantics(p)
 	case *snap.GetTrieNodesPacket:
 		results = checkGetTrieNodesSemantics(p, chain)
+	case *snap.TrieNodesPacket:
+		results = checkTrieNodesSemantics(p)
 	default:
 		// 对于响应类型的包，返回true
 		results = []bool{true}
@@ -697,6 +765,60 @@ func checkGetAccountRangeSemantics(p *snap.GetAccountRangePacket, chain *eth.Cha
 	return results
 }
 
+func checkAccountRangeSemantics(p *snap.AccountRangePacket) []bool {
+	results := make([]bool, 4) // 4个检查项
+
+	// 检查1: 请求不能为空
+	if p == nil || len(p.Accounts) == 0 {
+		results[0] = false
+		return results
+	}
+	results[0] = true
+
+	// 检查2: 账户数量不能超过限制
+	const MAX_ACCOUNTS = 256 // 最大账户数量限制
+	results[1] = len(p.Accounts) <= MAX_ACCOUNTS
+
+	// 检查3: 账户数据的有效性
+	results[2] = true
+	for i := 0; i < len(p.Accounts); i++ {
+		// 检查账户数据不为空
+		if p.Accounts[i] == nil {
+			results[2] = false
+			break
+		}
+		// 检查账户哈希不为空
+		if p.Accounts[i].Hash == (common.Hash{}) {
+			results[2] = false
+			break
+		}
+		// 检查账户体不为空
+		if len(p.Accounts[i].Body) == 0 {
+			results[2] = false
+			break
+		}
+		// 如果不是最后一个账户，检查哈希是否按升序排列
+		if i > 0 && bytes.Compare(p.Accounts[i-1].Hash[:], p.Accounts[i].Hash[:]) >= 0 {
+			results[2] = false
+			break
+		}
+	}
+
+	// 检查4: 证明数据的有效性
+	results[3] = true
+	if len(p.Proof) > 0 {
+		for _, proof := range p.Proof {
+			// 检查每个证明节点不为空且大小合理
+			if len(proof) == 0 || len(proof) > 532 { // MPT节点的最大大小
+				results[3] = false
+				break
+			}
+		}
+	}
+
+	return results
+}
+
 // 检查 GetStorageRanges 请求的语义
 func checkGetStorageRangesSemantics(p *snap.GetStorageRangesPacket, chain *eth.Chain) []bool {
 	results := make([]bool, 4)
@@ -722,8 +844,73 @@ func checkGetStorageRangesSemantics(p *snap.GetStorageRangesPacket, chain *eth.C
 	return results
 }
 
+func checkStorageRangesSemantics(p *snap.StorageRangesPacket) []bool {
+	results := make([]bool, 4) // 4个检查项
+
+	// 检查1: 请求不能为空
+	if p == nil || len(p.Slots) == 0 {
+		results[0] = false
+		return results
+	}
+	results[0] = true
+
+	// 检查2: 存储槽数量限制
+	const (
+		MAX_ACCOUNTS = 128  // 每个响应最多包含的账户数
+		MAX_SLOTS    = 1024 // 每个账户最多包含的存储槽数
+	)
+	results[1] = len(p.Slots) <= MAX_ACCOUNTS
+	for _, slots := range p.Slots {
+		if len(slots) > MAX_SLOTS {
+			results[1] = false
+			break
+		}
+	}
+
+	// 检查3: 存储槽数据的有效性
+	results[2] = true
+	for _, slots := range p.Slots {
+		for j, slot := range slots {
+			// 检查存储槽不为空
+			if slot == nil {
+				results[2] = false
+				break
+			}
+			// 检查哈希不为空
+			if slot.Hash == (common.Hash{}) {
+				results[2] = false
+				break
+			}
+			// 检查存储数据不为空
+			if len(slot.Body) == 0 {
+				results[2] = false
+				break
+			}
+			// 如果不是最后一个槽，检查哈希是否按升序排列
+			if j > 0 && bytes.Compare(slots[j-1].Hash[:], slot.Hash[:]) >= 0 {
+				results[2] = false
+				break
+			}
+		}
+	}
+
+	// 检查4: 证明数据的有效性
+	results[3] = true
+	if len(p.Proof) > 0 {
+		for _, proof := range p.Proof {
+			// 检查每个证明节点不为空且大小合理
+			if len(proof) == 0 || len(proof) > 532 { // MPT节点的最大大小
+				results[3] = false
+				break
+			}
+		}
+	}
+
+	return results
+}
+
 // 检查 GetByteCodes 请求的语义
-func checkGetByteCodesSemantics(p *snap.GetByteCodesPacket, chain *eth.Chain) []bool {
+func checkGetByteCodesSemantics(p *snap.GetByteCodesPacket) []bool {
 	results := make([]bool, 3)
 
 	// 1. 检查 Hashes 数组是否非空且长度合理
@@ -742,6 +929,63 @@ func checkGetByteCodesSemantics(p *snap.GetByteCodesPacket, chain *eth.Chain) []
 
 	// 3. 检查 Bytes 是否在合理范围内
 	results[2] = p.Bytes > 0 && p.Bytes <= 1024*1024 // 最大 1MB
+
+	return results
+}
+
+func checkByteCodesSemantics(p *snap.ByteCodesPacket) []bool {
+	results := make([]bool, 3) // 3个检查项
+
+	// 检查1: 请求不能为空
+	if p == nil || len(p.Codes) == 0 {
+		results[0] = false
+		return results
+	}
+	results[0] = true
+
+	// 检查2: 字节码数量和大小限制
+	const (
+		MAX_BYTECODES     = 1024             // 最大字节码数量
+		MAX_BYTECODE_SIZE = 24 * 1024        // 单个字节码最大大小 (24KB)
+		MAX_TOTAL_SIZE    = 10 * 1024 * 1024 // 总大小限制 (10MB)
+	)
+
+	results[1] = len(p.Codes) <= MAX_BYTECODES
+	var totalSize uint64
+	for _, code := range p.Codes {
+		totalSize += uint64(len(code))
+		if len(code) > MAX_BYTECODE_SIZE {
+			results[1] = false
+			break
+		}
+	}
+	if totalSize > MAX_TOTAL_SIZE {
+		results[1] = false
+	}
+
+	// 检查3: 字节码有效性
+	results[2] = true
+	for _, code := range p.Codes {
+		// 检查字节码不为空
+		if len(code) == 0 {
+			results[2] = false
+			break
+		}
+
+		// 检查字节码是否为有效的EVM字节码
+		// 简单检查：至少包含一个有效操作码
+		hasValidOpcode := false
+		for _, b := range code {
+			if b <= 0xfe { // 有效的EVM操作码范围
+				hasValidOpcode = true
+				break
+			}
+		}
+		if !hasValidOpcode {
+			results[2] = false
+			break
+		}
+	}
 
 	return results
 }
@@ -785,6 +1029,63 @@ func checkGetTrieNodesSemantics(p *snap.GetTrieNodesPacket, chain *eth.Chain) []
 	return results
 }
 
+func checkTrieNodesSemantics(p *snap.TrieNodesPacket) []bool {
+	results := make([]bool, 3) // 3个检查项
+
+	// 检查1: 请求不能为空
+	if p == nil || len(p.Nodes) == 0 {
+		results[0] = false
+		return results
+	}
+	results[0] = true
+
+	// 检查2: 节点数量和大小限制
+	const (
+		MAX_NODES      = 1024            // 最大节点数量
+		MAX_NODE_SIZE  = 532             // 单个节点最大大小 (MPT节点的最大大小)
+		MAX_TOTAL_SIZE = 4 * 1024 * 1024 // 总大小限制 (4MB)
+	)
+
+	results[1] = len(p.Nodes) <= MAX_NODES
+	var totalSize uint64
+	for _, node := range p.Nodes {
+		totalSize += uint64(len(node))
+		if len(node) > MAX_NODE_SIZE {
+			results[1] = false
+			break
+		}
+	}
+	if totalSize > MAX_TOTAL_SIZE {
+		results[1] = false
+	}
+
+	// 检查3: 节点有效性
+	results[2] = true
+	for _, node := range p.Nodes {
+		// 检查节点不为空且大小合理
+		if len(node) == 0 {
+			results[2] = false
+			break
+		}
+
+		// 检查节点是否为有效的MPT节点
+		// 简单检查：节点至少包含RLP编码的基本结构
+		if len(node) < 2 { // 最小的RLP编码长度
+			results[2] = false
+			break
+		}
+
+		// 检查第一个字节是否为有效的RLP前缀
+		firstByte := node[0]
+		if firstByte < 0x80 {
+			results[2] = false
+			break
+		}
+	}
+
+	return results
+}
+
 // analyzeResultsEth 分析测试结果并保存到文件
 func analyzeResultsSnap(results []snapPacketTestResult, logger *log.Logger, outputDir string) error {
 	// 创建输出目录
@@ -822,20 +1123,39 @@ func cloneAndMutateSnapPacket(mutator *fuzzing.Mutator, seed snap.Packet) snap.P
 		newPacket := *p
 		return mutateGetAccountRangePacket(mutator, &newPacket)
 
+	case *snap.AccountRangePacket:
+		// 创建深拷贝
+		newPacket := *p
+		return mutateAccountRangePacket(mutator, &newPacket)
+
 	case *snap.GetStorageRangesPacket:
 		// 创建深拷贝
 		newPacket := *p
 		return mutateGetStorageRangesPacket(mutator, &newPacket)
+
+	case *snap.StorageRangesPacket:
+		// 创建深拷贝
+		newPacket := *p
+		return mutateStorageRangesPacket(mutator, &newPacket)
 
 	case *snap.GetByteCodesPacket:
 		// 创建深拷贝
 		newPacket := *p
 		return mutateGetByteCodesPacket(mutator, &newPacket)
 
+	case *snap.ByteCodesPacket:
+		// 创建深拷贝
+		newPacket := *p
+		return mutateByteCodesPacket(mutator, &newPacket)
+
 	case *snap.GetTrieNodesPacket:
 		// 创建深拷贝
 		newPacket := *p
 		return mutateGetTrieNodesPacket(mutator, &newPacket)
+	case *snap.TrieNodesPacket:
+		// 创建深拷贝
+		newPacket := *p
+		return mutateTrieNodesPacket(mutator, &newPacket)
 
 	default:
 		return seed
@@ -874,6 +1194,38 @@ func mutateGetAccountRangePacket(mutator *fuzzing.Mutator, original *snap.GetAcc
 	return &mutated
 }
 
+func mutateAccountRangePacket(mutator *fuzzing.Mutator, original *snap.AccountRangePacket) *snap.AccountRangePacket {
+	mutated := *original
+
+	// 变异请求ID
+	if rand.Float32() < 0.3 {
+		mutator.MutateRequestId(&mutated.ID)
+	}
+
+	// 变异随机账户数据
+	if rand.Float32() < 0.3 && len(mutated.Accounts) > 0 {
+		idx := rand.Intn(len(mutated.Accounts))
+		mutator.MutateAccountData(mutated.Accounts[idx])
+	}
+
+	// 添加新的账户数据
+	if rand.Float32() < 0.3 {
+		mutator.AddAccountData(&mutated.Accounts)
+	}
+
+	// 删除随机账户数据
+	if rand.Float32() < 0.3 {
+		mutator.RemoveAccountData(&mutated.Accounts)
+	}
+
+	// 变异证明数据
+	if rand.Float32() < 0.3 {
+		mutator.MutateAccountProof(&mutated.Proof)
+	}
+
+	return &mutated
+}
+
 // mutateGetStorageRangesPacket 变异 GetStorageRanges 请求包
 func mutateGetStorageRangesPacket(mutator *fuzzing.Mutator, original *snap.GetStorageRangesPacket) *snap.GetStorageRangesPacket {
 	mutated := *original
@@ -889,6 +1241,37 @@ func mutateGetStorageRangesPacket(mutator *fuzzing.Mutator, original *snap.GetSt
 	}
 	if rand.Float32() < 0.3 {
 		mutated.Accounts = mutator.MutateSnapAccounts()
+	}
+
+	return &mutated
+}
+
+func mutateStorageRangesPacket(mutator *fuzzing.Mutator, original *snap.StorageRangesPacket) *snap.StorageRangesPacket {
+	mutated := *original
+
+	// 变异请求ID
+	if rand.Float32() < 0.3 {
+		mutator.MutateRequestId(&mutated.ID)
+	}
+
+	// 变异随机存储槽
+	if rand.Float32() < 0.3 {
+		mutator.MutateStorageSlots(&mutated.Slots)
+	}
+
+	// 添加新的存储槽
+	if rand.Float32() < 0.3 {
+		mutator.AddStorageSlot(&mutated.Slots)
+	}
+
+	// 删除随机存储槽
+	if rand.Float32() < 0.3 {
+		mutator.RemoveStorageSlot(&mutated.Slots)
+	}
+
+	// 变异证明数据
+	if rand.Float32() < 0.3 {
+		mutator.MutateAccountProof(&mutated.Proof)
 	}
 
 	return &mutated
@@ -911,6 +1294,32 @@ func mutateGetByteCodesPacket(mutator *fuzzing.Mutator, original *snap.GetByteCo
 	return &mutated
 }
 
+func mutateByteCodesPacket(mutator *fuzzing.Mutator, original *snap.ByteCodesPacket) *snap.ByteCodesPacket {
+	mutated := *original
+
+	// 变异请求ID
+	if rand.Float32() < 0.3 {
+		mutator.MutateRequestId(&mutated.ID)
+	}
+
+	// 变异随机字节码
+	if rand.Float32() < 0.3 {
+		mutator.MutateByteCodesResponse(&mutated.Codes)
+	}
+
+	// 添加新的字节码
+	if rand.Float32() < 0.3 {
+		mutator.AddByteCode(&mutated.Codes)
+	}
+
+	// 删除随机字节码
+	if rand.Float32() < 0.3 {
+		mutator.RemoveByteCode(&mutated.Codes)
+	}
+
+	return &mutated
+}
+
 // mutateGetTrieNodesPacket 变异 GetTrieNodes 请求包
 func mutateGetTrieNodesPacket(mutator *fuzzing.Mutator, original *snap.GetTrieNodesPacket) *snap.GetTrieNodesPacket {
 	mutated := *original
@@ -923,6 +1332,32 @@ func mutateGetTrieNodesPacket(mutator *fuzzing.Mutator, original *snap.GetTrieNo
 	}
 	if rand.Float32() < 0.3 {
 		mutator.MutateSnapBytes(&mutated.Bytes)
+	}
+
+	return &mutated
+}
+
+func mutateTrieNodesPacket(mutator *fuzzing.Mutator, original *snap.TrieNodesPacket) *snap.TrieNodesPacket {
+	mutated := *original
+
+	// 变异请求ID
+	if rand.Float32() < 0.3 {
+		mutator.MutateRequestId(&mutated.ID)
+	}
+
+	// 变异随机Trie节点
+	if rand.Float32() < 0.3 {
+		mutator.MutateTrieNodesResponse(&mutated.Nodes)
+	}
+
+	// 添加新的Trie节点
+	if rand.Float32() < 0.3 {
+		mutator.AddTrieNode(&mutated.Nodes)
+	}
+
+	// 删除随机Trie节点
+	if rand.Float32() < 0.3 {
+		mutator.RemoveTrieNode(&mutated.Nodes)
 	}
 
 	return &mutated
