@@ -222,11 +222,6 @@ func (t *UDPv4) MutateSend(n *enode.Node, req Packet) []byte {
 	if err != nil {
 		panic(fmt.Errorf("can't encode %v packet: %v", req.Name(), err))
 	}
-	fmt.Printf("Packet: %x\n", packet)
-
-	rawpacket, _, hash, err := Decode(packet)
-
-	fmt.Println(rawpacket)
 
 	//fmt.Printf("Hash: %x\n", hash)
 	//fmt.Printf("Packet: %s, Hash: %x\n", req.Name(), hash)

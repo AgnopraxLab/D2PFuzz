@@ -98,7 +98,7 @@ func Encode(priv *ecdsa.PrivateKey, req Packet) (packet, hash []byte, err error)
 func MutateEncode(priv *ecdsa.PrivateKey, req Packet) (packet, hash []byte, err error) {
 	b := new(bytes.Buffer)
 	b.Write(headSpace)
-	b.WriteByte(byte(fuzzing.RandIntRange(0, 256)))
+	b.WriteByte(byte(fuzzing.RandIntRange(0, 7)))
 	if err := rlp.Encode(b, req); err != nil {
 		return nil, nil, err
 	}

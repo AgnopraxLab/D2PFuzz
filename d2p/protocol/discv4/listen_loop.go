@@ -162,6 +162,9 @@ func (t *UDPv4) loop() {
 						p.from == r.from,
 						p.ptype == r.data.Kind(),
 						p.ip.Equal(r.ip))
+					fmt.Printf("Expected type: %v, Received type: %v\n",
+						p.ptype,
+						r.data.Kind())
 				}
 			}
 			r.matched <- matched

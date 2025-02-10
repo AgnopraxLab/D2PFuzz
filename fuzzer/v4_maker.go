@@ -134,7 +134,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *
 
 	// Authentication ping
 	ping := m.Client.GenPacket("ping", m.TargetList[0])
-	result := sendAndWaitResponse(m, m.TargetList[0], ping, logger)
+	result := sendAndWaitResponse(m, m.TargetList[0], ping, true, logger)
 	if result.Error != nil {
 		fmt.Printf("%s", result.Error)
 	}
@@ -150,7 +150,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *
 		go func(iteration int, packetSeed discv4.Packet, packetStats *UDPPacketStats) {
 			defer wg.Done()
 
-			result := sendAndWaitResponse(m, m.TargetList[0], packetSeed, logger)
+			result := sendAndWaitResponse(m, m.TargetList[0], packetSeed, false, logger)
 			result.CheckResults = m.checkRequestSemantics(packetSeed)
 			result.Check = allTrue(result.CheckResults)
 			result.PacketID = i
@@ -409,7 +409,7 @@ func (m *V4Maker) checkENRRequestSemantics(e *discv4.ENRRequest) []bool {
 }
 
 // sendAndWaitResponse sends a request and waits for response
-func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logger *log.Logger) v4packetTestResult {
+func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, handshake bool, logger *log.Logger) v4packetTestResult {
 	result := v4packetTestResult{
 		RequestType: req.Name(),
 	}
@@ -437,9 +437,15 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, logg
 		return false, false, false
 	})
 
-	hash := m.Client.Send(target, req)
+	// Add mutate packet head
+	if handshake {
+		_ = m.Client.Send(target, req)
+	} else {
+		_ = m.Client.MutateSend(target, req)
+	}
+
 	// Record send log info
-	logger.Printf("Send Packet: %s, Hash: %x\n", req.Name(), hash)
+	logger.Printf("Send Packet: %s\n", req.Name())
 	// Waiting for a response with the new WaitForResponse method
 	if err := rm.WaitForResponse(1 * time.Second); err != nil {
 		if err.Error() == "timeout waiting for response" {
