@@ -214,6 +214,29 @@ func (t *UDPv4) Send(n *enode.Node, req Packet) []byte {
 	return hash
 }
 
+// MutateSend use for mutate packet head and encode func
+func (t *UDPv4) MutateSend(n *enode.Node, req Packet) []byte {
+	toaddr := &net.UDPAddr{IP: n.IP(), Port: n.UDP()}
+	toid := n.ID()
+	packet, hash, err := MutateEncode(t.GetPri(), req)
+	if err != nil {
+		panic(fmt.Errorf("can't encode %v packet: %v", req.Name(), err))
+	}
+	fmt.Printf("Packet: %x\n", packet)
+
+	rawpacket, _, hash, err := Decode(packet)
+
+	fmt.Println(rawpacket)
+
+	//fmt.Printf("Hash: %x\n", hash)
+	//fmt.Printf("Packet: %s, Hash: %x\n", req.Name(), hash)
+	if err := t.write(toaddr, toid, req.Name(), packet); err != nil {
+		panic(fmt.Errorf("can't send %v: %v", req.Name(), err))
+	}
+
+	return hash
+}
+
 func (t *UDPv4) GenPacket(packetType string, n *enode.Node) Packet {
 	var (
 		addr        = &net.UDPAddr{IP: n.IP(), Port: n.UDP()}

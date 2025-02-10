@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -79,6 +80,25 @@ func Encode(priv *ecdsa.PrivateKey, req Packet) (packet, hash []byte, err error)
 	b := new(bytes.Buffer)
 	b.Write(headSpace)
 	b.WriteByte(req.Kind())
+	if err := rlp.Encode(b, req); err != nil {
+		return nil, nil, err
+	}
+	packet = b.Bytes()
+	sig, err := crypto.Sign(crypto.Keccak256(packet[headSize:]), priv)
+	if err != nil {
+		return nil, nil, err
+	}
+	copy(packet[macSize:], sig)
+	// Add the hash to the front. Note: this doesn't protect the packet in any way.
+	hash = crypto.Keccak256(packet[macSize:])
+	copy(packet, hash)
+	return packet, hash, nil
+}
+
+func MutateEncode(priv *ecdsa.PrivateKey, req Packet) (packet, hash []byte, err error) {
+	b := new(bytes.Buffer)
+	b.Write(headSpace)
+	b.WriteByte(byte(fuzzing.RandIntRange(0, 256)))
 	if err := rlp.Encode(b, req); err != nil {
 		return nil, nil, err
 	}

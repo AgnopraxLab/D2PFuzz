@@ -189,6 +189,8 @@ func RunGenerate(protocol, targetDir, chainDir, ptype string) error {
 			return fmt.Errorf("error encoding JSON")
 		}
 		fmt.Println(string(jsonData))
+		client.MutateSend(node, packet)
+
 	case "discv5":
 		client := InitDiscv5()
 		packet := client.GenPacket(ptype, node)
