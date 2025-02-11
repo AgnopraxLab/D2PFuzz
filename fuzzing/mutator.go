@@ -1580,3 +1580,11 @@ func (m *Mutator) RemoveTrieNode(nodes *[][]byte) {
 		*nodes = append((*nodes)[:idx], (*nodes)[idx+1:]...)
 	}
 }
+
+// mutatePacketType 随机选择一个新的消息类型
+func MutateV5PacketType() int {
+	packetTypes := []int{
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 254, 255,
+	}
+	return packetTypes[rand.Intn(len(packetTypes))]
+}

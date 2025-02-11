@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"hash"
 
+	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -398,10 +399,31 @@ func (c *Codec) encodeMessageHeader(toID enode.ID, s *session) (Header, error) {
 	return head, err
 }
 
+// func (c *Codec) encryptMessage(s *session, p Packet, head *Header, headerData []byte) ([]byte, error) {
+// 	// Encode message plaintext.
+// 	c.msgbuf.Reset()
+// 	c.msgbuf.WriteByte(p.Kind())
+// 	if err := rlp.Encode(&c.msgbuf, p); err != nil {
+// 		return nil, err
+// 	}
+// 	messagePT := c.msgbuf.Bytes()
+
+// 	// Encrypt into message ciphertext buffer.
+// 	messageCT, err := encryptGCM(c.msgctbuf[:0], s.writeKey, head.Nonce[:], messagePT, headerData)
+// 	if err == nil {
+// 		c.msgctbuf = messageCT
+// 	}
+// 	return messageCT, err
+// }
+
+// TODO: Mutate Version packettype
 func (c *Codec) encryptMessage(s *session, p Packet, head *Header, headerData []byte) ([]byte, error) {
 	// Encode message plaintext.
 	c.msgbuf.Reset()
-	c.msgbuf.WriteByte(p.Kind())
+
+	// c.msgbuf.WriteByte(p.Kind())
+	c.msgbuf.WriteByte(byte(fuzzing.MutateV5PacketType()))
+
 	if err := rlp.Encode(&c.msgbuf, p); err != nil {
 		return nil, err
 	}

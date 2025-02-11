@@ -133,7 +133,7 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer, seed discv5.Packet, stats *
 	ping := m.Client.GenPacket("ping", m.TargetList[0])
 	_, err := m.sendAndReceive(m.TargetList[0], ping, logger)
 	if err != nil {
-		fmt.Printf("Send initial ping failed: %s", err)
+		fmt.Printf("Send initial ping failed: %s\n", err)
 	}
 
 	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
