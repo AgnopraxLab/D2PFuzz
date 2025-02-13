@@ -8,12 +8,13 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/snap"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/rlpx"
 	"github.com/ethereum/go-ethereum/rlp"
+
+	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/snap"
 )
 
 var (
@@ -156,6 +157,23 @@ func (c *Conn) Write(proto Proto, code uint64, msg any) error {
 	return err
 }
 
+// func (s *Suite) SendMsg(proto Proto, code uint64, msg interface{}) error {
+
+// 	if !s.IsConnected() {
+// 		fmt.Println(">>> 错误: 连接未建立")
+// 		return errors.New("connection not established")
+// 	}
+
+// 	err := s.conn.Write(proto, code, msg)
+// 	if err != nil {
+// 		fmt.Printf(">>> Write failed: %v\n", err)
+// 		return err
+// 	}
+
+// 	return nil
+// }
+
+// TODO: Mutate sendMsg for fuzzing
 func (s *Suite) SendMsg(proto Proto, code uint64, msg interface{}) error {
 
 	if !s.IsConnected() {

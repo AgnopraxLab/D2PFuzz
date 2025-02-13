@@ -232,6 +232,33 @@ func (c *Codec) writeHeaders(head *Header) {
 }
 
 // makeHeader creates a packet header.
+// func (c *Codec) makeHeader(fromID enode.ID, flag byte, authsizeExtra int) Header {
+// 	var authsize int
+// 	switch flag {
+// 	case flagMessage:
+// 		authsize = sizeofMessageAuthData
+// 	case flagWhoareyou:
+// 		authsize = sizeofWhoareyouAuthData
+// 	case flagHandshake:
+// 		authsize = sizeofHandshakeAuthData
+// 	default:
+// 		panic(interface{}(fmt.Errorf("BUG: invalid packet header flag %x", flag)))
+// 	}
+// 	authsize += authsizeExtra
+// 	if authsize > int(^uint16(0)) {
+// 		panic(interface{}(fmt.Errorf("BUG: auth size %d overflows uint16", authsize)))
+// 	}
+// 	return Header{
+// 		StaticHeader: StaticHeader{
+// 			ProtocolID: c.protocolID,
+// 			Version:    version,
+// 			Flag:       flag,
+// 			AuthSize:   uint16(authsize),
+// 		},
+// 	}
+// }
+
+// TODO: Mutate makeHeader creates a packet header for fuzzing.
 func (c *Codec) makeHeader(fromID enode.ID, flag byte, authsizeExtra int) Header {
 	var authsize int
 	switch flag {
@@ -251,9 +278,15 @@ func (c *Codec) makeHeader(fromID enode.ID, flag byte, authsizeExtra int) Header
 	return Header{
 		StaticHeader: StaticHeader{
 			ProtocolID: c.protocolID,
-			Version:    version,
-			Flag:       flag,
-			AuthSize:   uint16(authsize),
+			// Version:    version,
+			// Flag:       flag,
+			AuthSize: uint16(authsize),
+
+			// ProtocolID: [6]byte{'d', 'i', 's', 'c', 'v', '5'}, // Must be "discv5", dont change it
+			// ProtocolID: [6]byte(fuzzing.RandBuff(6)),
+			Version: uint16(fuzzing.RandInt32() & 0xFFFF),
+			Flag:    byte(fuzzing.RandIntRange(0, 3)),
+			// AuthSize: uint16(fuzzing.RandInt32() & 0xFFFF),
 		},
 	}
 }
@@ -416,7 +449,7 @@ func (c *Codec) encodeMessageHeader(toID enode.ID, s *session) (Header, error) {
 // 	return messageCT, err
 // }
 
-// TODO: Mutate Version packettype
+// TODO: Mutate Version packettype for fuzzing
 func (c *Codec) encryptMessage(s *session, p Packet, head *Header, headerData []byte) ([]byte, error) {
 	// Encode message plaintext.
 	c.msgbuf.Reset()
