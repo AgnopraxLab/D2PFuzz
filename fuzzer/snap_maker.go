@@ -1205,19 +1205,35 @@ func mutateAccountRangePacket(mutator *fuzzing.Mutator, original *snap.AccountRa
 	// 变异随机账户数据
 	if rand.Float32() < 0.3 && len(mutated.Accounts) > 0 {
 		idx := rand.Intn(len(mutated.Accounts))
-		mutator.MutateAccountData(mutated.Accounts[idx])
+		account := mutated.Accounts[idx]
+
+		if mutator.Bool() {
+			account.Hash = mutator.MutateHash()
+		}
+		if mutator.Bool() {
+			account.Body = mutator.MutateRawValue()
+		}
 	}
 
 	// 添加新的账户数据
 	if rand.Float32() < 0.3 {
-		mutator.AddAccountData(&mutated.Accounts)
+		newAccount := &snap.AccountData{
+			Hash: mutator.MutateHash(),
+			Body: mutator.MutateRawValue(),
+		}
+		mutated.Accounts = append(mutated.Accounts, newAccount)
 	}
 
 	// 删除随机账户数据
 	if rand.Float32() < 0.3 {
-		mutator.RemoveAccountData(&mutated.Accounts)
+		if len(mutated.Accounts) > 1 {
+			idx := mutator.RandRange(0, uint64(len(mutated.Accounts)))
+			mutated.Accounts = append(
+				mutated.Accounts[:idx],
+				mutated.Accounts[idx+1:]...,
+			)
+		}
 	}
-
 	// 变异证明数据
 	if rand.Float32() < 0.3 {
 		mutator.MutateAccountProof(&mutated.Proof)
@@ -1256,17 +1272,49 @@ func mutateStorageRangesPacket(mutator *fuzzing.Mutator, original *snap.StorageR
 
 	// 变异随机存储槽
 	if rand.Float32() < 0.3 {
-		mutator.MutateStorageSlots(&mutated.Slots)
+		if len(mutated.Slots) > 0 {
+			accountIdx := mutator.RandRange(0, uint64(len(mutated.Slots)))
+			if len(mutated.Slots[accountIdx]) > 0 {
+				slotIdx := mutator.RandRange(0, uint64(len(mutated.Slots[accountIdx])))
+				storage := mutated.Slots[accountIdx][slotIdx]
+
+				if mutator.Bool() {
+					storage.Hash = mutator.MutateHash()
+				}
+				if mutator.Bool() {
+					mutator.MutateBytes(&storage.Body)
+				}
+			}
+		}
 	}
 
 	// 添加新的存储槽
 	if rand.Float32() < 0.3 {
-		mutator.AddStorageSlot(&mutated.Slots)
+		if len(mutated.Slots) > 0 {
+			accountIdx := mutator.RandRange(0, uint64(len(mutated.Slots)))
+			newSlot := &snap.StorageData{
+				Hash: mutator.MutateHash(),
+				Body: mutator.MutateRawValue(),
+			}
+			mutated.Slots[accountIdx] = append(
+				mutated.Slots[accountIdx],
+				newSlot,
+			)
+		}
 	}
 
 	// 删除随机存储槽
 	if rand.Float32() < 0.3 {
-		mutator.RemoveStorageSlot(&mutated.Slots)
+		if len(mutated.Slots) > 0 {
+			accountIdx := mutator.RandRange(0, uint64(len(mutated.Slots)))
+			if len(mutated.Slots[accountIdx]) > 1 {
+				slotIdx := mutator.RandRange(0, uint64(len(mutated.Slots[accountIdx])))
+				mutated.Slots[accountIdx] = append(
+					mutated.Slots[accountIdx][:slotIdx],
+					mutated.Slots[accountIdx][slotIdx+1:]...,
+				)
+			}
+		}
 	}
 
 	// 变异证明数据
@@ -1328,7 +1376,24 @@ func mutateGetTrieNodesPacket(mutator *fuzzing.Mutator, original *snap.GetTrieNo
 		mutator.MutateSnapRequestId(&mutated.ID)
 	}
 	if rand.Float32() < 0.3 {
-		mutated.Paths = mutator.MutateSnapTrieNodePaths()
+		// 控制路径集合的数量在合理范围内 (1-32)
+		pathSetCount := mutator.RandRange(1, 33)
+		paths := make([]snap.TrieNodePathSet, pathSetCount)
+
+		for i := uint64(0); i < pathSetCount; i++ {
+			// 每个路径集合包含 1-4 个路径
+			pathCount := mutator.RandRange(1, 5)
+			paths[i] = make([][]byte, pathCount)
+			for j := uint64(0); j < pathCount; j++ {
+				// 每个路径的长度在 1-64 字节之间
+				pathLen := mutator.RandRange(1, 65)
+				path := make([]byte, pathLen)
+				mutator.FillBytes(&path)
+				paths[i][j] = path
+			}
+		}
+
+		mutated.Paths = paths
 	}
 	if rand.Float32() < 0.3 {
 		mutator.MutateSnapBytes(&mutated.Bytes)

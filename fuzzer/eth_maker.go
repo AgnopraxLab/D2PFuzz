@@ -22,6 +22,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/big"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -1564,14 +1565,33 @@ func mutateNewBlockHashesPacket(mutator *fuzzing.Mutator, original *eth.NewBlock
 	mutated := *original
 
 	// 各字段有30%的概率进行变异
-	if rand.Float32() < 0.3 {
-		mutator.MutateBlockHashElement(&mutated)
+	// 变异现有元素
+	if rand.Float32() < 0.3 && len(mutated) > 0 {
+		idx := mutator.RandRange(0, uint64(len(mutated)))
+		if mutator.Bool() {
+			// 变异哈希
+			mutated[idx].Hash = mutator.MutateHash()
+		} else {
+			// 变异区块号
+			mutated[idx].Number = mutator.RandRange(0, 1000000)
+		}
 	}
+
+	// 添加新元素
 	if rand.Float32() < 0.3 {
-		mutator.AddBlockHashElement(&mutated)
+		mutated = append(mutated, struct {
+			Hash   common.Hash
+			Number uint64
+		}{
+			Hash:   mutator.MutateHash(),
+			Number: mutator.RandRange(0, 1000000),
+		})
 	}
-	if rand.Float32() < 0.3 {
-		mutator.RemoveBlockHashElement(&mutated)
+
+	// 删除随机元素
+	if rand.Float32() < 0.3 && len(mutated) > 1 {
+		idx := mutator.RandRange(0, uint64(len(mutated)))
+		mutated = append(mutated[:idx], mutated[idx+1:]...)
 	}
 
 	return &mutated
@@ -1606,13 +1626,40 @@ func mutateGetBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.GetBloc
 
 	// 各字段有30%的概率进行变异
 	if rand.Float32() < 0.3 {
-		mutator.MutateOrigin(&mutated.Origin, mutated.Amount, mutated.Skip, mutated.Reverse, chain)
+		// 简单地生成一个随机区块号
+		maxNumber := uint64(chain.Len() * 2) // 允许超出链长度
+		mutated.Origin.Number = mutator.RandRange(0, maxNumber)
+		mutated.Origin.Hash = common.Hash{} // 清空Hash，使用Number
 	}
 	if rand.Float32() < 0.3 {
-		mutator.MutateAmount(&mutated.Amount, mutated.Origin.Number, mutated.Skip, mutated.Reverse, chain)
+		switch mutator.RandChoice(3) {
+		case 0:
+			// 生成一个较小的值
+			mutated.Amount = mutator.RandRange(1, 100)
+		case 1:
+			// 生成一个较大的值
+			mutated.Amount = mutator.RandRange(100, 10100)
+		case 2:
+			// 边界值
+			mutated.Amount = mutator.RandRange(0, 2) // 0 或 1
+		}
 	}
 	if rand.Float32() < 0.3 {
-		mutator.MutateSkip(&mutated.Skip, chain)
+		switch mutator.RandChoice(3) {
+		case 0:
+			// 小值
+			mutated.Skip = mutator.RandRange(0, 10)
+		case 1:
+			// 大值
+			mutated.Skip = mutator.RandRange(100, 1100)
+		case 2:
+			// 极端值
+			if mutator.Bool() {
+				mutated.Skip = 0
+			} else {
+				mutated.Skip = mutator.MaxUint64()
+			}
+		}
 	}
 	if rand.Float32() < 0.3 {
 		mutator.MutateReverse(&mutated.Reverse)
@@ -1637,12 +1684,30 @@ func mutateBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.BlockHeade
 
 	// 添加新的区块头
 	if rand.Float32() < 0.3 {
-		mutator.AddBlockHeader(&mutated.BlockHeadersRequest, chain)
+		gasLimit := mutator.RandRange(0, 1000000)
+		newHeader := &types.Header{
+			ParentHash:  mutator.MutateHash(),
+			UncleHash:   mutator.MutateHash(),
+			Coinbase:    mutator.MutateAddress(),
+			Root:        mutator.MutateHash(),
+			TxHash:      mutator.MutateHash(),
+			ReceiptHash: mutator.MutateHash(),
+			Number:      new(big.Int).SetUint64(mutator.RandRange(0, 1000000)),
+			GasLimit:    gasLimit,
+			GasUsed:     mutator.RandRange(0, gasLimit),
+			Time:        mutator.RandRange(0, 1000000),
+		}
+		mutated.BlockHeadersRequest = append(mutated.BlockHeadersRequest, newHeader)
 	}
-
 	// 删除随机区块头
 	if rand.Float32() < 0.3 {
-		mutator.RemoveBlockHeader(&mutated.BlockHeadersRequest)
+		if len(mutated.BlockHeadersRequest) > 1 {
+			idx := mutator.Rand(len(mutated.BlockHeadersRequest))
+			mutated.BlockHeadersRequest = append(
+				mutated.BlockHeadersRequest[:idx],
+				mutated.BlockHeadersRequest[idx+1:]...,
+			)
+		}
 	}
 
 	return &mutated
@@ -1653,7 +1718,47 @@ func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.GetBlock
 
 	// 各字段有30%的概率进行变异
 	if rand.Float32() < 0.5 {
-		mutator.MutateBlockBodiesRequest(mutated.GetBlockBodiesRequest, chain)
+		switch mutator.RandChoice(4) {
+		case 0:
+			// 空列表
+			*mutated.GetBlockBodiesRequest = eth.GetBlockBodiesRequest{}
+
+		case 1:
+			// 随机选择1-5个有效哈希
+			count := mutator.RandRange(1, 6)
+			hashes := make(eth.GetBlockBodiesRequest, 0, count)
+			blocks := chain.Blocks()
+			for i := uint64(0); i < count; i++ {
+				if len(blocks) > 0 {
+					idx := mutator.RandRange(0, uint64(len(blocks)))
+					hashes = append(hashes, blocks[idx].Hash())
+				}
+			}
+			*mutated.GetBlockBodiesRequest = hashes
+
+		case 2:
+			// 生成1-5个随机哈希
+			count := mutator.RandRange(1, 6)
+			hashes := make(eth.GetBlockBodiesRequest, 0, count)
+			for i := uint64(0); i < count; i++ {
+				hashes = append(hashes, mutator.MutateHash())
+			}
+			*mutated.GetBlockBodiesRequest = hashes
+		case 3:
+			// 混合有效和无效哈希
+			count := mutator.RandRange(1, 6)
+			hashes := make(eth.GetBlockBodiesRequest, 0, count)
+			blocks := chain.Blocks()
+			for i := uint64(0); i < count; i++ {
+				if mutator.Bool() && len(blocks) > 0 {
+					idx := mutator.RandRange(0, uint64(len(blocks)))
+					hashes = append(hashes, blocks[idx].Hash())
+				} else {
+					hashes = append(hashes, mutator.MutateHash())
+				}
+			}
+			*mutated.GetBlockBodiesRequest = hashes
+		}
 	}
 
 	return &mutated
@@ -1666,21 +1771,68 @@ func mutateBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.BlockBodies
 	if rand.Float32() < 0.3 {
 		mutator.MutateRequestId(&mutated.RequestId)
 	}
-
 	// 变异随机区块体
 	if rand.Float32() < 0.3 && len(mutated.BlockBodiesResponse) > 0 {
-		idx := mutator.Rand(len(mutated.BlockBodiesResponse))
-		mutator.MutateBlockBody(mutated.BlockBodiesResponse[idx])
-	}
+		idx := mutator.RandRange(0, uint64(len(mutated.BlockBodiesResponse)))
+		body := mutated.BlockBodiesResponse[idx]
 
+		// 变异交易列表
+		if mutator.Bool() && len(body.Transactions) > 0 {
+			txIdx := mutator.RandRange(0, uint64(len(body.Transactions)))
+			body.Transactions[txIdx] = mutator.MutateTransaction(body.Transactions[txIdx])
+		}
+
+		// 变异叔块列表
+		if mutator.Bool() && len(body.Uncles) > 0 {
+			uncleIdx := mutator.RandRange(0, uint64(len(body.Uncles)))
+			mutator.MutateBlockHeader(body.Uncles[uncleIdx])
+		}
+
+		// 变异提款列表
+		if mutator.Bool() && len(body.Withdrawals) > 0 {
+			withdrawalIdx := mutator.RandRange(0, uint64(len(body.Withdrawals)))
+			mutator.MutateWithdrawal(body.Withdrawals[withdrawalIdx])
+		}
+	}
 	// 添加新的区块体
 	if rand.Float32() < 0.3 {
-		mutator.AddBlockBody(&mutated.BlockBodiesResponse)
-	}
+		// 创建新的区块体
+		newBody := &eth.BlockBody{
+			Transactions: make([]*types.Transaction, mutator.RandRange(1, 6)), // 1-5个交易
+			Uncles:       make([]*types.Header, mutator.RandRange(0, 2)),      // 0-1个叔块
+			Withdrawals:  make([]*types.Withdrawal, mutator.RandRange(0, 3)),  // 0-2个提款
+		}
 
+		// 填充交易
+		for i := range newBody.Transactions {
+			newBody.Transactions[i] = mutator.MutateTransaction(nil)
+		}
+
+		// 填充叔块
+		for i := range newBody.Uncles {
+			uncle := &types.Header{}
+			mutator.MutateBlockHeader(uncle)
+			newBody.Uncles[i] = uncle
+		}
+
+		// 填充提款
+		for i := range newBody.Withdrawals {
+			withdrawal := &types.Withdrawal{}
+			mutator.MutateWithdrawal(withdrawal)
+			newBody.Withdrawals[i] = withdrawal
+		}
+
+		mutated.BlockBodiesResponse = append(mutated.BlockBodiesResponse, newBody)
+	}
 	// 删除随机区块体
 	if rand.Float32() < 0.3 {
-		mutator.RemoveBlockBody(&mutated.BlockBodiesResponse)
+		if len(mutated.BlockBodiesResponse) > 1 {
+			idx := mutator.RandRange(0, uint64(len(mutated.BlockBodiesResponse)))
+			mutated.BlockBodiesResponse = append(
+				mutated.BlockBodiesResponse[:idx],
+				mutated.BlockBodiesResponse[idx+1:]...,
+			)
+		}
 	}
 
 	return &mutated
@@ -1707,17 +1859,26 @@ func mutateNewPooledTransactionHashesPacket(mutator *fuzzing.Mutator, original *
 
 	// 变异随机交易哈希
 	if rand.Float32() < 0.3 {
-		mutator.MutatePooledTransactionHash(&mutated)
+		if len(mutated.Hashes) > 0 {
+			idx := mutator.RandRange(0, uint64(len(mutated.Hashes)))
+			mutated.Hashes[idx] = mutator.MutateHash()
+		}
 	}
 
 	// 添加新的交易哈希
 	if rand.Float32() < 0.3 {
-		mutator.AddPooledTransactionHash(&mutated)
+		mutated.Hashes = append(mutated.Hashes, mutator.MutateHash())
 	}
 
 	// 删除随机交易哈希
 	if rand.Float32() < 0.3 {
-		mutator.RemovePooledTransactionHash(&mutated)
+		if len(mutated.Hashes) > 1 {
+			idx := mutator.RandRange(0, uint64(len(mutated.Hashes)))
+			mutated.Hashes = append(
+				mutated.Hashes[:idx],
+				mutated.Hashes[idx+1:]...,
+			)
+		}
 	}
 
 	return &mutated
@@ -1729,7 +1890,68 @@ func mutateGetPooledTransactionsPacket(mutator *fuzzing.Mutator, original *eth.G
 	// 50%的概率变异请求内容
 	if rand.Float32() < 0.5 {
 		request := *original.GetPooledTransactionsRequest
-		mutator.MutatePooledTransactionsRequest(&request, chain)
+
+		switch mutator.RandChoice(4) {
+		case 0:
+			// 空列表
+			request = eth.GetPooledTransactionsRequest{}
+
+		case 1:
+			// 随机选择1-5个有效哈希
+			blocks := chain.Blocks() // 使用区块中的交易
+			if len(blocks) == 0 {
+				// 如果没有区块，生成随机哈希
+				count := uint64(mutator.RandRange(1, 6))
+				hashes := make(eth.GetPooledTransactionsRequest, count)
+				for i := uint64(0); i < count; i++ {
+					hashes[i] = mutator.MutateHash()
+				}
+				request = hashes
+			} else {
+				count := uint64(mutator.RandRange(1, 6))
+				hashes := make(eth.GetPooledTransactionsRequest, count)
+				for i := uint64(0); i < count; i++ {
+					block := blocks[mutator.RandRange(0, uint64(len(blocks)))]
+					txs := block.Transactions()
+					if len(txs) > 0 {
+						hashes[i] = txs[mutator.RandRange(0, uint64(len(txs)))].Hash()
+					} else {
+						hashes[i] = mutator.MutateHash()
+					}
+				}
+				request = hashes
+			}
+
+		case 2:
+			// 生成1-5个随机哈希
+			count := uint64(mutator.RandRange(1, 6))
+			hashes := make(eth.GetPooledTransactionsRequest, count)
+			for i := uint64(0); i < count; i++ {
+				hashes[i] = mutator.MutateHash()
+			}
+			request = hashes
+
+		case 3:
+			// 混合有效和无效哈希
+			blocks := chain.Blocks()
+			count := uint64(mutator.RandRange(1, 6))
+			hashes := make(eth.GetPooledTransactionsRequest, count)
+			for i := uint64(0); i < count; i++ {
+				if mutator.Bool() && len(blocks) > 0 {
+					block := blocks[mutator.RandRange(0, uint64(len(blocks)))]
+					txs := block.Transactions()
+					if len(txs) > 0 {
+						hashes[i] = txs[mutator.RandRange(0, uint64(len(txs)))].Hash()
+					} else {
+						hashes[i] = mutator.MutateHash()
+					}
+				} else {
+					hashes[i] = mutator.MutateHash()
+				}
+			}
+			request = hashes
+		}
+
 		mutated.GetPooledTransactionsRequest = &request
 	}
 
@@ -1746,17 +1968,32 @@ func mutatePooledTransactionsPacket(mutator *fuzzing.Mutator, original *eth.Pool
 
 	// 变异随机交易
 	if rand.Float32() < 0.3 {
-		mutator.MutatePooledTransaction(&mutated.PooledTransactionsResponse)
+		if len(mutated.PooledTransactionsResponse) > 0 {
+			idx := mutator.RandRange(0, uint64(len(mutated.PooledTransactionsResponse)))
+			mutated.PooledTransactionsResponse[idx] = mutator.MutateTransaction(
+				mutated.PooledTransactionsResponse[idx],
+			)
+		}
 	}
 
 	// 添加新的交易
 	if rand.Float32() < 0.3 {
-		mutator.AddPooledTransaction(&mutated.PooledTransactionsResponse)
+		newTx := mutator.MutateTransaction(nil)
+		mutated.PooledTransactionsResponse = append(
+			mutated.PooledTransactionsResponse,
+			newTx,
+		)
 	}
 
 	// 删除随机交易
 	if rand.Float32() < 0.3 {
-		mutator.RemovePooledTransaction(&mutated.PooledTransactionsResponse)
+		if len(mutated.PooledTransactionsResponse) > 1 {
+			idx := mutator.RandRange(0, uint64(len(mutated.PooledTransactionsResponse)))
+			mutated.PooledTransactionsResponse = append(
+				mutated.PooledTransactionsResponse[:idx],
+				mutated.PooledTransactionsResponse[idx+1:]...,
+			)
+		}
 	}
 
 	return &mutated
@@ -1767,7 +2004,47 @@ func mutateGetReceiptsPacket(mutator *fuzzing.Mutator, original *eth.GetReceipts
 
 	// 各字段有30%的概率进行变异
 	if rand.Float32() < 0.5 {
-		mutator.MutateReceiptsRequest(mutated.GetReceiptsRequest, chain)
+		switch mutator.RandChoice(4) {
+		case 0:
+			// 空列表
+			*mutated.GetReceiptsRequest = eth.GetReceiptsRequest{}
+
+		case 1:
+			// 随机选择1-5个有效哈希
+			count := mutator.RandRange(1, 6)
+			hashes := make(eth.GetReceiptsRequest, 0, count)
+			blocks := chain.Blocks()
+			for i := uint64(0); i < count; i++ {
+				if len(blocks) > 0 {
+					idx := mutator.RandRange(0, uint64(len(blocks)))
+					hashes = append(hashes, blocks[idx].Hash())
+				}
+			}
+			*mutated.GetReceiptsRequest = hashes
+
+		case 2:
+			// 生成1-5个随机哈希
+			count := mutator.RandRange(1, 6)
+			hashes := make(eth.GetReceiptsRequest, 0, count)
+			for i := uint64(0); i < count; i++ {
+				hashes = append(hashes, mutator.MutateHash())
+			}
+			*mutated.GetReceiptsRequest = hashes
+		case 3:
+			// 混合有效和无效哈希
+			count := mutator.RandRange(1, 6)
+			hashes := make(eth.GetReceiptsRequest, 0, count)
+			blocks := chain.Blocks()
+			for i := uint64(0); i < count; i++ {
+				if mutator.Bool() && len(blocks) > 0 {
+					idx := mutator.RandRange(0, uint64(len(blocks)))
+					hashes = append(hashes, blocks[idx].Hash())
+				} else {
+					hashes = append(hashes, mutator.MutateHash())
+				}
+			}
+			*mutated.GetReceiptsRequest = hashes
+		}
 	}
 
 	return &mutated
@@ -1783,17 +2060,40 @@ func mutateReceiptsPacket(mutator *fuzzing.Mutator, original *eth.ReceiptsPacket
 
 	// 变异随机收据
 	if rand.Float32() < 0.3 {
-		mutator.MutateReceiptResponse(&mutated.ReceiptsResponse)
+		if len(mutated.ReceiptsResponse) > 0 {
+			idx := mutator.RandRange(0, uint64(len(mutated.ReceiptsResponse)))
+			if len(mutated.ReceiptsResponse[idx]) > 0 {
+				mutator.MutateReceipt(mutated.ReceiptsResponse[idx][0])
+			}
+		}
 	}
 
 	// 添加新的收据
 	if rand.Float32() < 0.3 {
-		mutator.AddReceipt(&mutated.ReceiptsResponse)
+		gasUsed := mutator.RandRange(0, 1000000)
+		newReceipt := &types.Receipt{
+			Status:            mutator.RandRange(0, 2),
+			CumulativeGasUsed: gasUsed,
+			GasUsed:           mutator.RandRange(0, gasUsed+1),
+			Bloom:             types.BytesToBloom(mutator.MutateHash().Bytes()),
+			TxHash:            mutator.MutateHash(),
+			ContractAddress:   mutator.MutateAddress(),
+		}
+		mutated.ReceiptsResponse = append(
+			mutated.ReceiptsResponse,
+			[]*types.Receipt{newReceipt},
+		)
 	}
 
 	// 删除随机收据
 	if rand.Float32() < 0.3 {
-		mutator.RemoveReceipt(&mutated.ReceiptsResponse)
+		if len(mutated.ReceiptsResponse) > 1 {
+			idx := mutator.RandRange(0, uint64(len(mutated.ReceiptsResponse)))
+			mutated.ReceiptsResponse = append(
+				mutated.ReceiptsResponse[:idx],
+				mutated.ReceiptsResponse[idx+1:]...,
+			)
+		}
 	}
 
 	return &mutated
