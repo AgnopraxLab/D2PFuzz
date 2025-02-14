@@ -379,7 +379,7 @@ func (m *SnapMaker) handleGetAccountRangePacket(p *snap.GetAccountRangePacket, s
 		return &snapPacketTestResult{
 			Response: res,
 			Error:    fmt.Sprintf("account range response wrong: %T %v", msg, msg),
-			Success:  false,
+			Success:  true,
 			Valid:    false,
 		}
 	}
@@ -389,7 +389,7 @@ func (m *SnapMaker) handleGetAccountRangePacket(p *snap.GetAccountRangePacket, s
 			return &snapPacketTestResult{
 				Response: res,
 				Error:    fmt.Sprintf("accounts not monotonically increasing: #%d [%x] vs #%d [%x]", i-1, res.Accounts[i-1].Hash[:], i, res.Accounts[i].Hash[:]),
-				Success:  false,
+				Success:  true,
 				Valid:    false,
 			}
 		}
@@ -404,12 +404,16 @@ func (m *SnapMaker) handleGetAccountRangePacket(p *snap.GetAccountRangePacket, s
 		return &snapPacketTestResult{
 			Response: res,
 			Error:    err.Error(),
-			Success:  false,
+			Success:  true,
 			Valid:    false,
 		}
 	}
 	if len(hashes) == 0 && len(accounts) == 0 && len(proof) == 0 {
-		return nil
+		return &snapPacketTestResult{
+			Response: res,
+			Success:  true,
+			Valid:    true,
+		}
 	}
 	// Reconstruct a partial trie from the response and verify it
 	keys := make([][]byte, len(hashes))
@@ -1213,10 +1217,23 @@ func mutateAccountRangePacket(mutator *fuzzing.Mutator, original *snap.AccountRa
 		if mutator.Bool() {
 			account.Body = mutator.MutateRawValue()
 		}
+		account := mutated.Accounts[idx]
+
+		if mutator.Bool() {
+			account.Hash = mutator.MutateHash()
+		}
+		if mutator.Bool() {
+			account.Body = mutator.MutateRawValue()
+		}
 	}
 
 	// 添加新的账户数据
 	if rand.Float32() < 0.3 {
+		newAccount := &snap.AccountData{
+			Hash: mutator.MutateHash(),
+			Body: mutator.MutateRawValue(),
+		}
+		mutated.Accounts = append(mutated.Accounts, newAccount)
 		newAccount := &snap.AccountData{
 			Hash: mutator.MutateHash(),
 			Body: mutator.MutateRawValue(),

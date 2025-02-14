@@ -769,10 +769,6 @@ func (m *Mutator) MutateTotalDifficulty() *big.Int {
 	return new(big.Int).SetUint64(uint64(m.r.Int63n(1000000)))
 }
 
-func (m *Mutator) MutateHash() common.Hash {
-	return common.BytesToHash(m.RandBytes(32))
-}
-
 func (m *Mutator) MutateForkID() forkid.ID {
 	var hash [4]byte
 	binary.BigEndian.PutUint32(hash[:], uint32(m.r.Uint64()))

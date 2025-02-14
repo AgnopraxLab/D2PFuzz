@@ -154,11 +154,11 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 	}
 
 	for i := 0; i < MutateCount; i++ {
-		// for i := 0; i < 1; i++ {
+		//for i := 0; i < 1; i++ {
 		wg.Add(1)
 
 		mutateSeed := cloneAndMutateEthPacket(mutator, currentSeed, m.SuiteList[0].Chain())
-		// mutateSeed := seed
+		//mutateSeed := seed
 		go func(iteration int, currentReq eth.Packet, packetStats *UDPPacketStats) {
 			defer wg.Done()
 
@@ -474,10 +474,11 @@ func (m *EthMaker) handleTransactionPacket(p *eth.TransactionsPacket, suite *eth
 }
 
 func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, suite *eth.Suite) ethPacketTestResult {
+
 	// 修改包内容进行测试
-	// p.Origin.Number = 1
-	// p.Amount = 300
-	// p.Skip = 0
+	// p.Origin.Number = 300
+	// p.Amount = 8000
+	// p.Skip = 18446744073709551615
 	// //p.Skip = 18446744073709551615
 	// p.Reverse = false
 	// p.Origin.Hash = common.Hash{} // 确保使用Number而不是Hash
@@ -1716,7 +1717,6 @@ func mutateBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.BlockHeade
 func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.GetBlockBodiesPacket, chain *eth.Chain) *eth.GetBlockBodiesPacket {
 	mutated := *original
 
-	// 各字段有30%的概率进行变异
 	if rand.Float32() < 0.5 {
 		switch mutator.RandChoice(4) {
 		case 0:
@@ -1887,7 +1887,6 @@ func mutateNewPooledTransactionHashesPacket(mutator *fuzzing.Mutator, original *
 func mutateGetPooledTransactionsPacket(mutator *fuzzing.Mutator, original *eth.GetPooledTransactionsPacket, chain *eth.Chain) *eth.GetPooledTransactionsPacket {
 	mutated := *original
 
-	// 50%的概率变异请求内容
 	if rand.Float32() < 0.5 {
 		request := *original.GetPooledTransactionsRequest
 
@@ -2002,7 +2001,6 @@ func mutatePooledTransactionsPacket(mutator *fuzzing.Mutator, original *eth.Pool
 func mutateGetReceiptsPacket(mutator *fuzzing.Mutator, original *eth.GetReceiptsPacket, chain *eth.Chain) *eth.GetReceiptsPacket {
 	mutated := *original
 
-	// 各字段有30%的概率进行变异
 	if rand.Float32() < 0.5 {
 		switch mutator.RandChoice(4) {
 		case 0:
