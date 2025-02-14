@@ -24,8 +24,6 @@ import (
 	"net"
 	"unsafe"
 
-	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
-	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/snap"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -343,45 +341,41 @@ func (m *Mutator) MutateRequestId(id *uint64) {
 	}
 }
 
-// MutateOrigin 变异区块头的Origin字段
-func (m *Mutator) MutateOrigin(origin *eth.HashOrNumber, amount uint64, skip uint64, reverse bool, chain *eth.Chain) {
-	// 简单地生成一个随机区块号
-	origin.Number = uint64(m.Rand(int(chain.Len()) * 2)) // 允许超出链长度
-	origin.Hash = common.Hash{}                          // 清空Hash，使用Number
+// RandUint64 生成随机uint64值
+func (m *Mutator) RandUint64() uint64 {
+	// 使用两次 Rand 调用来生成完整的 uint64
+	high := uint64(m.Rand(1<<31)) << 32
+	low := uint64(m.Rand(1 << 32))
+	return high | low
 }
 
-// MutateAmount 变异区块头请求的Amount字段
-func (m *Mutator) MutateAmount(amount *uint64, origin uint64, skip uint64, reverse bool, chain *eth.Chain) {
-	switch m.Rand(3) {
-	case 0:
-		// 生成一个较小的值
-		*amount = uint64(m.Rand(100)) + 1
-	case 1:
-		// 生成一个较大的值
-		*amount = uint64(m.Rand(10000)) + 100
-	case 2:
-		// 边界值
-		*amount = uint64(m.Rand(2)) // 0 或 1
+// MutateHash 变异哈希值
+func (m *Mutator) MutateHash() common.Hash {
+	var hash common.Hash
+	rand := make([]byte, common.HashLength)
+	for i := range rand {
+		rand[i] = byte(m.Rand(256))
 	}
+	copy(hash[:], rand)
+	return hash
 }
 
-// MutateSkip 变异区块头请求的Skip字段
-func (m *Mutator) MutateSkip(skip *uint64, chain *eth.Chain) {
-	switch m.Rand(3) {
-	case 0:
-		// 小值
-		*skip = uint64(m.Rand(10))
-	case 1:
-		// 大值
-		*skip = uint64(m.Rand(1000)) + 100
-	case 2:
-		// 极端值
-		if m.Bool() {
-			*skip = 0
-		} else {
-			*skip = ^uint64(0) // 最大值
-		}
+// RandRange 在指定范围内生成随机数
+func (m *Mutator) RandRange(min, max uint64) uint64 {
+	if min >= max {
+		return min
 	}
+	return min + uint64(m.Rand(int(max-min)))
+}
+
+// RandChoice 从几个选项中随机选择
+func (m *Mutator) RandChoice(n int) int {
+	return m.Rand(n)
+}
+
+// MaxUint64 返回uint64的最大值
+func (m *Mutator) MaxUint64() uint64 {
+	return ^uint64(0)
 }
 
 // MutateReverse 变异区块头请求的Reverse字段
@@ -389,112 +383,17 @@ func (m *Mutator) MutateReverse(reverse *bool) {
 	*reverse = !*reverse // 保持简单的翻转即可
 }
 
-// MutateBlockBodiesRequest 变异区块体请求的哈希列表
-func (m *Mutator) MutateBlockBodiesRequest(request *eth.GetBlockBodiesRequest, chain *eth.Chain) {
-	switch m.Rand(4) {
-	case 0:
-		// 空列表
-		*request = eth.GetBlockBodiesRequest{}
-
-	case 1:
-		// 随机选择1-5个有效哈希
-		count := m.Rand(5) + 1
-		hashes := make(eth.GetBlockBodiesRequest, 0, count)
-		blocks := chain.Blocks()
-		for i := 0; i < count; i++ {
-			if len(blocks) > 0 {
-				idx := m.Rand(len(blocks))
-				hashes = append(hashes, blocks[idx].Hash())
-			}
-		}
-		*request = hashes
-
-	case 2:
-		// 生成1-5个随机哈希
-		count := m.Rand(5) + 1
-		hashes := make(eth.GetBlockBodiesRequest, 0, count)
-		for i := 0; i < count; i++ {
-			var hash common.Hash
-			hashBytes := make([]byte, common.HashLength)
-			m.MutateBytes(&hashBytes)
-			copy(hash[:], hashBytes)
-			hashes = append(hashes, hash)
-		}
-		*request = hashes
-
-	case 3:
-		// 混合有效和无效哈希
-		count := m.Rand(5) + 1
-		hashes := make(eth.GetBlockBodiesRequest, 0, count)
-		blocks := chain.Blocks()
-		for i := 0; i < count; i++ {
-			if m.Bool() && len(blocks) > 0 {
-				idx := m.Rand(len(blocks))
-				hashes = append(hashes, blocks[idx].Hash())
-			} else {
-				var hash common.Hash
-				hashBytes := make([]byte, common.HashLength)
-				m.MutateBytes(&hashBytes)
-				copy(hash[:], hashBytes)
-				hashes = append(hashes, hash)
-			}
-		}
-		*request = hashes
+// GenerateRandomHashes 生成指定数量的随机哈希
+func (m *Mutator) GenerateRandomHashes(count int) []common.Hash {
+	hashes := make([]common.Hash, 0, count)
+	for i := 0; i < count; i++ {
+		var hash common.Hash
+		hashBytes := make([]byte, common.HashLength)
+		m.MutateBytes(&hashBytes)
+		copy(hash[:], hashBytes)
+		hashes = append(hashes, hash)
 	}
-}
-
-// MutateReceiptsRequest 变异收据请求的哈希列表
-func (m *Mutator) MutateReceiptsRequest(request *eth.GetReceiptsRequest, chain *eth.Chain) {
-	switch m.Rand(4) {
-	case 0:
-		// 空列表
-		*request = eth.GetReceiptsRequest{}
-
-	case 1:
-		// 随机选择1-5个有效哈希
-		count := m.Rand(5) + 1
-		hashes := make(eth.GetReceiptsRequest, 0, count)
-		blocks := chain.Blocks()
-		for i := 0; i < count; i++ {
-			if len(blocks) > 0 {
-				idx := m.Rand(len(blocks))
-				hashes = append(hashes, blocks[idx].Hash())
-			}
-		}
-		*request = hashes
-
-	case 2:
-		// 生成1-5个随机哈希
-		count := m.Rand(5) + 1
-		hashes := make(eth.GetReceiptsRequest, 0, count)
-		for i := 0; i < count; i++ {
-			var hash common.Hash
-			hashBytes := make([]byte, common.HashLength)
-			m.MutateBytes(&hashBytes)
-			copy(hash[:], hashBytes)
-			hashes = append(hashes, hash)
-		}
-		*request = hashes
-
-	case 3:
-		// 混合有效和无效哈希
-		count := m.Rand(5) + 1
-		hashes := make(eth.GetReceiptsRequest, 0, count)
-		blocks := chain.Blocks()
-		for i := 0; i < count; i++ {
-			if m.Bool() && len(blocks) > 0 {
-				idx := m.Rand(len(blocks))
-				hashes = append(hashes, blocks[idx].Hash())
-			} else {
-				var hash common.Hash
-				hashBytes := make([]byte, common.HashLength)
-				m.MutateBytes(&hashBytes)
-				copy(hash[:], hashBytes)
-				hashes = append(hashes, hash)
-			}
-		}
-		*request = hashes
-	}
+	return hashes
 }
 
 func (m *Mutator) MutateTransaction(original *types.Transaction) *types.Transaction {
@@ -902,10 +801,6 @@ func (m *Mutator) MutateTotalDifficulty() *big.Int {
 	return new(big.Int).SetUint64(uint64(m.r.Int63n(1000000)))
 }
 
-func (m *Mutator) MutateHash() common.Hash {
-	return common.BytesToHash(m.RandBytes(32))
-}
-
 func (m *Mutator) MutateForkID() forkid.ID {
 	var hash [4]byte
 	binary.BigEndian.PutUint32(hash[:], uint32(m.r.Uint64()))
@@ -913,73 +808,6 @@ func (m *Mutator) MutateForkID() forkid.ID {
 	return forkid.ID{
 		Hash: hash,
 		Next: uint64(m.r.Int63n(1000000)),
-	}
-}
-
-// MutatePooledTransactionsRequest 变异交易池请求的哈希列表
-func (m *Mutator) MutatePooledTransactionsRequest(request *eth.GetPooledTransactionsRequest, chain *eth.Chain) {
-	switch m.Rand(4) {
-	case 0:
-		// 空列表
-		*request = eth.GetPooledTransactionsRequest{}
-
-	case 1:
-		// 随机选择1-5个有效哈希
-		blocks := chain.Blocks() // 使用区块中的交易
-		if len(blocks) == 0 {
-			// 如果没有区块，生成随机哈希
-			count := m.Rand(5) + 1
-			hashes := make(eth.GetPooledTransactionsRequest, count)
-			for i := 0; i < count; i++ {
-				hashes[i] = m.MutateHash()
-			}
-			*request = hashes
-			return
-		}
-
-		count := m.Rand(5) + 1
-		hashes := make(eth.GetPooledTransactionsRequest, count)
-		for i := 0; i < count; i++ {
-			if len(blocks) > 0 {
-				block := blocks[m.Rand(len(blocks))]
-				txs := block.Transactions()
-				if len(txs) > 0 {
-					hashes[i] = txs[m.Rand(len(txs))].Hash()
-				} else {
-					hashes[i] = m.MutateHash()
-				}
-			}
-		}
-		*request = hashes
-
-	case 2:
-		// 生成1-5个随机哈希
-		count := m.Rand(5) + 1
-		hashes := make(eth.GetPooledTransactionsRequest, count)
-		for i := 0; i < count; i++ {
-			hashes[i] = m.MutateHash()
-		}
-		*request = hashes
-
-	case 3:
-		// 混合有效和无效哈希
-		blocks := chain.Blocks()
-		count := m.Rand(5) + 1
-		hashes := make(eth.GetPooledTransactionsRequest, count)
-		for i := 0; i < count; i++ {
-			if m.Bool() && len(blocks) > 0 {
-				block := blocks[m.Rand(len(blocks))]
-				txs := block.Transactions()
-				if len(txs) > 0 {
-					hashes[i] = txs[m.Rand(len(txs))].Hash()
-				} else {
-					hashes[i] = m.MutateHash()
-				}
-			} else {
-				hashes[i] = m.MutateHash()
-			}
-		}
-		*request = hashes
 	}
 }
 
@@ -1098,60 +926,21 @@ func (m *Mutator) MutateSnapHashes() []common.Hash {
 	return hashes
 }
 
-// MutateSnapTrieNodePaths 变异 TrieNodePathSet 数组
-func (m *Mutator) MutateSnapTrieNodePaths() []snap.TrieNodePathSet {
-	// 控制路径集合的数量在合理范围内 (1-32)
-	pathSetCount := m.Rand(32) + 1
-	paths := make([]snap.TrieNodePathSet, pathSetCount)
+// GenerateByteArrays 生成二维字节数组
+func (m *Mutator) GenerateByteArrays(outerMin, outerMax, innerMin, innerMax int) [][]byte {
+	// 生成外层数组的长度
+	count := m.RandRange(uint64(outerMin), uint64(outerMax))
+	arrays := make([][]byte, count)
 
-	for i := 0; i < pathSetCount; i++ {
-		// 每个路径集合包含 1-4 个路径
-		pathCount := m.Rand(4) + 1
-		paths[i] = make([][]byte, pathCount)
-
-		for j := 0; j < pathCount; j++ {
-			// 每个路径的长度在 1-64 字节之间
-			pathLen := m.Rand(64) + 1
-			path := make([]byte, pathLen)
-			m.FillBytes(&path)
-			paths[i][j] = path
-		}
+	for i := uint64(0); i < count; i++ {
+		// 生成内层数组的长度
+		pathLen := m.RandRange(uint64(innerMin), uint64(innerMax))
+		path := make([]byte, pathLen)
+		m.FillBytes(&path)
+		arrays[i] = path
 	}
 
-	return paths
-}
-
-// MutateBlockHashElement 变异区块哈希公告中的随机元素
-func (m *Mutator) MutateBlockHashElement(packet *eth.NewBlockHashesPacket) {
-	if len(*packet) > 0 {
-		idx := m.Rand(len(*packet))
-		if m.Bool() {
-			// 变异哈希
-			(*packet)[idx].Hash = m.MutateHash()
-		} else {
-			// 变异区块号
-			(*packet)[idx].Number = uint64(m.Rand(1000000))
-		}
-	}
-}
-
-// AddBlockHashElement 添加新的区块哈希公告元素
-func (m *Mutator) AddBlockHashElement(packet *eth.NewBlockHashesPacket) {
-	*packet = append(*packet, struct {
-		Hash   common.Hash
-		Number uint64
-	}{
-		Hash:   m.MutateHash(),
-		Number: uint64(m.Rand(1000000)),
-	})
-}
-
-// RemoveBlockHashElement 删除随机的区块哈希公告元素
-func (m *Mutator) RemoveBlockHashElement(packet *eth.NewBlockHashesPacket) {
-	if len(*packet) > 1 {
-		idx := m.Rand(len(*packet))
-		*packet = append((*packet)[:idx], (*packet)[idx+1:]...)
-	}
+	return arrays
 }
 
 // MutateBlockHeader 变异区块头
@@ -1188,8 +977,8 @@ func (m *Mutator) MutateBlockHeader(header *types.Header) {
 	}
 }
 
-// AddBlockHeader 添加新的区块头
-func (m *Mutator) AddBlockHeader(headers *eth.BlockHeadersRequest, chain *eth.Chain) {
+// MutateHeader 生成一个变异的区块头数据
+func (m *Mutator) MutateHeader() *types.Header {
 	newHeader := &types.Header{
 		ParentHash:  m.MutateHash(),
 		UncleHash:   m.MutateHash(),
@@ -1197,20 +986,12 @@ func (m *Mutator) AddBlockHeader(headers *eth.BlockHeadersRequest, chain *eth.Ch
 		Root:        m.MutateHash(),
 		TxHash:      m.MutateHash(),
 		ReceiptHash: m.MutateHash(),
-		Number:      new(big.Int).SetUint64(uint64(m.Rand(1000000))),
-		GasLimit:    uint64(m.Rand(1000000)),
-		Time:        uint64(m.Rand(1000000)),
+		Number:      new(big.Int).SetUint64(m.RandRange(0, 1000000)),
+		GasLimit:    m.RandRange(0, 1000000),
+		Time:        m.RandRange(0, 1000000),
 	}
-	newHeader.GasUsed = uint64(m.Rand(int(newHeader.GasLimit)))
-	*headers = append(*headers, newHeader)
-}
-
-// RemoveBlockHeader 删除随机的区块头
-func (m *Mutator) RemoveBlockHeader(headers *eth.BlockHeadersRequest) {
-	if len(*headers) > 1 {
-		idx := m.Rand(len(*headers))
-		*headers = append((*headers)[:idx], (*headers)[idx+1:]...)
-	}
+	newHeader.GasUsed = m.RandRange(0, newHeader.GasLimit)
+	return newHeader
 }
 
 // MutateAddress 生成随机的以太坊地址
@@ -1221,69 +1002,6 @@ func (m *Mutator) MutateAddress() common.Address {
 	m.MutateBytes(&addrBytes)
 	copy(addr[:], addrBytes)
 	return addr
-}
-
-// MutateBlockBody 变异区块体
-func (m *Mutator) MutateBlockBody(body *eth.BlockBody) {
-	// 变异交易列表
-	if m.Bool() && len(body.Transactions) > 0 {
-		// 变异随机交易
-		idx := m.Rand(len(body.Transactions))
-		body.Transactions[idx] = m.MutateTransaction(body.Transactions[idx])
-	}
-
-	// 变异叔块列表
-	if m.Bool() && len(body.Uncles) > 0 {
-		// 变异随机叔块头
-		idx := m.Rand(len(body.Uncles))
-		m.MutateBlockHeader(body.Uncles[idx])
-	}
-
-	// 变异提款列表（如果存在）
-	if m.Bool() && len(body.Withdrawals) > 0 {
-		// 变异随机提款
-		idx := m.Rand(len(body.Withdrawals))
-		m.MutateWithdrawal(body.Withdrawals[idx])
-	}
-}
-
-// AddBlockBody 添加新的区块体
-func (m *Mutator) AddBlockBody(bodies *eth.BlockBodiesResponse) {
-	// 创建新的区块体
-	newBody := &eth.BlockBody{
-		Transactions: make([]*types.Transaction, m.Rand(5)+1), // 1-5个交易
-		Uncles:       make([]*types.Header, m.Rand(2)),        // 0-1个叔块
-		Withdrawals:  make([]*types.Withdrawal, m.Rand(3)),    // 0-2个提款
-	}
-
-	// 填充交易
-	for i := range newBody.Transactions {
-		newBody.Transactions[i] = m.MutateTransaction(nil)
-	}
-
-	// 填充叔块
-	for i := range newBody.Uncles {
-		uncle := &types.Header{}
-		m.MutateBlockHeader(uncle)
-		newBody.Uncles[i] = uncle
-	}
-
-	// 填充提款
-	for i := range newBody.Withdrawals {
-		withdrawal := &types.Withdrawal{}
-		m.MutateWithdrawal(withdrawal)
-		newBody.Withdrawals[i] = withdrawal
-	}
-
-	*bodies = append(*bodies, newBody)
-}
-
-// RemoveBlockBody 删除随机的区块体
-func (m *Mutator) RemoveBlockBody(bodies *eth.BlockBodiesResponse) {
-	if len(*bodies) > 1 {
-		idx := m.Rand(len(*bodies))
-		*bodies = append((*bodies)[:idx], (*bodies)[idx+1:]...)
-	}
 }
 
 // MutateWithdrawal 变异提款数据
@@ -1328,47 +1046,14 @@ func (m *Mutator) MutateNewBlock(block *types.Block) {
 	}
 }
 
-// MutatePooledTransactionHash 变异交易哈希
-func (m *Mutator) MutatePooledTransactionHash(hashes *eth.NewPooledTransactionHashesPacket) {
-	if len(hashes.Hashes) > 0 {
-		idx := m.Rand(len(hashes.Hashes))
-		hashes.Hashes[idx] = m.MutateHash()
-	}
+// AddPooledTransaction 生成一个新的变异交易
+func (m *Mutator) AddPooledTransaction() *types.Transaction {
+	return m.MutateTransaction(nil)
 }
 
-// AddPooledTransactionHash 添加新的交易哈希
-func (m *Mutator) AddPooledTransactionHash(hashes *eth.NewPooledTransactionHashesPacket) {
-	hashes.Hashes = append(hashes.Hashes, m.MutateHash())
-}
-
-// RemovePooledTransactionHash 删除随机的交易哈希
-func (m *Mutator) RemovePooledTransactionHash(hashes *eth.NewPooledTransactionHashesPacket) {
-	if len(hashes.Hashes) > 1 {
-		idx := m.Rand(len(hashes.Hashes))
-		hashes.Hashes = append(hashes.Hashes[:idx], hashes.Hashes[idx+1:]...)
-	}
-}
-
-// MutatePooledTransaction 变异交易池中的随机交易
-func (m *Mutator) MutatePooledTransaction(txs *eth.PooledTransactionsResponse) {
-	if len(*txs) > 0 {
-		idx := m.Rand(len(*txs))
-		(*txs)[idx] = m.MutateTransaction((*txs)[idx])
-	}
-}
-
-// AddPooledTransaction 添加新的交易到交易池
-func (m *Mutator) AddPooledTransaction(txs *eth.PooledTransactionsResponse) {
-	newTx := m.MutateTransaction(nil)
-	*txs = append(*txs, newTx)
-}
-
-// RemovePooledTransaction 从交易池中删除随机交易
-func (m *Mutator) RemovePooledTransaction(txs *eth.PooledTransactionsResponse) {
-	if len(*txs) > 1 {
-		idx := m.Rand(len(*txs))
-		*txs = append((*txs)[:idx], (*txs)[idx+1:]...)
-	}
+// RemovePooledTransaction 生成要删除的交易索引
+func (m *Mutator) RemovePooledTransaction(length int) int {
+	return m.Rand(length)
 }
 
 // MutateReceipt 变异收据中的随机字段
@@ -1393,16 +1078,12 @@ func (m *Mutator) MutateReceipt(receipt *types.Receipt) {
 	}
 }
 
-// MutateReceiptResponse 变异收据响应中的随机收据
-func (m *Mutator) MutateReceiptResponse(receipts *eth.ReceiptsResponse) {
-	if len(*receipts) > 0 {
-		idx := m.Rand(len(*receipts))
-		m.MutateReceipt((*receipts)[idx][0])
-	}
+func (m *Mutator) MutateReceiptResponse(length int) int {
+	return m.Rand(length)
 }
 
-// AddReceipt 添加新的收据
-func (m *Mutator) AddReceipt(receipts *eth.ReceiptsResponse) {
+// AddReceipt 生成一个新的变异收据
+func (m *Mutator) AddReceipt() *types.Receipt {
 	newReceipt := &types.Receipt{
 		Status:            uint64(m.Rand(2)),
 		CumulativeGasUsed: uint64(m.Rand(1000000)),
@@ -1411,25 +1092,20 @@ func (m *Mutator) AddReceipt(receipts *eth.ReceiptsResponse) {
 		ContractAddress:   m.MutateAddress(),
 	}
 	newReceipt.GasUsed = uint64(m.Rand(int(newReceipt.CumulativeGasUsed + 1)))
-	*receipts = append(*receipts, []*types.Receipt{newReceipt})
+	return newReceipt
 }
 
-// RemoveReceipt 删除随机收据
-func (m *Mutator) RemoveReceipt(receipts *eth.ReceiptsResponse) {
-	if len(*receipts) > 1 {
-		idx := m.Rand(len(*receipts))
-		*receipts = append((*receipts)[:idx], (*receipts)[idx+1:]...)
-	}
+// RemoveReceipt 生成要删除的收据索引
+func (m *Mutator) RemoveReceipt(length int) int {
+	return m.Rand(length)
 }
 
-// MutateAccountData 变异单个账户数据
-func (m *Mutator) MutateAccountData(account *snap.AccountData) {
-	if m.Bool() {
-		account.Hash = m.MutateHash()
-	}
-	if m.Bool() {
-		account.Body = m.MutateRawValue()
-	}
+// MutateRawValue 生成随机字节数组
+func (m *Mutator) MutateRawValue() []byte {
+	length := m.RandRange(0, 1024) // 随机长度，最大1KB
+	value := make([]byte, length)
+	m.FillBytes(&value) // 使用 FillBytes 替代 Rand.Read
+	return value
 }
 
 // MutateAccountProof 变异账户证明
@@ -1438,81 +1114,6 @@ func (m *Mutator) MutateAccountProof(proof *[][]byte) {
 		// 变异随机证明节点
 		idx := m.Rand(len(*proof))
 		m.MutateBytes(&(*proof)[idx])
-	}
-}
-
-// AddAccountData 添加新的账户数据
-func (m *Mutator) AddAccountData(accounts *[]*snap.AccountData) {
-	newAccount := &snap.AccountData{
-		Hash: m.MutateHash(),
-		Body: m.MutateRawValue(),
-	}
-	*accounts = append(*accounts, newAccount)
-}
-
-// RemoveAccountData 删除随机账户数据
-func (m *Mutator) RemoveAccountData(accounts *[]*snap.AccountData) {
-	if len(*accounts) > 1 {
-		idx := m.Rand(len(*accounts))
-		*accounts = append((*accounts)[:idx], (*accounts)[idx+1:]...)
-	}
-}
-
-// MutateRawValue 生成随机的 RLP 编码值
-func (m *Mutator) MutateRawValue() rlp.RawValue {
-	// 生成随机长度的字节数组 (4-128字节)
-	length := m.Rand(124) + 4
-	value := make([]byte, length)
-
-	// 填充随机字节
-	m.FillBytes(&value)
-
-	// 转换为 RLP 编码值
-	return rlp.RawValue(value)
-}
-
-// MutateStorageData 变异单个存储数据
-func (m *Mutator) MutateStorageData(storage *snap.StorageData) {
-	if m.Bool() {
-		storage.Hash = m.MutateHash()
-	}
-	if m.Bool() {
-		m.MutateBytes(&storage.Body)
-	}
-}
-
-// MutateStorageSlots 变异存储槽列表中的随机存储槽
-func (m *Mutator) MutateStorageSlots(slots *[][]*snap.StorageData) {
-	if len(*slots) > 0 {
-		accountIdx := m.Rand(len(*slots))
-		if len((*slots)[accountIdx]) > 0 {
-			slotIdx := m.Rand(len((*slots)[accountIdx]))
-			m.MutateStorageData((*slots)[accountIdx][slotIdx])
-		}
-	}
-}
-
-// AddStorageSlot 添加新的存储槽
-func (m *Mutator) AddStorageSlot(slots *[][]*snap.StorageData) {
-	if len(*slots) > 0 {
-		accountIdx := m.Rand(len(*slots))
-		newSlot := &snap.StorageData{
-			Hash: m.MutateHash(),
-			Body: m.MutateRawValue(),
-		}
-		(*slots)[accountIdx] = append((*slots)[accountIdx], newSlot)
-	}
-}
-
-// RemoveStorageSlot 删除随机存储槽
-func (m *Mutator) RemoveStorageSlot(slots *[][]*snap.StorageData) {
-	if len(*slots) > 0 {
-		accountIdx := m.Rand(len(*slots))
-		if len((*slots)[accountIdx]) > 1 {
-			slotIdx := m.Rand(len((*slots)[accountIdx]))
-			(*slots)[accountIdx] = append((*slots)[accountIdx][:slotIdx],
-				(*slots)[accountIdx][slotIdx+1:]...)
-		}
 	}
 }
 

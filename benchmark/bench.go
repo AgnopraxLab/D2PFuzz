@@ -182,19 +182,19 @@ func getSnapPacketType(packetType string) int {
 	switch packetType {
 	case "GetAccountRange":
 		return snap.GetAccountRangeMsg // 0x00
-	case "AccountRangeMsg":
+	case "AccountRange":
 		return snap.AccountRangeMsg // 0x01
-	case "GetStorageRangesMsg":
+	case "GetStorageRanges":
 		return snap.GetStorageRangesMsg // 0x02
-	case "StorageRangesMsg":
+	case "StorageRanges":
 		return snap.StorageRangesMsg // 0x03
-	case "GetByteCodesMsg":
+	case "GetByteCodes":
 		return snap.GetByteCodesMsg // 0x04
-	case "ByteCodesMsg":
+	case "ByteCodes":
 		return snap.ByteCodesMsg // 0x05
-	case "GetTrieNodesMsg":
+	case "GetTrieNodes":
 		return snap.GetTrieNodesMsg // 0x06
-	case "TrieNodesMsg ":
+	case "TrieNodes ":
 		return snap.TrieNodesMsg // 0x07
 	default:
 		return -1
