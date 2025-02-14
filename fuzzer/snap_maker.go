@@ -1217,7 +1217,7 @@ func mutateAccountRangePacket(mutator *fuzzing.Mutator, original *snap.AccountRa
 		if mutator.Bool() {
 			account.Body = mutator.MutateRawValue()
 		}
-		account := mutated.Accounts[idx]
+		account = mutated.Accounts[idx]
 
 		if mutator.Bool() {
 			account.Hash = mutator.MutateHash()
@@ -1234,7 +1234,7 @@ func mutateAccountRangePacket(mutator *fuzzing.Mutator, original *snap.AccountRa
 			Body: mutator.MutateRawValue(),
 		}
 		mutated.Accounts = append(mutated.Accounts, newAccount)
-		newAccount := &snap.AccountData{
+		newAccount = &snap.AccountData{
 			Hash: mutator.MutateHash(),
 			Body: mutator.MutateRawValue(),
 		}
