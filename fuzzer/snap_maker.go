@@ -70,6 +70,8 @@ type snapPacketTestResult struct {
 	Response     snap.Packet
 	Valid        bool
 	Error        string `json:"error"`
+
+	DiffCode []int // 新增差分编码字段
 }
 
 func NewSnapMaker(targetDir string, chain string) *SnapMaker {
@@ -121,84 +123,98 @@ func (m *SnapMaker) ToSubTest() *stJSON {
 }
 
 func (m *SnapMaker) PacketStart(traceOutput io.Writer, seed snap.Packet, stats *UDPPacketStats) error {
-
 	var (
-		wg      sync.WaitGroup
-		logger  *log.Logger
-		mu      sync.Mutex
-		results []snapPacketTestResult
+		wg     sync.WaitGroup
+		logger *log.Logger
+		mu     sync.Mutex
 	)
+
+	if len(m.SuiteList) == 0 {
+		return fmt.Errorf("empty suite list")
+	}
 
 	if traceOutput != nil {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
 	}
 
 	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
+	results := make([][]snapPacketTestResult, len(m.SuiteList))
 	currentSeed := seed
 
-	if err := m.SuiteList[0].SetupSnapConn(); err != nil {
-		return fmt.Errorf("failed to setup connection: %v", err)
+	for i := 0; i < len(m.SuiteList); i++ {
+		if err := m.SuiteList[i].SetupSnapConn(); err != nil {
+			return fmt.Errorf("failed to setup connection: %v", err)
+		}
+		defer m.SuiteList[i].Conn().Close()
+		results[i] = make([]snapPacketTestResult, 0)
 	}
-	defer m.SuiteList[0].Conn().Close()
 
-	for i := 0; i < MutateCount; i++ {
+	for i := 1; i <= MutateCount; i++ {
 		wg.Add(1)
+		fmt.Printf("Start Mutate count: %d\n", i)
 
 		mutateSeed := cloneAndMutateSnapPacket(mutator, currentSeed)
 		//mutateSeed := seed
-		go func(iteration int, currentReq snap.Packet, packetStats *UDPPacketStats) {
-			defer wg.Done()
+		for j := 0; j < len(m.SuiteList); j++ {
+			go func(currentReq snap.Packet, packetStats *UDPPacketStats) {
+				defer wg.Done()
 
-			result := snapPacketTestResult{
-				PacketID:    iteration,
-				RequestType: fmt.Sprintf("%d", currentReq.Kind()),
-				Request:     currentReq,
-			}
-
-			result.CheckResults = m.checkRequestSemantics(currentReq, m.SuiteList[0].Chain())
-			result.Check = allTrue(result.CheckResults)
-
-			// 发送并等待响应
-			resp, err, success, valid := m.handlePacketWithResponse(currentReq, m.SuiteList[0])
-			if err != "" {
-				result.Error = err
-				result.Success = false
-				result.Valid = false
-			} else {
-				result.Response = resp
-				result.Success = success
-				result.Valid = valid
-			}
-
-			if result.Check { // 语义检查正确
-				if !result.Success { // 没有收到响应
-					mu.Lock()
-					packetStats.CheckTrueFail = packetStats.CheckTrueFail + 1
-					results = append(results, result)
-					mu.Unlock()
-				} else if result.Valid { // 收到有效响应
-					mu.Lock()
-					packetStats.CheckTruePass = packetStats.CheckTruePass + 1
-					results = append(results, result)
-					mu.Unlock()
+				result := snapPacketTestResult{
+					PacketID:    i,
+					RequestType: fmt.Sprintf("%d", currentReq.Kind()),
+					Request:     currentReq,
 				}
-			} else { // 语义检查错误
-				if result.Success { // 收到响应
-					if result.Valid { // 响应有效
+
+				result.CheckResults = m.checkRequestSemantics(currentReq, m.SuiteList[0].Chain())
+				result.Check = allTrue(result.CheckResults)
+
+				// 发送并等待响应
+				resp, err, success, valid := m.handlePacketWithResponse(currentReq, m.SuiteList[j])
+				if err != "" {
+					result.Error = err
+					result.Success = false
+					result.Valid = false
+				} else {
+					result.Response = resp
+					result.Success = success
+					result.Valid = valid
+				}
+
+				// different testing for clients
+				result.DiffCode = snapRespToInts(resp)
+
+				fmt.Printf("Client: %d, DiffCodeState: %v\n", j, result.DiffCode)
+
+				if result.Check { // 语义检查正确
+					if !result.Success { // 没有收到响应
 						mu.Lock()
-						packetStats.CheckFalsePassOK = packetStats.CheckFalsePassOK + 1
-						results = append(results, result)
+						packetStats.CheckTrueFail = packetStats.CheckTrueFail + 1
+						results[j] = append(results[j], result)
 						mu.Unlock()
-					} else { // 响应无效
+					} else if result.Valid { // 收到有效响应
 						mu.Lock()
-						packetStats.CheckFalsePassBad = packetStats.CheckFalsePassBad + 1
-						results = append(results, result)
+						packetStats.CheckTruePass = packetStats.CheckTruePass + 1
+						results[j] = append(results[j], result)
 						mu.Unlock()
 					}
+				} else { // 语义检查错误
+					if result.Success { // 收到响应
+						if result.Valid { // 响应有效
+							mu.Lock()
+							packetStats.CheckFalsePassOK = packetStats.CheckFalsePassOK + 1
+							results[j] = append(results[j], result)
+							mu.Unlock()
+						} else { // 响应无效
+							mu.Lock()
+							packetStats.CheckFalsePassBad = packetStats.CheckFalsePassBad + 1
+							results[j] = append(results[j], result)
+							mu.Unlock()
+						}
+					}
 				}
-			}
 
-		}(i, mutateSeed, stats)
+			}(mutateSeed, stats)
+		}
 		currentSeed = mutateSeed
 		time.Sleep(PacketSleepTime)
 	}
@@ -207,7 +223,10 @@ func (m *SnapMaker) PacketStart(traceOutput io.Writer, seed snap.Packet, stats *
 
 	// 分析结果
 	if SaveFlag {
-		analyzeResultsSnap(results, logger, OutputDir)
+		for i, result := range results {
+			nodeOutputDir := filepath.Join(OutputDir, fmt.Sprintf("node_%d", i))
+			analyzeResultsSnap(result, logger, nodeOutputDir)
+		}
 	}
 
 	return nil

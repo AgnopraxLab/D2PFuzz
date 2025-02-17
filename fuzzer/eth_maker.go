@@ -131,14 +131,15 @@ func (m *EthMaker) ToSubTest() *stJSON {
 }
 
 func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UDPPacketStats) error {
-	if len(m.SuiteList) == 0 {
-		return fmt.Errorf("empty suite list")
-	}
 	var (
 		wg     sync.WaitGroup
 		logger *log.Logger
 		mu     sync.Mutex
 	)
+
+	if len(m.SuiteList) == 0 {
+		return fmt.Errorf("empty suite list")
+	}
 
 	if traceOutput != nil {
 		logger = log.New(traceOutput, "TRACE: ", log.Ldate|log.Ltime|log.Lmicroseconds)
@@ -200,7 +201,9 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 				}
 
 				// different testing for clients
-				result.DiffCode = encodeRespToInts(resp)
+				result.DiffCode = ethRespToInts(resp)
+
+				fmt.Printf("Client: %d, DiffCodeState: %v\n", j, result.DiffCode)
 
 				if result.Check { // 语义检查正确
 					if !result.Success { // 没有收到响应
@@ -1642,6 +1645,7 @@ func mutateTransactionsPacket(mutator *fuzzing.Mutator, original *eth.Transactio
 func mutateGetBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.GetBlockHeadersPacket, chain *eth.Chain) *eth.GetBlockHeadersPacket {
 	mutated := *original
 
+	mutator.MutateRequestId(&mutated.RequestId)
 	// 各字段有30%的概率进行变异
 	if rand.Float32() < 0.3 {
 		// 简单地生成一个随机区块号
@@ -1734,6 +1738,7 @@ func mutateBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.BlockHeade
 func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.GetBlockBodiesPacket, chain *eth.Chain) *eth.GetBlockBodiesPacket {
 	mutated := *original
 
+	mutator.MutateRequestId(&mutated.RequestId)
 	if rand.Float32() < 0.5 {
 		switch mutator.RandChoice(4) {
 		case 0:
@@ -2017,6 +2022,8 @@ func mutatePooledTransactionsPacket(mutator *fuzzing.Mutator, original *eth.Pool
 
 func mutateGetReceiptsPacket(mutator *fuzzing.Mutator, original *eth.GetReceiptsPacket, chain *eth.Chain) *eth.GetReceiptsPacket {
 	mutated := *original
+
+	mutator.MutateRequestId(&mutated.RequestId)
 
 	if rand.Float32() < 0.5 {
 		switch mutator.RandChoice(4) {

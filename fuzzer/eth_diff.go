@@ -20,16 +20,17 @@ import (
 	"encoding/binary"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
+	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/snap"
 )
 
 // Response type constants
 const (
-	NoResponse    = -1 // No response
-	EmptyResponse = 0  // Empty response
+	NoResponse    = -3 // No response
+	EmptyResponse = -2 // Empty response
 )
 
-// encodeRespToInts encodes response packet into integer array
-func encodeRespToInts(resp eth.Packet) []int {
+// ethRespToInts encodes response packet into integer array
+func ethRespToInts(resp eth.Packet) []int {
 	if resp == nil {
 		return []int{NoResponse}
 	}
@@ -41,7 +42,7 @@ func encodeRespToInts(resp eth.Packet) []int {
 			return []int{EmptyResponse}
 		}
 
-		code := make([]int, 6)
+		code := make([]int, 5)
 
 		// [0]: RequestId
 		code[0] = int(msg.RequestId)
@@ -95,7 +96,14 @@ func encodeRespToInts(resp eth.Packet) []int {
 		}
 		code[3] = uncleCount
 
-		// [4]: Combined transaction hash
+		// [4]: Total withdrawals count
+		withdrawalCount := 0
+		for _, body := range bodies {
+			withdrawalCount += len(body.Withdrawals)
+		}
+		code[4] = withdrawalCount
+
+		// [5]: Combined transaction hash
 		if txCount > 0 {
 			txHashSum := make([]byte, 32)
 			for _, body := range bodies {
@@ -106,7 +114,7 @@ func encodeRespToInts(resp eth.Packet) []int {
 					}
 				}
 			}
-			code[4] = int(binary.BigEndian.Uint32(txHashSum[:4]))
+			code[5] = int(binary.BigEndian.Uint32(txHashSum[:4]))
 		}
 
 		return code
@@ -117,7 +125,7 @@ func encodeRespToInts(resp eth.Packet) []int {
 			return []int{EmptyResponse}
 		}
 
-		code := make([]int, 6)
+		code := make([]int, 4)
 
 		// [0]: RequestId
 		code[0] = int(msg.RequestId)
@@ -141,6 +149,68 @@ func encodeRespToInts(resp eth.Packet) []int {
 		}
 		code[3] = logCount
 
+		return code
+	}
+
+	return []int{NoResponse}
+}
+
+// snapRespToInts encodes response packet into integer array
+func snapRespToInts(resp snap.Packet) []int {
+	if resp == nil {
+		return []int{NoResponse}
+	}
+
+	switch msg := resp.(type) {
+	case *snap.AccountRangePacket:
+		code := make([]int, 4)
+		code[0] = int(msg.ID)
+		code[1] = len(msg.Accounts)
+		code[2] = len(msg.Proof)
+
+		totalSize := 0
+		for _, acc := range msg.Accounts {
+			totalSize += len(acc.Body)
+		}
+		code[3] = totalSize
+		return code
+
+	case *snap.StorageRangesPacket:
+		code := make([]int, 4)
+		code[0] = int(msg.ID)
+
+		// 计算所有账户的存储槽总数
+		totalSlots := 0
+		for _, slots := range msg.Slots {
+			totalSlots += len(slots)
+		}
+		code[1] = len(msg.Slots) // 账户数量
+		code[2] = totalSlots     // 总存储槽数量
+		code[3] = len(msg.Proof) // 证明大小
+		return code
+
+	case *snap.ByteCodesPacket:
+		code := make([]int, 3)
+		code[0] = int(msg.ID)
+		code[1] = len(msg.Codes)
+
+		totalSize := 0
+		for _, bytecode := range msg.Codes {
+			totalSize += len(bytecode)
+		}
+		code[2] = totalSize
+		return code
+
+	case *snap.TrieNodesPacket:
+		code := make([]int, 3)
+		code[0] = int(msg.ID)
+		code[1] = len(msg.Nodes)
+
+		totalSize := 0
+		for _, node := range msg.Nodes {
+			totalSize += len(node)
+		}
+		code[2] = totalSize
 		return code
 	}
 
