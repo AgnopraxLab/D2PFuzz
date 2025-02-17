@@ -78,6 +78,8 @@ type ethPacketTestResult struct {
 	Response     eth.Packet
 	Valid        bool
 	Error        string `json:"error"`
+
+	DiffCode []int // 新增差分编码字段
 }
 
 func NewEthMaker(targetDir string, chain string) *EthMaker {
@@ -129,11 +131,13 @@ func (m *EthMaker) ToSubTest() *stJSON {
 }
 
 func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UDPPacketStats) error {
+	if len(m.SuiteList) == 0 {
+		return fmt.Errorf("empty suite list")
+	}
 	var (
-		wg      sync.WaitGroup
-		logger  *log.Logger
-		mu      sync.Mutex
-		results []ethPacketTestResult
+		wg     sync.WaitGroup
+		logger *log.Logger
+		mu     sync.Mutex
 	)
 
 	if traceOutput != nil {
@@ -141,83 +145,93 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 	}
 
 	mutator := fuzzing.NewMutator(rand.New(rand.NewSource(time.Now().UnixNano())))
+	results := make([][]ethPacketTestResult, len(m.SuiteList))
 	currentSeed := seed
 
 	// Only three 'get' message types need special connection handling
 	if seed.Kind() == eth.GetBlockHeadersMsg ||
 		seed.Kind() == eth.GetBlockBodiesMsg ||
 		seed.Kind() == eth.GetReceiptsMsg {
-		if err := m.SuiteList[0].SetupConn(); err != nil {
-			return fmt.Errorf("failed to setup connection: %v", err)
+		for i := 0; i < len(m.SuiteList); i++ {
+			if err := m.SuiteList[i].SetupConn(); err != nil {
+				return fmt.Errorf("failed to setup connection: %v", err)
+			}
+			defer m.SuiteList[i].Conn().Close()
+			results[i] = make([]ethPacketTestResult, 0)
 		}
-		defer m.SuiteList[0].Conn().Close()
 	}
 
-	for i := 0; i < MutateCount; i++ {
+	for i := 1; i <= MutateCount; i++ {
 		//for i := 0; i < 1; i++ {
 		wg.Add(1)
+		fmt.Printf("Start Mutate count: %d\n", i)
 
 		mutateSeed := cloneAndMutateEthPacket(mutator, currentSeed, m.SuiteList[0].Chain())
 		//mutateSeed := seed
-		go func(iteration int, currentReq eth.Packet, packetStats *UDPPacketStats) {
-			defer wg.Done()
+		for j := 0; j < len(m.SuiteList); j++ {
+			go func(currentReq eth.Packet, packetStats *UDPPacketStats) {
+				defer wg.Done()
 
-			result := ethPacketTestResult{
-				PacketID:    iteration,
-				RequestType: fmt.Sprintf("%d", currentReq.Kind()),
-				Request:     currentReq,
-			}
+				result := ethPacketTestResult{
+					PacketID:    i,
+					RequestType: fmt.Sprintf("%d", currentReq.Kind()),
+					Request:     currentReq,
+				}
 
-			result.CheckResults = m.checkRequestSemantics(currentReq, m.SuiteList[0].Chain())
-			result.Check = allTrue(result.CheckResults)
+				result.CheckResults = m.checkRequestSemantics(currentReq, m.SuiteList[0].Chain())
+				result.Check = allTrue(result.CheckResults)
 
-			// 发送并等待响应
-			resp, success, valid, err := m.handlePacketWithResponse(currentReq, m.SuiteList[0])
-			if err != nil {
-				result.Error = err.Error()
-				result.Success = false
-				result.Valid = false
-			} else {
-				result.Response = resp
-				if currentReq.Kind() == eth.StatusMsg {
-					// Status 包使用 handlePacketWithResponse 返回的 success
-					result.Success = success
+				// 发送并等待响应
+				resp, success, valid, err := m.handlePacketWithResponse(currentReq, m.SuiteList[j])
+				if err != nil {
+					result.Error = err.Error()
+					result.Success = false
+					result.Valid = false
 				} else {
-					// 修改：只有在有响应时才设置 Success 为 true
-					result.Success = (resp != nil)
+					result.Response = resp
+					if currentReq.Kind() == eth.StatusMsg {
+						// Status 包使用 handlePacketWithResponse 返回的 success
+						result.Success = success
+					} else {
+						// 修改：只有在有响应时才设置 Success 为 true
+						result.Success = (resp != nil)
+					}
+					result.Valid = valid
 				}
-				result.Valid = valid
-			}
 
-			if result.Check { // 语义检查正确
-				if !result.Success { // 没有收到响应
-					mu.Lock()
-					packetStats.CheckTrueFail = packetStats.CheckTrueFail + 1
-					results = append(results, result)
-					mu.Unlock()
-				} else if result.Valid { // 收到有效响应
-					mu.Lock()
-					packetStats.CheckTruePass = packetStats.CheckTruePass + 1
-					results = append(results, result)
-					mu.Unlock()
-				}
-			} else { // 语义检查错误
-				if result.Success { // 收到响应
-					if result.Valid { // 响应有效
+				// different testing for clients
+				result.DiffCode = encodeRespToInts(resp)
+
+				if result.Check { // 语义检查正确
+					if !result.Success { // 没有收到响应
 						mu.Lock()
-						packetStats.CheckFalsePassOK = packetStats.CheckFalsePassOK + 1
-						results = append(results, result)
+						packetStats.CheckTrueFail = packetStats.CheckTrueFail + 1
+						results[j] = append(results[j], result)
 						mu.Unlock()
-					} else { // 响应无效
+					} else if result.Valid { // 收到有效响应
 						mu.Lock()
-						packetStats.CheckFalsePassBad = packetStats.CheckFalsePassBad + 1
-						results = append(results, result)
+						packetStats.CheckTruePass = packetStats.CheckTruePass + 1
+						results[j] = append(results[j], result)
 						mu.Unlock()
 					}
+				} else { // 语义检查错误
+					if result.Success { // 收到响应
+						if result.Valid { // 响应有效
+							mu.Lock()
+							packetStats.CheckFalsePassOK = packetStats.CheckFalsePassOK + 1
+							results[j] = append(results[j], result)
+							mu.Unlock()
+						} else { // 响应无效
+							mu.Lock()
+							packetStats.CheckFalsePassBad = packetStats.CheckFalsePassBad + 1
+							results[j] = append(results[j], result)
+							mu.Unlock()
+						}
+					}
 				}
-			}
 
-		}(i, mutateSeed, stats)
+			}(mutateSeed, stats)
+		}
 		currentSeed = mutateSeed
 		time.Sleep(PacketSleepTime)
 	}
@@ -226,7 +240,10 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 
 	// 分析结果
 	if SaveFlag {
-		analyzeResultsEth(results, logger, OutputDir)
+		for i, result := range results {
+			nodeOutputDir := filepath.Join(OutputDir, fmt.Sprintf("node_%d", i))
+			analyzeResultsEth(result, logger, nodeOutputDir)
+		}
 	}
 
 	return nil

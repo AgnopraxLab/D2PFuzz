@@ -147,6 +147,7 @@ func (s *Suite) ReadMsg(proto Proto, code uint64, msg interface{}) error {
 	}
 }
 
+// Original Write
 func (c *Conn) Write(proto Proto, code uint64, msg any) error {
 	c.SetWriteDeadline(time.Now().Add(timeout))
 	payload, err := rlp.EncodeToBytes(msg)
@@ -180,6 +181,21 @@ func (s *Suite) SendMsg(proto Proto, code uint64, msg interface{}) error {
 		fmt.Println(">>> 错误: 连接未建立")
 		return errors.New("connection not established")
 	}
+
+	// 只对非 Status 消息进行变异
+	// if code != StatusMsg {
+	// 	// 变异协议类型 (在 baseProto, ethProto, snapProto 中选择)
+	// 	if fuzzing.RandBool() {
+	// 		protos := []Proto{baseProto, ethProto, snapProto}
+	// 		proto = protos[fuzzing.RandIntRange(0, len(protos)-1)]
+	// 	}
+
+	// 	// 变异消息码 (在有效的消息码范围内选择)
+	// 	if fuzzing.RandBool() {
+	// 		// eth 协议的有效消息码范围是 0x00-0x10
+	// 		code = uint64(fuzzing.RandIntRange(0, 0x10))
+	// 	}
+	// }
 
 	err := s.conn.Write(proto, code, msg)
 	if err != nil {

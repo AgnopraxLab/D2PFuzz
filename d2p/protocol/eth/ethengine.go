@@ -3,13 +3,14 @@ package eth
 import (
 	"bytes"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/golang-jwt/jwt/v4"
 	"io"
 	"net/http"
 	"os"
 	"path"
 	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/golang-jwt/jwt/v4"
 )
 
 // EngineClient is a wrapper around engine-related data.
