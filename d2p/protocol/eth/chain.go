@@ -125,6 +125,10 @@ func blocksFromFile(chainfile string, gblock *types.Block) ([]*types.Block, erro
 		} else if err != nil {
 			return nil, fmt.Errorf("at block index %d: %v", i, err)
 		}
+		if b.NumberU64() == 0 {
+			i--
+			continue
+		}
 		if b.NumberU64() != uint64(i+1) {
 			return nil, fmt.Errorf("block at index %d has wrong number %d", i, b.NumberU64())
 		}
