@@ -704,14 +704,14 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 	}
 
 	// 4. 等待交易确认
-	if err := m.SuiteList[0].SetupConn(); err != nil {
+	if err := suite.SetupConn(); err != nil {
 		return ethPacketTestResult{
 			Error:   fmt.Errorf("failed to setup connection: %v", err).Error(),
 			Success: false,
 			Valid:   false,
 		}
 	}
-	defer m.SuiteList[0].Conn().Close()
+	defer suite.Conn().Close()
 
 	// Modify: Correctly construct GetPooledTransactionsPacket
 	request := eth.GetPooledTransactionsRequest(hashes) // Convert hashes to GetPooledTransactionsRequest type
@@ -721,7 +721,7 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 	}
 
 	// Use new request to replace original request
-	if err := m.SuiteList[0].Conn().Write(eth.EthProto, eth.GetPooledTransactionsMsg, newRequest); err != nil {
+	if err := suite.Conn().Write(eth.EthProto, eth.GetPooledTransactionsMsg, newRequest); err != nil {
 		return ethPacketTestResult{
 			Error:   fmt.Errorf("could not write to conn: %v", err).Error(),
 			Success: false,
@@ -730,7 +730,7 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 	}
 	// Check that all received transactions match those that were sent to node.
 	msg := new(eth.PooledTransactionsPacket)
-	if err := m.SuiteList[0].Conn().ReadMsg(eth.EthProto, eth.PooledTransactionsMsg, &msg); err != nil {
+	if err := suite.Conn().ReadMsg(eth.EthProto, eth.PooledTransactionsMsg, &msg); err != nil {
 		return ethPacketTestResult{
 			Error:   fmt.Errorf("error reading from connection: %v", err).Error(),
 			Success: false,
@@ -879,10 +879,10 @@ func (m *EthMaker) handlePacketWithResponse(req eth.Packet, suite *eth.Suite) (e
 		result := m.handleGetReceiptsPacket(p, suite)
 		return result.Response, result.Success, result.Valid, nil
 	default:
-		if err := m.SuiteList[0].SetupConn(); err != nil {
+		if err := suite.SetupConn(); err != nil {
 			return nil, false, false, fmt.Errorf("failed to setup connection: %v", err)
 		}
-		defer m.SuiteList[0].Conn().Close()
+		defer suite.Conn().Close()
 		err := m.handleSendOnlyPacket(p, suite)
 		return nil, false, false, err
 	}
