@@ -308,22 +308,28 @@ loop:
 		switch code {
 		case StatusMsg + protoOffset(ethProto):
 			msg := new(StatusPacket)
+			fmt.Println("pass dail")
 			if err := rlp.DecodeBytes(data, &msg); err != nil {
 				return fmt.Errorf("error decoding status packet: %w", err)
 			}
+			fmt.Println("pass 1")
 			if have, want := msg.Head, chain.blocks[chain.Len()-1].Hash(); have != want {
 				return fmt.Errorf("wrong head block in status, want:  %#x (block %d) have %#x",
 					want, chain.blocks[chain.Len()-1].NumberU64(), have)
 			}
+			fmt.Println("pass 2")
 			if have, want := msg.TD.Cmp(chain.TD()), 0; have != want {
 				return fmt.Errorf("wrong TD in status: have %v want %v", have, want)
 			}
+			fmt.Println("pass 3")
 			if have, want := msg.ForkID, chain.ForkID(); !reflect.DeepEqual(have, want) {
 				return fmt.Errorf("wrong fork ID in status: have %v, want %v", have, want)
 			}
+			fmt.Println("pass 4")
 			if have, want := msg.ProtocolVersion, c.ourHighestProtoVersion; have != uint32(want) {
 				return fmt.Errorf("wrong protocol version: have %v, want %v", have, want)
 			}
+			fmt.Println("pass 5")
 			break loop
 		case discMsg:
 			var msg []p2p.DiscReason

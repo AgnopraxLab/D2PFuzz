@@ -132,7 +132,6 @@ func (m *EthMaker) ToSubTest() *stJSON {
 
 func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UDPPacketStats) error {
 	var (
-		wg     sync.WaitGroup
 		logger *log.Logger
 		mu     sync.Mutex
 	)
@@ -149,7 +148,12 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 	results := make([][]ethPacketTestResult, len(m.SuiteList))
 	currentSeed := seed
 
-	// Only three 'get' message types need special connection handling
+	// 初始化 results 数组
+	for i := range results {
+		results[i] = make([]ethPacketTestResult, 0)
+	}
+
+	// 特殊连接处理
 	if seed.Kind() == eth.GetBlockHeadersMsg ||
 		seed.Kind() == eth.GetBlockBodiesMsg ||
 		seed.Kind() == eth.GetReceiptsMsg {
@@ -158,19 +162,19 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 				return fmt.Errorf("failed to setup connection: %v", err)
 			}
 			defer m.SuiteList[i].Conn().Close()
-			results[i] = make([]ethPacketTestResult, 0)
 		}
 	}
 
 	for i := 1; i <= MutateCount; i++ {
-		//for i := 0; i < 1; i++ {
-		wg.Add(1)
 		fmt.Printf("Start Mutate count: %d\n", i)
-
 		mutateSeed := cloneAndMutateEthPacket(mutator, currentSeed, m.SuiteList[0].Chain())
-		//mutateSeed := seed
+
+		// 创建一个新的 WaitGroup 用于当前迭代
+		var wg sync.WaitGroup
+		wg.Add(len(m.SuiteList)) // 在启动 goroutine 前添加计数
+
 		for j := 0; j < len(m.SuiteList); j++ {
-			go func(currentReq eth.Packet, packetStats *UDPPacketStats) {
+			go func(j int, currentReq eth.Packet, packetStats *UDPPacketStats) {
 				defer wg.Done()
 
 				result := ethPacketTestResult{
@@ -182,7 +186,6 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 				result.CheckResults = m.checkRequestSemantics(currentReq, m.SuiteList[0].Chain())
 				result.Check = allTrue(result.CheckResults)
 
-				// 发送并等待响应
 				resp, success, valid, err := m.handlePacketWithResponse(currentReq, m.SuiteList[j])
 				if err != nil {
 					result.Error = err.Error()
@@ -191,55 +194,45 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 				} else {
 					result.Response = resp
 					if currentReq.Kind() == eth.StatusMsg {
-						// Status 包使用 handlePacketWithResponse 返回的 success
 						result.Success = success
 					} else {
-						// 修改：只有在有响应时才设置 Success 为 true
 						result.Success = (resp != nil)
 					}
 					result.Valid = valid
 				}
 
-				// different testing for clients
 				result.DiffCode = ethRespToInts(resp)
-
 				fmt.Printf("Client: %d, DiffCodeState: %v\n", j, result.DiffCode)
 
-				if result.Check { // 语义检查正确
-					if !result.Success { // 没有收到响应
-						mu.Lock()
-						packetStats.CheckTrueFail = packetStats.CheckTrueFail + 1
+				mu.Lock()
+				if result.Check {
+					if !result.Success {
+						packetStats.CheckTrueFail++
 						results[j] = append(results[j], result)
-						mu.Unlock()
-					} else if result.Valid { // 收到有效响应
-						mu.Lock()
-						packetStats.CheckTruePass = packetStats.CheckTruePass + 1
+					} else if result.Valid {
+						packetStats.CheckTruePass++
 						results[j] = append(results[j], result)
-						mu.Unlock()
 					}
-				} else { // 语义检查错误
-					if result.Success { // 收到响应
-						if result.Valid { // 响应有效
-							mu.Lock()
-							packetStats.CheckFalsePassOK = packetStats.CheckFalsePassOK + 1
+				} else {
+					if result.Success {
+						if result.Valid {
+							packetStats.CheckFalsePassOK++
 							results[j] = append(results[j], result)
-							mu.Unlock()
-						} else { // 响应无效
-							mu.Lock()
-							packetStats.CheckFalsePassBad = packetStats.CheckFalsePassBad + 1
+						} else {
+							packetStats.CheckFalsePassBad++
 							results[j] = append(results[j], result)
-							mu.Unlock()
 						}
 					}
 				}
-
-			}(mutateSeed, stats)
+				mu.Unlock()
+			}(j, mutateSeed, stats)
 		}
+
+		// 等待当前迭代的所有 goroutine 完成
+		wg.Wait()
 		currentSeed = mutateSeed
 		time.Sleep(PacketSleepTime)
 	}
-
-	wg.Wait()
 
 	// 分析结果
 	if SaveFlag {
