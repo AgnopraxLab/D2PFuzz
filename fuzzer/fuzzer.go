@@ -39,6 +39,7 @@ var (
 	globalV4Stats  = make(map[string]*UDPPacketStats)
 	globalV5Stats  = make(map[string]*UDPPacketStats)
 	globalEthStats = make(map[string]*UDPPacketStats)
+	StateCoverage  = []int{} // State coverage
 )
 
 type UDPPacketStats struct {
@@ -373,6 +374,23 @@ func ethFuzzer(engine int, target, chain string) error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
+	// Create coverage recording file
+	coveragePath := filepath.Join(OutputDir, "eth")
+	if err := os.MkdirAll(coveragePath, 0755); err != nil {
+		fmt.Printf("Failed to create directory: %v\n", err)
+	}
+
+	// Use CSV format for easier processing
+	coverageFilename := filepath.Join(coveragePath, fmt.Sprintf("%s-coverage.csv", time.Now().Format("2006-01-02_15-04-05")))
+	coverageFile, err := os.OpenFile(coverageFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("Failed to create coverage file: %v\n", err)
+	} else {
+		defer coverageFile.Close()
+		// Write CSV header
+		coverageFile.WriteString("time_s,coverage\n")
+	}
+
 	// Ensure resources are cleaned up when function returns
 	defer func() {
 		testMaker.SuiteList[0].Close()
@@ -400,7 +418,6 @@ func ethFuzzer(engine int, target, chain string) error {
 		traceFile = setupTrace(finalName)
 		defer traceFile.Close()
 	}
-	var err error
 
 	fmt.Println("Eth protocol Fuzzing start!!!")
 	if engine == 1 {
@@ -444,6 +461,21 @@ func ethFuzzer(engine int, target, chain string) error {
 					fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
 						name, stats.ExecuteCount, stats.CheckTrueFail, stats.CheckFalsePass, stats.CheckTruePass)
 				}
+
+				// Record runtime and coverage (as floating point seconds)
+				runtimeSec := float64(time.Since(startTime).Milliseconds()) / 1000.0
+				coverageInfo := fmt.Sprintf("%.3f,%d\n", runtimeSec, len(StateCoverage))
+
+				// Print to console with a more user-friendly format
+				fmt.Printf("[%s] Runtime: %.3f seconds, State coverage: %d\n",
+					time.Now().Format("2006-01-02 15:04:05"),
+					runtimeSec,
+					len(StateCoverage))
+
+				if coverageFile != nil {
+					coverageFile.WriteString(coverageInfo)
+				}
+
 				itration = itration + 1
 			}
 		}
@@ -611,4 +643,24 @@ func saveSnapPacketSeed(testMaker *SnapMaker) {
 		return
 	}
 	fmt.Printf("Seeds saved to: %s\n", filename)
+}
+
+// updateCoverage 检查并更新覆盖率
+func updateCoverage(states *[]int, diffCode []int) {
+	if len(diffCode) == 0 {
+		return
+	}
+
+	lastState := diffCode[len(diffCode)-1]
+
+	// 检查状态是否已经存在
+	for _, state := range *states {
+		if state == lastState {
+			return
+		}
+	}
+
+	// 添加新状态
+	*states = append(*states, lastState)
+	return
 }

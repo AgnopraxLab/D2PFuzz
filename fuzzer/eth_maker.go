@@ -40,11 +40,12 @@ import (
 )
 
 var (
-	ethoptions = []int{eth.StatusMsg, eth.NewBlockHashesMsg, eth.TransactionsMsg, eth.GetBlockHeadersMsg,
-		eth.BlockHeadersMsg, eth.GetBlockBodiesMsg, eth.BlockBodiesMsg, eth.NewBlockMsg,
-		eth.NewPooledTransactionHashesMsg, eth.GetPooledTransactionsMsg, eth.PooledTransactionsMsg,
-		eth.GetReceiptsMsg, eth.ReceiptsMsg}
-	ethstate = []int{eth.StatusMsg, eth.GetReceiptsMsg}
+	// ethoptions = []int{eth.StatusMsg, eth.NewBlockHashesMsg, eth.TransactionsMsg, eth.GetBlockHeadersMsg,
+	// 	eth.BlockHeadersMsg, eth.GetBlockBodiesMsg, eth.BlockBodiesMsg, eth.NewBlockMsg,
+	// 	eth.NewPooledTransactionHashesMsg, eth.GetPooledTransactionsMsg, eth.PooledTransactionsMsg,
+	// 	eth.GetReceiptsMsg, eth.ReceiptsMsg}
+	ethoptions = []int{eth.GetBlockHeadersMsg, eth.GetBlockBodiesMsg, eth.GetReceiptsMsg}
+	ethstate   = []int{eth.StatusMsg, eth.GetReceiptsMsg}
 )
 
 type EthMaker struct {
@@ -205,6 +206,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 				fmt.Printf("Client: %d, DiffCodeState: %v\n", j, result.DiffCode)
 
 				mu.Lock()
+				updateCoverage(&StateCoverage, result.DiffCode)
 				if result.Check {
 					if !result.Success {
 						packetStats.CheckTrueFail++
@@ -489,8 +491,8 @@ func (m *EthMaker) handleTransactionPacket(p *eth.TransactionsPacket, suite *eth
 func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, suite *eth.Suite) ethPacketTestResult {
 
 	// 修改包内容进行测试
-	// p.Origin.Number = 300
-	// p.Amount = 8000
+	// p.Origin.Number = 2944
+	// p.Amount = 11
 	// p.Skip = 18446744073709551615
 	// //p.Skip = 18446744073709551615
 	// p.Reverse = false

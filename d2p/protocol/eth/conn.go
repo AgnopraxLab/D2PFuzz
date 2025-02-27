@@ -317,7 +317,7 @@ loop:
 				return fmt.Errorf("wrong head block in status, want:  %#x (block %d) have %#x",
 					want, chain.blocks[chain.Len()-1].NumberU64(), have)
 			}
-			fmt.Println("pass 2")
+			// fmt.Println("pass 2")
 			if have, want := msg.TD.Cmp(chain.TD()), 0; have != want {
 				return fmt.Errorf("wrong TD in status: have %v want %v", have, want)
 			}
