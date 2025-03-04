@@ -33,13 +33,20 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
+// PacketCoverage 存储特定包类型的覆盖率信息
+type PacketCoverage struct {
+	PacketType int   // 包类型
+	CountSet   []int // 包含的数量集合
+	DetailsSet []int // 详细信息集合（如区块编号等）
+}
+
 var (
 	outputDir      = "TraceOut"
 	EnvKey         = "FUZZYDIR"
 	globalV4Stats  = make(map[string]*UDPPacketStats)
 	globalV5Stats  = make(map[string]*UDPPacketStats)
 	globalEthStats = make(map[string]*UDPPacketStats)
-	StateCoverage  = []int{} // State coverage
+	StateCoverage  = []PacketCoverage{} // 状态覆盖率
 )
 
 type UDPPacketStats struct {
@@ -464,13 +471,14 @@ func ethFuzzer(engine int, target, chain string) error {
 
 				// Record runtime and coverage (as floating point seconds)
 				runtimeSec := float64(time.Since(startTime).Milliseconds()) / 1000.0
-				coverageInfo := fmt.Sprintf("%.3f,%d\n", runtimeSec, len(StateCoverage))
+				coverageTotal := GetTotalCoverage(StateCoverage)
+				coverageInfo := fmt.Sprintf("%.3f,%d\n", runtimeSec, coverageTotal)
 
 				// Print to console with a more user-friendly format
 				fmt.Printf("[%s] Runtime: %.3f seconds, State coverage: %d\n",
 					time.Now().Format("2006-01-02 15:04:05"),
 					runtimeSec,
-					len(StateCoverage))
+					coverageTotal)
 
 				if coverageFile != nil {
 					coverageFile.WriteString(coverageInfo)
@@ -606,6 +614,15 @@ func snapFuzzer(engine int, target, chain string) error {
 					fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
 						name, stats.ExecuteCount, stats.CheckTrueFail, stats.CheckFalsePass, stats.CheckTruePass)
 				}
+
+				// 添加覆盖率显示
+				runtimeSec := float64(time.Since(startTime).Milliseconds()) / 1000.0
+				coverageTotal := GetTotalCoverage(StateCoverage)
+				fmt.Printf("[%s] Runtime: %.3f seconds, State coverage: %d\n",
+					time.Now().Format("2006-01-02 15:04:05"),
+					runtimeSec,
+					coverageTotal)
+
 				itration = itration + 1
 			}
 		}
@@ -646,21 +663,92 @@ func saveSnapPacketSeed(testMaker *SnapMaker) {
 }
 
 // updateCoverage 检查并更新覆盖率
-func updateCoverage(states *[]int, diffCode []int) {
-	if len(diffCode) == 0 {
+func updateCoverage(states *[]PacketCoverage, diffCode []int) {
+	// 如果差分编码为空或无效，则不处理
+	if len(diffCode) <= 1 {
 		return
 	}
 
-	lastState := diffCode[len(diffCode)-1]
+	// 忽略特殊状态码
+	if diffCode[0] == NoResponse || diffCode[0] == EmptyResponse {
+		return
+	}
 
-	// 检查状态是否已经存在
-	for _, state := range *states {
-		if state == lastState {
-			return
+	packetType := diffCode[0]
+
+	// 查找是否已存在该包类型的覆盖率记录
+	var coverage *PacketCoverage
+	var coverageIndex int
+
+	for i := range *states {
+		if (*states)[i].PacketType == packetType {
+			coverage = &(*states)[i]
+			coverageIndex = i
+			break
 		}
 	}
 
-	// 添加新状态
-	*states = append(*states, lastState)
-	return
+	// 如果不存在该包类型的记录，创建新记录
+	if coverage == nil {
+		newCoverage := PacketCoverage{
+			PacketType: packetType,
+			CountSet:   []int{},
+			DetailsSet: []int{},
+		}
+		*states = append(*states, newCoverage)
+		coverage = &(*states)[len(*states)-1]
+		coverageIndex = len(*states) - 1
+	}
+
+	// 如果有数量信息（至少有2个元素）
+	if len(diffCode) >= 2 {
+		count := diffCode[1]
+
+		// 检查是否已存在该数量，不存在则添加
+		countExists := false
+		for _, c := range coverage.CountSet {
+			if c == count {
+				countExists = true
+				break
+			}
+		}
+
+		if !countExists {
+			(*states)[coverageIndex].CountSet = append((*states)[coverageIndex].CountSet, count)
+		}
+
+		// 处理详细信息（从第3个元素开始）
+		if len(diffCode) > 2 {
+			for i := 2; i < len(diffCode); i++ {
+				detail := diffCode[i]
+
+				// 检查是否已存在该详细信息，不存在则添加
+				detailExists := false
+				for _, d := range coverage.DetailsSet {
+					if d == detail {
+						detailExists = true
+						break
+					}
+				}
+
+				if !detailExists {
+					(*states)[coverageIndex].DetailsSet = append((*states)[coverageIndex].DetailsSet, detail)
+				}
+			}
+		}
+	}
+}
+
+// GetTotalCoverage 计算总覆盖率
+func GetTotalCoverage(coverage []PacketCoverage) int {
+	total := 0
+	for _, cov := range coverage {
+		// 包类型本身算一个
+		total++
+		// 加上不同的数量
+		total += len(cov.CountSet)
+		// 加上不同的详细信息
+		total += len(cov.DetailsSet)
+	}
+	return total
 }

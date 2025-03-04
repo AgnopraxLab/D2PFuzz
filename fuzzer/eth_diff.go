@@ -25,12 +25,13 @@ import (
 
 // Response type constants
 const (
-	NoResponse    = -3 // No response
-	EmptyResponse = -2 // Empty response
+	NoResponse    = -1 // No response
+	EmptyResponse = 0  // Empty response
 )
 
-// ethRespToInts encodes response packet into integer array
+// ethRespToInts 将响应包编码为整数数组，用于状态覆盖率分析
 func ethRespToInts(resp eth.Packet) []int {
+	// 如果没有响应，返回特定状态码
 	if resp == nil {
 		return []int{NoResponse}
 	}
@@ -38,124 +39,138 @@ func ethRespToInts(resp eth.Packet) []int {
 	switch msg := resp.(type) {
 	case *eth.BlockHeadersPacket:
 		headers := msg.BlockHeadersRequest
+
+		// 如果响应为空，返回空响应状态码
 		if len(headers) == 0 {
 			return []int{EmptyResponse}
 		}
 
-		code := make([]int, 5)
+		// 第一个字段：包类型
+		code := []int{eth.BlockHeadersMsg}
 
-		// [0]: RequestId
-		code[0] = int(msg.RequestId)
+		// 第二个字段：返回的区块头数量
+		code = append(code, len(headers))
 
-		// [1]: Number of headers
-		code[1] = len(headers)
-
-		// [2]: Starting block number
-		code[2] = int(headers[0].Number.Uint64())
-
-		// [3]: Ending block number
-		code[3] = int(headers[len(headers)-1].Number.Uint64())
-
-		// [4]: Combined hash of all headers (first 4 bytes)
-		hashSum := headers[0].Hash().Bytes()
-		for _, h := range headers[1:] {
-			hash := h.Hash().Bytes()
-			for i := range hashSum {
-				hashSum[i] ^= hash[i%len(hash)]
-			}
+		// 后续字段：每个区块头的编号作为唯一标识符
+		for _, header := range headers {
+			code = append(code, int(header.Number.Uint64()))
 		}
-		code[4] = int(binary.BigEndian.Uint32(hashSum[:4]))
 
 		return code
 
 	case *eth.BlockBodiesPacket:
 		bodies := msg.BlockBodiesResponse
+
 		if len(bodies) == 0 {
 			return []int{EmptyResponse}
 		}
 
-		code := make([]int, 6)
+		// 第一个字段：包类型
+		code := []int{eth.BlockBodiesMsg}
 
-		// [0]: RequestId
-		code[0] = int(msg.RequestId)
+		// 第二个字段：区块体数量
+		code = append(code, len(bodies))
 
-		// [1]: Number of bodies
-		code[1] = len(bodies)
-
-		// [2]: Total transaction count
-		txCount := 0
+		// 为每个区块体添加唯一标识信息
 		for _, body := range bodies {
-			txCount += len(body.Transactions)
-		}
-		code[2] = txCount
-
-		// [3]: Total uncle count
-		uncleCount := 0
-		for _, body := range bodies {
-			uncleCount += len(body.Uncles)
-		}
-		code[3] = uncleCount
-
-		// [4]: Total withdrawals count
-		withdrawalCount := 0
-		for _, body := range bodies {
-			withdrawalCount += len(body.Withdrawals)
-		}
-		code[4] = withdrawalCount
-
-		// [5]: Combined transaction hash
-		if txCount > 0 {
-			txHashSum := make([]byte, 32)
-			for _, body := range bodies {
-				for _, tx := range body.Transactions {
-					txHash := tx.Hash().Bytes()
-					for i := range txHashSum {
-						txHashSum[i] ^= txHash[i%len(txHash)]
-					}
-				}
+			// 添加每个交易的 nonce 值作为唯一标识符
+			for _, tx := range body.Transactions {
+				// 假设 Nonce 是 uint64 类型
+				code = append(code, int(tx.Nonce()))
 			}
-			code[5] = int(binary.BigEndian.Uint32(txHashSum[:4]))
+			for _, uncle := range body.Uncles {
+				code = append(code, int(uncle.Number.Uint64()))
+			}
+			for _, withdrawal := range body.Withdrawals {
+				code = append(code, int(withdrawal.Index))
+			}
 		}
 
 		return code
 
 	case *eth.ReceiptsPacket:
 		receipts := msg.ReceiptsResponse
+
 		if len(receipts) == 0 {
 			return []int{EmptyResponse}
 		}
 
-		code := make([]int, 4)
+		// 第一个字段：包类型
+		code := []int{eth.ReceiptsMsg}
 
-		// [0]: RequestId
-		code[0] = int(msg.RequestId)
+		// 第二个字段：收据批次数量
+		code = append(code, len(receipts))
 
-		// [1]: Number of receipt batches
-		code[1] = len(receipts)
-
-		// [2]: Total receipt count
-		receiptCount := 0
-		for _, batch := range receipts {
-			receiptCount += len(batch)
-		}
-		code[2] = receiptCount
-
-		// [3]: Total log count
-		logCount := 0
+		// 添加每个收据的详细信息
 		for _, batch := range receipts {
 			for _, receipt := range batch {
-				logCount += len(receipt.Logs)
+				// 直接使用已有的uint64值
+				code = append(code, int(receipt.CumulativeGasUsed))
+
+				if len(receipt.Logs) > 0 {
+					code = append(code, len(receipt.Logs))
+				}
 			}
 		}
-		code[3] = logCount
 
 		return code
+
+	// 其他类型的响应包处理...
+	case *eth.StatusPacket:
+		return []int{eth.StatusMsg}
+
+	case *eth.NewBlockHashesPacket:
+		hashes := *msg
+		if len(hashes) == 0 {
+			return []int{EmptyResponse}
+		}
+
+		code := []int{eth.NewBlockHashesMsg, len(hashes)}
+
+		// 添加每个块的编号作为唯一标识符
+		for _, blockInfo := range hashes {
+			code = append(code, int(blockInfo.Number))
+		}
+
+		return code
+
+	case *eth.TransactionsPacket:
+		txs := *msg
+		if len(txs) == 0 {
+			return []int{EmptyResponse}
+		}
+
+		return []int{eth.TransactionsMsg, len(txs)}
+
+	case *eth.NewBlockPacket:
+		if msg.Block == nil {
+			return []int{EmptyResponse}
+		}
+
+		blockNum := int(msg.Block.NumberU64())
+		return []int{eth.NewBlockMsg, 1, blockNum}
+
+	case *eth.PooledTransactionsPacket:
+		txs := msg.PooledTransactionsResponse
+		if len(txs) == 0 {
+			return []int{EmptyResponse}
+		}
+
+		return []int{eth.PooledTransactionsMsg, len(txs)}
+
+	case *eth.NewPooledTransactionHashesPacket:
+		hashes := msg.Hashes
+		if len(hashes) == 0 {
+			return []int{EmptyResponse}
+		}
+
+		return []int{eth.NewPooledTransactionHashesMsg, len(hashes)}
 	}
 
 	return []int{NoResponse}
 }
 
-// snapRespToInts encodes response packet into integer array
+// snapRespToInts 将响应包编码为整数数组，用于状态覆盖率分析
 func snapRespToInts(resp snap.Packet) []int {
 	if resp == nil {
 		return []int{NoResponse}
@@ -163,54 +178,148 @@ func snapRespToInts(resp snap.Packet) []int {
 
 	switch msg := resp.(type) {
 	case *snap.AccountRangePacket:
-		code := make([]int, 4)
-		code[0] = int(msg.ID)
-		code[1] = len(msg.Accounts)
-		code[2] = len(msg.Proof)
+		// 如果账户列表为空
+		if len(msg.Accounts) == 0 {
+			return []int{EmptyResponse}
+		}
 
+		// 第一个字段：包类型
+		code := []int{snap.AccountRangeMsg}
+
+		// 第二个字段：账户数量
+		code = append(code, len(msg.Accounts))
+
+		// 第三个字段：证明大小
+		code = append(code, len(msg.Proof))
+
+		// 计算总数据大小
 		totalSize := 0
 		for _, acc := range msg.Accounts {
 			totalSize += len(acc.Body)
 		}
-		code[3] = totalSize
+		code = append(code, totalSize)
+
+		// 添加数据哈希特征（取哈希的前4字节转为整数）
+		if len(msg.Accounts) > 0 {
+			hashSum := make([]byte, 32)
+			for _, acc := range msg.Accounts {
+				// XOR account body bytes
+				for i, b := range acc.Body {
+					hashSum[i%len(hashSum)] ^= b
+				}
+			}
+			code = append(code, int(binary.BigEndian.Uint32(hashSum[:4])))
+		}
+
 		return code
 
 	case *snap.StorageRangesPacket:
-		code := make([]int, 4)
-		code[0] = int(msg.ID)
-
-		// 计算所有账户的存储槽总数
+		// 如果存储槽为空
 		totalSlots := 0
 		for _, slots := range msg.Slots {
 			totalSlots += len(slots)
 		}
-		code[1] = len(msg.Slots) // 账户数量
-		code[2] = totalSlots     // 总存储槽数量
-		code[3] = len(msg.Proof) // 证明大小
+
+		if len(msg.Slots) == 0 || totalSlots == 0 {
+			return []int{EmptyResponse}
+		}
+
+		// 第一个字段：包类型
+		code := []int{snap.StorageRangesMsg}
+
+		// 第二个字段：账户数量
+		code = append(code, len(msg.Slots))
+
+		// 第三个字段：总存储槽数
+		code = append(code, totalSlots)
+
+		// 第四个字段：证明大小
+		code = append(code, len(msg.Proof))
+
+		// 添加数据哈希特征
+		if totalSlots > 0 {
+			hashSum := make([]byte, 32)
+			for _, slots := range msg.Slots {
+				for _, slot := range slots {
+					// XOR slot hash and body bytes
+					hashBytes := slot.Hash.Bytes()
+					for i, b := range hashBytes {
+						hashSum[i%len(hashSum)] ^= b
+					}
+					for i, b := range slot.Body {
+						hashSum[i%len(hashSum)] ^= b
+					}
+				}
+			}
+			code = append(code, int(binary.BigEndian.Uint32(hashSum[:4])))
+		}
+
 		return code
 
 	case *snap.ByteCodesPacket:
-		code := make([]int, 3)
-		code[0] = int(msg.ID)
-		code[1] = len(msg.Codes)
+		// 如果字节码为空
+		if len(msg.Codes) == 0 {
+			return []int{EmptyResponse}
+		}
 
+		// 第一个字段：包类型
+		code := []int{snap.ByteCodesMsg}
+
+		// 第二个字段：字节码数量
+		code = append(code, len(msg.Codes))
+
+		// 计算总大小
 		totalSize := 0
 		for _, bytecode := range msg.Codes {
 			totalSize += len(bytecode)
 		}
-		code[2] = totalSize
+		code = append(code, totalSize)
+
+		// 添加字节码哈希特征
+		if len(msg.Codes) > 0 {
+			hashSum := make([]byte, 32)
+			for _, bytecode := range msg.Codes {
+				// XOR bytecode bytes
+				for i, b := range bytecode {
+					hashSum[i%len(hashSum)] ^= b
+				}
+			}
+			code = append(code, int(binary.BigEndian.Uint32(hashSum[:4])))
+		}
+
 		return code
 
 	case *snap.TrieNodesPacket:
-		code := make([]int, 3)
-		code[0] = int(msg.ID)
-		code[1] = len(msg.Nodes)
+		// 如果Trie节点为空
+		if len(msg.Nodes) == 0 {
+			return []int{EmptyResponse}
+		}
 
+		// 第一个字段：包类型
+		code := []int{snap.TrieNodesMsg}
+
+		// 第二个字段：节点数量
+		code = append(code, len(msg.Nodes))
+
+		// 计算总大小
 		totalSize := 0
 		for _, node := range msg.Nodes {
 			totalSize += len(node)
 		}
-		code[2] = totalSize
+		code = append(code, totalSize)
+
+		// 添加节点哈希特征
+		if len(msg.Nodes) > 0 {
+			hashSum := make([]byte, 32)
+			for _, node := range msg.Nodes {
+				// XOR node bytes
+				for i, b := range node {
+					hashSum[i%len(hashSum)] ^= b
+				}
+			}
+			code = append(code, int(binary.BigEndian.Uint32(hashSum[:4])))
+		}
+
 		return code
 	}
 
