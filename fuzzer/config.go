@@ -22,7 +22,7 @@ import (
 
 const (
 	SequenceLength  = 10
-	MutateCount     = 100
+	MutateCount     = 1000
 	OutputDir       = "./output"
 	SaveFlag        = false
 	PacketSleepTime = 10 * time.Millisecond // Single packet send and waiting time

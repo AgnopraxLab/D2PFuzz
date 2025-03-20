@@ -176,7 +176,7 @@ func (m *V5Maker) PacketStart(traceOutput io.Writer, seed discv5.Packet, stats *
 			}
 		}(i, mutateSeed, stats)
 		currentSeed = mutateSeed
-		time.Sleep(PacketSleepTime)
+		// time.Sleep(PacketSleepTime)
 	}
 
 	wg.Wait()

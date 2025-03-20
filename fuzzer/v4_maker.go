@@ -178,7 +178,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *
 		}(i, mutateSeed, stats)
 		currentSeed = mutateSeed
 		logger.Printf("================================================= Completed iteration %d =================================================", i+1)
-		time.Sleep(PacketSleepTime)
+		// time.Sleep(PacketSleepTime)
 	}
 
 	wg.Wait()
