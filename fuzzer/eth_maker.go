@@ -233,7 +233,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 		// 等待当前迭代的所有 goroutine 完成
 		wg.Wait()
 		currentSeed = mutateSeed
-		// time.Sleep(PacketSleepTime)
+		time.Sleep(PacketSleepTime)
 	}
 
 	// 分析结果

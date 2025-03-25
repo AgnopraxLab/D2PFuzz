@@ -190,7 +190,7 @@ func RunGenerate(protocol, targetDir, chainDir, ptype string) error {
 		}
 		fmt.Println(string(jsonData))
 
-		enpacket, _, _ := discv4.MutateEncode(client.GetPri(), packet)
+		enpacket, _, _ := discv4.Encode(client.GetPri(), packet)
 		fmt.Println(enpacket)
 		depacket, pubkey, hash, err := discv4.Decode(enpacket)
 		fmt.Println("packet:", depacket)

@@ -308,7 +308,7 @@ loop:
 		switch code {
 		case StatusMsg + protoOffset(ethProto):
 			msg := new(StatusPacket)
-			// fmt.Println("pass dail")		
+			// fmt.Println("pass dail")
 			if err := rlp.DecodeBytes(data, &msg); err != nil {
 				return fmt.Errorf("error decoding status packet: %w", err)
 			}

@@ -150,7 +150,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *
 		go func(iteration int, packetSeed discv4.Packet, packetStats *UDPPacketStats) {
 			defer wg.Done()
 
-			result := sendAndWaitResponse(m, m.TargetList[0], packetSeed, false, logger)
+			result := sendAndWaitResponse(m, m.TargetList[0], packetSeed, true, logger)
 			result.CheckResults = m.checkRequestSemantics(packetSeed)
 			result.Check = allTrue(result.CheckResults)
 			result.PacketID = i
@@ -178,7 +178,7 @@ func (m *V4Maker) PacketStart(traceOutput io.Writer, seed discv4.Packet, stats *
 		}(i, mutateSeed, stats)
 		currentSeed = mutateSeed
 		logger.Printf("================================================= Completed iteration %d =================================================", i+1)
-		// time.Sleep(PacketSleepTime)
+		time.Sleep(PacketSleepTime)
 	}
 
 	wg.Wait()
@@ -438,11 +438,12 @@ func sendAndWaitResponse(m *V4Maker, target *enode.Node, req discv4.Packet, hand
 	})
 
 	// Add mutate packet head
-	if handshake {
-		_ = m.Client.Send(target, req)
-	} else {
-		_ = m.Client.MutateSend(target, req)
-	}
+	// if handshake {
+	// 	_ = m.Client.Send(target, req)
+	// } else {
+	// 	_ = m.Client.MutateSend(target, req)
+	// }
+	_ = m.Client.Send(target, req)
 
 	// Record send log info
 	logger.Printf("Send Packet: %s\n", req.Name())

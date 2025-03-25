@@ -216,7 +216,7 @@ func (m *SnapMaker) PacketStart(traceOutput io.Writer, seed snap.Packet, stats *
 			}(mutateSeed, stats)
 		}
 		currentSeed = mutateSeed
-		// time.Sleep(PacketSleepTime)
+		time.Sleep(PacketSleepTime)
 	}
 
 	wg.Wait()

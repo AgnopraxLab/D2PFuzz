@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"hash"
 
-	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -232,33 +231,6 @@ func (c *Codec) writeHeaders(head *Header) {
 }
 
 // makeHeader creates a packet header.
-// func (c *Codec) makeHeader(fromID enode.ID, flag byte, authsizeExtra int) Header {
-// 	var authsize int
-// 	switch flag {
-// 	case flagMessage:
-// 		authsize = sizeofMessageAuthData
-// 	case flagWhoareyou:
-// 		authsize = sizeofWhoareyouAuthData
-// 	case flagHandshake:
-// 		authsize = sizeofHandshakeAuthData
-// 	default:
-// 		panic(interface{}(fmt.Errorf("BUG: invalid packet header flag %x", flag)))
-// 	}
-// 	authsize += authsizeExtra
-// 	if authsize > int(^uint16(0)) {
-// 		panic(interface{}(fmt.Errorf("BUG: auth size %d overflows uint16", authsize)))
-// 	}
-// 	return Header{
-// 		StaticHeader: StaticHeader{
-// 			ProtocolID: c.protocolID,
-// 			Version:    version,
-// 			Flag:       flag,
-// 			AuthSize:   uint16(authsize),
-// 		},
-// 	}
-// }
-
-// TODO: Mutate makeHeader creates a packet header for fuzzing.
 func (c *Codec) makeHeader(fromID enode.ID, flag byte, authsizeExtra int) Header {
 	var authsize int
 	switch flag {
@@ -278,18 +250,45 @@ func (c *Codec) makeHeader(fromID enode.ID, flag byte, authsizeExtra int) Header
 	return Header{
 		StaticHeader: StaticHeader{
 			ProtocolID: c.protocolID,
-			// Version:    version,
-			// Flag:       flag,
-			AuthSize: uint16(authsize),
-
-			// ProtocolID: [6]byte{'d', 'i', 's', 'c', 'v', '5'}, // Must be "discv5", dont change it
-			// ProtocolID: [6]byte(fuzzing.RandBuff(6)),
-			Version: uint16(fuzzing.RandInt32() & 0xFFFF),
-			Flag:    byte(fuzzing.RandIntRange(0, 3)),
-			// AuthSize: uint16(fuzzing.RandInt32() & 0xFFFF),
+			Version:    version,
+			Flag:       flag,
+			AuthSize:   uint16(authsize),
 		},
 	}
 }
+
+// TODO: Mutate makeHeader creates a packet header for fuzzing.
+// func (c *Codec) makeHeader(fromID enode.ID, flag byte, authsizeExtra int) Header {
+// 	var authsize int
+// 	switch flag {
+// 	case flagMessage:
+// 		authsize = sizeofMessageAuthData
+// 	case flagWhoareyou:
+// 		authsize = sizeofWhoareyouAuthData
+// 	case flagHandshake:
+// 		authsize = sizeofHandshakeAuthData
+// 	default:
+// 		panic(interface{}(fmt.Errorf("BUG: invalid packet header flag %x", flag)))
+// 	}
+// 	authsize += authsizeExtra
+// 	if authsize > int(^uint16(0)) {
+// 		panic(interface{}(fmt.Errorf("BUG: auth size %d overflows uint16", authsize)))
+// 	}
+// 	return Header{
+// 		StaticHeader: StaticHeader{
+// 			ProtocolID: c.protocolID,
+// 			// Version:    version,
+// 			// Flag:       flag,
+// 			AuthSize: uint16(authsize),
+
+// 			// ProtocolID: [6]byte{'d', 'i', 's', 'c', 'v', '5'}, // Must be "discv5", dont change it
+// 			// ProtocolID: [6]byte(fuzzing.RandBuff(6)),
+// 			Version: uint16(fuzzing.RandInt32() & 0xFFFF),
+// 			Flag:    byte(fuzzing.RandIntRange(0, 3)),
+// 			// AuthSize: uint16(fuzzing.RandInt32() & 0xFFFF),
+// 		},
+// 	}
+// }
 
 // encodeRandom encodes a packet with random content.
 func (c *Codec) encodeRandom(toID enode.ID) (Header, []byte, error) {
@@ -432,31 +431,10 @@ func (c *Codec) encodeMessageHeader(toID enode.ID, s *session) (Header, error) {
 	return head, err
 }
 
-// func (c *Codec) encryptMessage(s *session, p Packet, head *Header, headerData []byte) ([]byte, error) {
-// 	// Encode message plaintext.
-// 	c.msgbuf.Reset()
-// 	c.msgbuf.WriteByte(p.Kind())
-// 	if err := rlp.Encode(&c.msgbuf, p); err != nil {
-// 		return nil, err
-// 	}
-// 	messagePT := c.msgbuf.Bytes()
-
-// 	// Encrypt into message ciphertext buffer.
-// 	messageCT, err := encryptGCM(c.msgctbuf[:0], s.writeKey, head.Nonce[:], messagePT, headerData)
-// 	if err == nil {
-// 		c.msgctbuf = messageCT
-// 	}
-// 	return messageCT, err
-// }
-
-// TODO: Mutate Version packettype for fuzzing
 func (c *Codec) encryptMessage(s *session, p Packet, head *Header, headerData []byte) ([]byte, error) {
 	// Encode message plaintext.
 	c.msgbuf.Reset()
-
-	// c.msgbuf.WriteByte(p.Kind())
-	c.msgbuf.WriteByte(byte(fuzzing.MutateV5PacketType()))
-
+	c.msgbuf.WriteByte(p.Kind())
 	if err := rlp.Encode(&c.msgbuf, p); err != nil {
 		return nil, err
 	}
@@ -469,6 +447,27 @@ func (c *Codec) encryptMessage(s *session, p Packet, head *Header, headerData []
 	}
 	return messageCT, err
 }
+
+// TODO: Mutate Version packettype for fuzzing
+// func (c *Codec) encryptMessage(s *session, p Packet, head *Header, headerData []byte) ([]byte, error) {
+// 	// Encode message plaintext.
+// 	c.msgbuf.Reset()
+
+// 	// c.msgbuf.WriteByte(p.Kind())
+// 	c.msgbuf.WriteByte(byte(fuzzing.MutateV5PacketType()))
+
+// 	if err := rlp.Encode(&c.msgbuf, p); err != nil {
+// 		return nil, err
+// 	}
+// 	messagePT := c.msgbuf.Bytes()
+
+// 	// Encrypt into message ciphertext buffer.
+// 	messageCT, err := encryptGCM(c.msgctbuf[:0], s.writeKey, head.Nonce[:], messagePT, headerData)
+// 	if err == nil {
+// 		c.msgctbuf = messageCT
+// 	}
+// 	return messageCT, err
+// }
 
 // Decode decodes a discovery packet.
 func (c *Codec) Decode(inputData []byte, addr string) (src enode.ID, n *enode.Node, p Packet, err error) {
