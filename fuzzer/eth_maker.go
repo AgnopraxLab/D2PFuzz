@@ -1642,13 +1642,13 @@ func mutateGetBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.GetBloc
 
 	mutator.MutateRequestId(&mutated.RequestId)
 	// 各字段有30%的概率进行变异
-	if rand.Float32() < 0.3 {
+	if rand.Float32() < 1 {
 		// 简单地生成一个随机区块号
 		maxNumber := uint64(chain.Len() * 2) // 允许超出链长度
 		mutated.Origin.Number = mutator.RandRange(0, maxNumber)
 		mutated.Origin.Hash = common.Hash{} // 清空Hash，使用Number
 	}
-	if rand.Float32() < 0.3 {
+	if rand.Float32() < 1 {
 		switch mutator.RandChoice(3) {
 		case 0:
 			// 生成一个较小的值
@@ -1661,7 +1661,7 @@ func mutateGetBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.GetBloc
 			mutated.Amount = mutator.RandRange(0, 2) // 0 或 1
 		}
 	}
-	if rand.Float32() < 0.3 {
+	if rand.Float32() < 1 {
 		switch mutator.RandChoice(3) {
 		case 0:
 			// 小值
@@ -1678,7 +1678,7 @@ func mutateGetBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.GetBloc
 			}
 		}
 	}
-	if rand.Float32() < 0.3 {
+	if rand.Float32() < 1 {
 		mutator.MutateReverse(&mutated.Reverse)
 	}
 
@@ -1734,26 +1734,26 @@ func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.GetBlock
 	mutated := *original
 
 	mutator.MutateRequestId(&mutated.RequestId)
-	if rand.Float32() < 0.5 {
-		switch mutator.RandChoice(4) {
+	if rand.Float32() < 1 {
+		switch mutator.RandChoice(2) {
 		case 0:
 			// 空列表
 			*mutated.GetBlockBodiesRequest = eth.GetBlockBodiesRequest{}
 
-		case 1:
-			// 随机选择1-5个有效哈希
-			count := mutator.RandRange(1, 6)
-			hashes := make(eth.GetBlockBodiesRequest, 0, count)
-			blocks := chain.Blocks()
-			for i := uint64(0); i < count; i++ {
-				if len(blocks) > 0 {
-					idx := mutator.RandRange(0, uint64(len(blocks)))
-					hashes = append(hashes, blocks[idx].Hash())
-				}
-			}
-			*mutated.GetBlockBodiesRequest = hashes
+		// case 1:
+		// 	// 随机选择1-5个有效哈希
+		// 	count := mutator.RandRange(1, 6)
+		// 	hashes := make(eth.GetBlockBodiesRequest, 0, count)
+		// 	blocks := chain.Blocks()
+		// 	for i := uint64(0); i < count; i++ {
+		// 		if len(blocks) > 0 {
+		// 			idx := mutator.RandRange(0, uint64(len(blocks)))
+		// 			hashes = append(hashes, blocks[idx].Hash())
+		// 		}
+		// 	}
+		// 	*mutated.GetBlockBodiesRequest = hashes
 
-		case 2:
+		case 1:
 			// 生成1-5个随机哈希
 			count := mutator.RandRange(1, 6)
 			hashes := make(eth.GetBlockBodiesRequest, 0, count)
@@ -1761,20 +1761,20 @@ func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.GetBlock
 				hashes = append(hashes, mutator.MutateHash())
 			}
 			*mutated.GetBlockBodiesRequest = hashes
-		case 3:
-			// 混合有效和无效哈希
-			count := mutator.RandRange(1, 6)
-			hashes := make(eth.GetBlockBodiesRequest, 0, count)
-			blocks := chain.Blocks()
-			for i := uint64(0); i < count; i++ {
-				if mutator.Bool() && len(blocks) > 0 {
-					idx := mutator.RandRange(0, uint64(len(blocks)))
-					hashes = append(hashes, blocks[idx].Hash())
-				} else {
-					hashes = append(hashes, mutator.MutateHash())
-				}
-			}
-			*mutated.GetBlockBodiesRequest = hashes
+			// case 3:
+			// 	// 混合有效和无效哈希
+			// 	count := mutator.RandRange(1, 6)
+			// 	hashes := make(eth.GetBlockBodiesRequest, 0, count)
+			// 	blocks := chain.Blocks()
+			// 	for i := uint64(0); i < count; i++ {
+			// 		if mutator.Bool() && len(blocks) > 0 {
+			// 			idx := mutator.RandRange(0, uint64(len(blocks)))
+			// 			hashes = append(hashes, blocks[idx].Hash())
+			// 		} else {
+			// 			hashes = append(hashes, mutator.MutateHash())
+			// 		}
+			// 	}
+			// 	*mutated.GetBlockBodiesRequest = hashes
 		}
 	}
 
@@ -2020,26 +2020,26 @@ func mutateGetReceiptsPacket(mutator *fuzzing.Mutator, original *eth.GetReceipts
 
 	mutator.MutateRequestId(&mutated.RequestId)
 
-	if rand.Float32() < 0.5 {
-		switch mutator.RandChoice(4) {
+	if rand.Float32() < 1 {
+		switch mutator.RandChoice(2) {
 		case 0:
 			// 空列表
 			*mutated.GetReceiptsRequest = eth.GetReceiptsRequest{}
 
-		case 1:
-			// 随机选择1-5个有效哈希
-			count := mutator.RandRange(1, 6)
-			hashes := make(eth.GetReceiptsRequest, 0, count)
-			blocks := chain.Blocks()
-			for i := uint64(0); i < count; i++ {
-				if len(blocks) > 0 {
-					idx := mutator.RandRange(0, uint64(len(blocks)))
-					hashes = append(hashes, blocks[idx].Hash())
-				}
-			}
-			*mutated.GetReceiptsRequest = hashes
+		// case 1:
+		// 	// 随机选择1-5个有效哈希
+		// 	count := mutator.RandRange(1, 6)
+		// 	hashes := make(eth.GetReceiptsRequest, 0, count)
+		// 	blocks := chain.Blocks()
+		// 	for i := uint64(0); i < count; i++ {
+		// 		if len(blocks) > 0 {
+		// 			idx := mutator.RandRange(0, uint64(len(blocks)))
+		// 			hashes = append(hashes, blocks[idx].Hash())
+		// 		}
+		// 	}
+		// 	*mutated.GetReceiptsRequest = hashes
 
-		case 2:
+		case 1:
 			// 生成1-5个随机哈希
 			count := mutator.RandRange(1, 6)
 			hashes := make(eth.GetReceiptsRequest, 0, count)
@@ -2047,20 +2047,20 @@ func mutateGetReceiptsPacket(mutator *fuzzing.Mutator, original *eth.GetReceipts
 				hashes = append(hashes, mutator.MutateHash())
 			}
 			*mutated.GetReceiptsRequest = hashes
-		case 3:
-			// 混合有效和无效哈希
-			count := mutator.RandRange(1, 6)
-			hashes := make(eth.GetReceiptsRequest, 0, count)
-			blocks := chain.Blocks()
-			for i := uint64(0); i < count; i++ {
-				if mutator.Bool() && len(blocks) > 0 {
-					idx := mutator.RandRange(0, uint64(len(blocks)))
-					hashes = append(hashes, blocks[idx].Hash())
-				} else {
-					hashes = append(hashes, mutator.MutateHash())
-				}
-			}
-			*mutated.GetReceiptsRequest = hashes
+			// case 3:
+			// 	// 混合有效和无效哈希
+			// 	count := mutator.RandRange(1, 6)
+			// 	hashes := make(eth.GetReceiptsRequest, 0, count)
+			// 	blocks := chain.Blocks()
+			// 	for i := uint64(0); i < count; i++ {
+			// 		if mutator.Bool() && len(blocks) > 0 {
+			// 			idx := mutator.RandRange(0, uint64(len(blocks)))
+			// 			hashes = append(hashes, blocks[idx].Hash())
+			// 		} else {
+			// 			hashes = append(hashes, mutator.MutateHash())
+			// 		}
+			// 	}
+			// 	*mutated.GetReceiptsRequest = hashes
 		}
 	}
 

@@ -33,7 +33,7 @@ const maxMessageSize = 10 * 1024 * 1024
 
 const (
 	StatusMsg                     = 0x00
-	NewBlockHashesMsg             = 0x01
+	NewBlockHashesMsg             = 0x01 
 	TransactionsMsg               = 0x02
 	GetBlockHeadersMsg            = 0x03
 	BlockHeadersMsg               = 0x04

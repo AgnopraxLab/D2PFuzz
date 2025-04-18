@@ -291,6 +291,9 @@ func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, logger *
 				logger.Printf("Received PONG response")
 				result.Response = pong
 				result.Success = true
+				// Update StateCoverage with the response
+				diffCode := discv5RespToInts(pong)
+				updateCoverage(&StateCoverage, diffCode)
 				return result, nil
 			}
 		case discv5.FindnodeMsg:
@@ -298,6 +301,9 @@ func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, logger *
 				logger.Printf("Received NODES response")
 				result.Response = nodes
 				result.Success = true
+				// Update StateCoverage with the response
+				diffCode := discv5RespToInts(nodes)
+				updateCoverage(&StateCoverage, diffCode)
 				return result, nil
 			}
 		case discv5.TalkRequestMsg:
@@ -305,6 +311,9 @@ func (m *V5Maker) sendAndReceive(target *enode.Node, req discv5.Packet, logger *
 				logger.Printf("Received TALK_RESPONSE")
 				result.Response = talkResp
 				result.Success = true
+				// Update StateCoverage with the response
+				diffCode := discv5RespToInts(talkResp)
+				updateCoverage(&StateCoverage, diffCode)
 				return result, nil
 			}
 		default:
@@ -609,4 +618,94 @@ func mutateWhoareyouV5(mutator *fuzzing.Mutator, original *discv5.Whoareyou) *di
 	mutator.MutateENRSeq(&mutated.RecordSeq)
 
 	return &mutated
+}
+
+// discv5RespToInts converts a discv5 response packet to an integer array for StateCoverage tracking
+func discv5RespToInts(resp discv5.Packet) []int {
+	// Response type constants
+	const (
+		NoResponse    = -1 // No response
+		EmptyResponse = 0  // Empty response
+	)
+
+	// If no response, return special code
+	if resp == nil {
+		return []int{NoResponse}
+	}
+
+	switch msg := resp.(type) {
+	case *discv5.Pong:
+		// First value is the packet type
+		code := []int{int(discv5.PongMsg)}
+
+		// Second value is ENRSeq
+		code = append(code, int(msg.ENRSeq))
+
+		// Add IP bytes as unique identifiers
+		if msg.ToIP != nil {
+			for _, b := range msg.ToIP {
+				code = append(code, int(b))
+			}
+		}
+
+		// Add port as a unique identifier
+		code = append(code, int(msg.ToPort))
+
+		return code
+
+	case *discv5.Nodes:
+		// First value is the packet type
+		code := []int{int(discv5.NodesMsg)}
+
+		// Second value is number of nodes
+		nodeCount := len(msg.Nodes)
+		code = append(code, nodeCount)
+
+		// Add response count
+		code = append(code, int(msg.RespCount))
+
+		// If we have nodes, add some information about them
+		if nodeCount > 0 {
+			// We could add more details about the nodes here if needed
+			// but for now just tracking the count gives us coverage information
+			for i := 0; i < min(nodeCount, 5); i++ { // Limit to first 5 nodes to avoid huge arrays
+				if node := msg.Nodes[i]; node != nil {
+					seq := node.Seq()
+					code = append(code, int(seq))
+				}
+			}
+		}
+
+		return code
+
+	case *discv5.TalkResponse:
+		// First value is the packet type
+		code := []int{int(discv5.TalkResponseMsg)}
+
+		// Second value is message length
+		if msg.Message != nil {
+			code = append(code, len(msg.Message))
+
+			// Add first few bytes of message as identifiers if available
+			for i := 0; i < min(len(msg.Message), 4); i++ {
+				code = append(code, int(msg.Message[i]))
+			}
+		} else {
+			code = append(code, 0)
+		}
+
+		return code
+
+	default:
+		// For other packet types, just return the packet type
+		return []int{int(resp.Kind())}
+	}
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

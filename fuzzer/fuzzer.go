@@ -264,6 +264,23 @@ func discv5Fuzzer(engine int, target string) error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
+	// Create coverage recording file
+	coveragePath := filepath.Join(OutputDir, "discv5")
+	if err := os.MkdirAll(coveragePath, 0755); err != nil {
+		fmt.Printf("Failed to create directory: %v\n", err)
+	}
+
+	// Use CSV format for easier processing
+	coverageFilename := filepath.Join(coveragePath, fmt.Sprintf("%s-coverage.csv", time.Now().Format("2006-01-02_15-04-05")))
+	coverageFile, coverageErr := os.OpenFile(coverageFilename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if coverageErr != nil {
+		fmt.Printf("Failed to create coverage file: %v\n", coverageErr)
+	} else {
+		defer coverageFile.Close()
+		// Write CSV header
+		coverageFile.WriteString("time_s,coverage\n")
+	}
+
 	// Ensure resources are cleaned up when function returns
 	defer func() {
 		testMaker.Close()
@@ -291,11 +308,10 @@ func discv5Fuzzer(engine int, target string) error {
 		traceFile = setupTrace(finalName)
 		defer traceFile.Close()
 	}
-	var err error
 
 	fmt.Println("Discv5 protocol Fuzzing start!!!")
 	if engine == 1 {
-		if err = testMaker.Start(traceFile); err != nil {
+		if err := testMaker.Start(traceFile); err != nil {
 			return err
 		}
 	} else {
@@ -323,14 +339,30 @@ func discv5Fuzzer(engine int, target string) error {
 					itration,
 					len(testMaker.PakcetSeed),
 					seed.Name())
-				if err = testMaker.PacketStart(traceFile, seed, globalV5Stats[seed.Name()]); err != nil {
-					return err
+				if packetErr := testMaker.PacketStart(traceFile, seed, globalV5Stats[seed.Name()]); packetErr != nil {
+					return packetErr
 				}
 				globalV5Stats[seed.Name()].ExecuteCount = globalV5Stats[seed.Name()].ExecuteCount + 1
 				for name, stats := range globalV5Stats {
 					fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
 						name, stats.ExecuteCount, stats.CheckTrueFail, stats.CheckFalsePass, stats.CheckTruePass)
 				}
+
+				// Record runtime and coverage (as floating point seconds)
+				runtimeSec := float64(time.Since(startTime).Milliseconds()) / 1000.0
+				coverageTotal := GetTotalCoverage(StateCoverage)
+				coverageInfo := fmt.Sprintf("%.3f,%d\n", runtimeSec, coverageTotal)
+
+				// Print to console with a more user-friendly format
+				fmt.Printf("[%s] Runtime: %.3f seconds, State coverage: %d\n",
+					time.Now().Format("2006-01-02 15:04:05"),
+					runtimeSec,
+					coverageTotal)
+
+				if coverageFile != nil {
+					coverageFile.WriteString(coverageInfo)
+				}
+
 				itration = itration + 1
 			}
 		}
