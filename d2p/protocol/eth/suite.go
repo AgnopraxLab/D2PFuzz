@@ -2,17 +2,14 @@ package eth
 
 import (
 	"crypto/ecdsa"
-	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/big"
 	"reflect"
 	"time"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/snap"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -20,29 +17,19 @@ import (
 
 type Suite struct {
 	DestList *enode.Node
-	chain    *Chain
 	conn     *Conn
 	pri      *ecdsa.PrivateKey
 	engine   *EngineClient
 }
 
-func (s *Suite) Chain() *Chain {
-	return s.chain
-}
-
-func NewSuite(dest *enode.Node, chainDir string, engineURL, jwt string) (*Suite, error) {
-	chain, err := NewChain(chainDir)
-	if err != nil {
-		return nil, err
-	}
-	engine, err := NewEngineClient(chainDir, engineURL, jwt)
+func NewSuite(dest *enode.Node, engineURL, jwt string) (*Suite, error) {
+	engine, err := NewEngineClient(engineURL, jwt)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Suite{
 		DestList: dest,
-		chain:    chain,
 		engine:   engine,
 	}, nil
 }
@@ -75,34 +62,6 @@ func (s *Suite) Close() error {
 
 func (s *Suite) GenPacket(packetType int) (Packet, error) {
 	switch packetType {
-	case StatusMsg:
-		// 如果连接未初始化，仍然可以创建Status包，但使用chain的信息
-		buf := make([]byte, 2024)
-		_, err := rand.Read(buf)
-		if err != nil {
-			return nil, fmt.Errorf("生成随机字节失败: %v", err)
-		}
-
-		// 使用chain的信息创建Status包，而不依赖conn
-		return &StatusPacket{
-			ProtocolVersion: uint32(ETH68), // 使用固定的协议版本
-			NetworkID:       s.chain.config.ChainID.Uint64(),
-			TD:              s.chain.TD(),
-			Head:            s.chain.blocks[s.chain.Len()-1].Hash(),
-			Genesis:         s.chain.GetBlock(0).Hash(),
-			ForkID:          s.chain.ForkID(),
-		}, nil
-
-	case NewBlockHashesMsg:
-		return &NewBlockHashesPacket{
-			{
-				Hash:   s.chain.GetBlock(0).Hash(),
-				Number: 1,
-			},
-		}, nil
-	case TransactionsMsg:
-		txMsg := s.makeTxs()
-		return &txMsg, nil
 	case GetBlockHeadersMsg:
 		return &GetBlockHeadersPacket{
 			RequestId: 33,
@@ -114,109 +73,6 @@ func (s *Suite) GenPacket(packetType int) (Packet, error) {
 				Skip:    1,
 				Reverse: false,
 			},
-		}, nil
-	case BlockHeadersMsg:
-		headers := make([]*types.Header, 0, 1)
-		block := s.chain.GetBlock(len(s.chain.blocks) - 1)
-		headers = append(headers, block.Header())
-		return &BlockHeadersPacket{
-			RequestId:           44,
-			BlockHeadersRequest: BlockHeadersRequest(headers),
-		}, nil
-	case GetBlockBodiesMsg:
-		return &GetBlockBodiesPacket{
-			RequestId: 55,
-			GetBlockBodiesRequest: &GetBlockBodiesRequest{
-				s.chain.blocks[54].Hash(),
-				s.chain.blocks[75].Hash(),
-			},
-		}, nil
-	case BlockBodiesMsg:
-		bodies := make([]*BlockBody, 0, 1)
-		block := s.chain.GetBlock(len(s.chain.blocks) - 1)
-		body := &BlockBody{
-			Transactions: block.Transactions(),
-			Uncles:       block.Uncles(),
-			Withdrawals:  block.Withdrawals(),
-		}
-		bodies = append(bodies, body)
-		return &BlockBodiesPacket{
-			RequestId:           66,
-			BlockBodiesResponse: bodies,
-		}, nil
-	case NewBlockMsg:
-		buf := make([]byte, 2024)
-		_, err := rand.Read(buf)
-		if err != nil {
-			fmt.Println("Error generating random bytes:", err)
-		}
-		return &NewBlockPacket{
-			Block: s.chain.Head(),
-			TD:    new(big.Int).SetBytes(buf),
-		}, nil
-	case NewPooledTransactionHashesMsg:
-		txs := s.makeTxs()
-		packet := &NewPooledTransactionHashesPacket{
-			Types:  make([]byte, len(txs)),
-			Sizes:  make([]uint32, len(txs)),
-			Hashes: make([]common.Hash, len(txs)),
-		}
-		for i, tx := range txs {
-			packet.Types[i] = tx.Type()
-			packet.Sizes[i] = uint32(tx.Size())
-			packet.Hashes[i] = tx.Hash()
-		}
-		return packet, nil
-	case GetPooledTransactionsMsg:
-		return &GetPooledTransactionsPacket{
-			RequestId: 99,
-			GetPooledTransactionsRequest: &GetPooledTransactionsRequest{
-				s.chain.blocks[13].Transactions()[0].Hash(), // 假设我们要请求第13个区块的第一个交易
-				s.chain.blocks[7].Transactions()[0].Hash(),  // 假设我们要请求第7个区块的第一个交易
-			},
-		}, nil
-	case PooledTransactionsMsg:
-		txs := s.makeTxs()
-		pooledTxs := make([]*types.Transaction, 0, 1)
-		for _, tx := range txs {
-			pooledTxs = append(pooledTxs, tx)
-			break
-		}
-		return &PooledTransactionsPacket{
-			RequestId:                  100,
-			PooledTransactionsResponse: pooledTxs,
-		}, nil
-	case GetReceiptsMsg:
-		packet := &GetReceiptsPacket{
-			RequestId: 110,
-			GetReceiptsRequest: &GetReceiptsRequest{
-				s.chain.blocks[12].Hash(), // 请求第54个区块的收据
-				s.chain.blocks[3].Hash(),  // 请求第75个区块的收据
-			},
-		}
-		return packet, nil
-	case ReceiptsMsg:
-		receipts := make([][]*types.Receipt, 0, 1)
-		block := s.chain.GetBlock(len(s.chain.blocks) - 1)
-		if block != nil {
-			blockReceipts := make([]*types.Receipt, len(block.Transactions()))
-			for j, tx := range block.Transactions() {
-				receipt := &types.Receipt{
-					Type:             tx.Type(),
-					TxHash:           tx.Hash(),
-					ContractAddress:  crypto.CreateAddress(block.Header().Coinbase, tx.Nonce()),
-					GasUsed:          21000,
-					BlockHash:        block.Hash(),
-					BlockNumber:      block.Number(),
-					TransactionIndex: uint(j),
-				}
-				blockReceipts[j] = receipt
-			}
-			receipts = append(receipts, blockReceipts)
-		}
-		return &ReceiptsPacket{
-			RequestId:        110,
-			ReceiptsResponse: receipts,
 		}, nil
 	default:
 		return nil, errors.New("unknown packet type")
@@ -232,14 +88,14 @@ var (
 // GenPacket 生成指定类型的 snap 协议数据包
 func (s *Suite) GenSnapPacket(packetType int) (Packet, error) {
 	switch packetType {
-	case snap.GetAccountRangeMsg:
-		return &snap.GetAccountRangePacket{
-			ID:     uint64(1),
-			Root:   s.chain.Head().Root(),
-			Origin: zero,
-			Limit:  ffHash,
-			Bytes:  4000,
-		}, nil
+	// case snap.GetAccountRangeMsg:
+	// 	return &snap.GetAccountRangePacket{
+	// 		ID:     uint64(1),
+	// 		Root:   s.chain.Head().Root(),
+	// 		Origin: zero,
+	// 		Limit:  ffHash,
+	// 		Bytes:  4000,
+	// 	}, nil
 
 	case snap.AccountRangeMsg:
 		accounts := []*snap.AccountData{
@@ -265,15 +121,15 @@ func (s *Suite) GenSnapPacket(packetType int) (Packet, error) {
 			Proof:    proofs,
 		}, nil
 
-	case snap.GetStorageRangesMsg:
-		return &snap.GetStorageRangesPacket{
-			ID:       uint64(1),
-			Root:     s.chain.Head().Root(),
-			Accounts: []common.Hash{common.BytesToHash(s.chain.state[acct].AddressHash)},
-			Origin:   zero[:],
-			Limit:    ffHash[:],
-			Bytes:    1000,
-		}, nil
+	// case snap.GetStorageRangesMsg:
+	// 	return &snap.GetStorageRangesPacket{
+	// 		ID:       uint64(1),
+	// 		Root:     s.chain.Head().Root(),
+	// 		Accounts: []common.Hash{common.BytesToHash(s.chain.state[acct].AddressHash)},
+	// 		Origin:   zero[:],
+	// 		Limit:    ffHash[:],
+	// 		Bytes:    1000,
+	// 	}, nil
 
 	case snap.StorageRangesMsg:
 		// 创建多个账户的存储槽数据
@@ -312,12 +168,12 @@ func (s *Suite) GenSnapPacket(packetType int) (Packet, error) {
 			Proof: proofs, // 最后一个存储槽范围的默克尔证明
 		}, nil
 
-	case snap.GetByteCodesMsg:
-		return &snap.GetByteCodesPacket{
-			ID:     uint64(1),
-			Hashes: s.chain.CodeHashes(),
-			Bytes:  10000,
-		}, nil
+	// case snap.GetByteCodesMsg:
+	// 	return &snap.GetByteCodesPacket{
+	// 		ID:     uint64(1),
+	// 		Hashes: s.chain.CodeHashes(),
+	// 		Bytes:  10000,
+	// 	}, nil
 
 	case snap.ByteCodesMsg:
 		// 创建一些示例合约字节码
@@ -341,19 +197,19 @@ func (s *Suite) GenSnapPacket(packetType int) (Packet, error) {
 			Codes: codes, // 返回请求的合约字节码列表
 		}, nil
 
-	case snap.GetTrieNodesMsg:
-		storageAcctHash := common.BytesToHash(s.chain.state[acct].AddressHash)
-		return &snap.GetTrieNodesPacket{
-			ID:   uint64(1),
-			Root: s.chain.Head().Root(),
-			Paths: []snap.TrieNodePathSet{
-				{
-					storageAcctHash[:],
-					[]byte{0},
-				},
-			},
-			Bytes: 5000,
-		}, nil
+	// case snap.GetTrieNodesMsg:
+	// 	storageAcctHash := common.BytesToHash(s.chain.state[acct].AddressHash)
+	// 	return &snap.GetTrieNodesPacket{
+	// 		ID:   uint64(1),
+	// 		Root: s.chain.Head().Root(),
+	// 		Paths: []snap.TrieNodePathSet{
+	// 			{
+	// 				storageAcctHash[:],
+	// 				[]byte{0},
+	// 			},
+	// 		},
+	// 		Bytes: 5000,
+	// 	}, nil
 
 	case snap.TrieNodesMsg:
 		// 创建一些示例 trie 节点数据
@@ -601,59 +457,6 @@ func (s *Suite) GenSnapPacket(packetType int) (Packet, error) {
 // 	}
 // }
 
-func (s *Suite) makeTxs() TransactionsPacket {
-	// // Generate many transactions to seed target with.
-	// var (
-	// 	from, nonce = s.chain.GetSender(1)
-	// 	count       = 2000
-	// 	txs         []*types.Transaction
-	// 	hashes      []common.Hash
-	// 	set         = make(map[common.Hash]struct{})
-	// )
-
-	// for i := 0; i < count; i++ {
-	// 	// Use filler to fill the fields for transaction
-	// 	gasTipCap := fuzzing.RandBigInt() // Random big.Int for GasTipCap
-	// 	gasFeeCap := fuzzing.RandBigInt() // Random big.Int for GasFeeCap
-	// 	gasLimit := fuzzing.RandUint64()  // Random uint64 for Gas limit
-
-	// 	inner := &types.DynamicFeeTx{
-	// 		ChainID:   s.chain.config.ChainID,
-	// 		Nonce:     nonce + uint64(i),
-	// 		GasTipCap: gasTipCap,
-	// 		GasFeeCap: gasFeeCap,
-	// 		Gas:       gasLimit,
-	// 	}
-	// 	tx, _ := s.chain.SignTx(from, types.NewTx(inner))
-	// 	txs = append(txs, tx)
-	// 	set[tx.Hash()] = struct{}{}
-	// 	hashes = append(hashes, tx.Hash())
-	// }
-	var (
-		from, nonce = s.chain.GetSender(0)
-		txs         []*types.Transaction
-	)
-	inner := &types.DynamicFeeTx{
-		ChainID:   s.chain.config.ChainID,
-		Nonce:     nonce,
-		GasTipCap: common.Big1,
-		GasFeeCap: s.chain.Head().BaseFee(),
-		Gas:       30000,
-		To:        &common.Address{0xaa},
-		Value:     common.Big1,
-	}
-	tx, _ := s.chain.SignTx(from, types.NewTx(inner))
-	txs = append(txs, tx)
-	return txs
-}
-
-func (s *Suite) GetHeaders(req *GetBlockHeadersPacket) ([]*types.Header, error) {
-	if s.chain == nil {
-		return nil, errors.New("chain is not initialized")
-	}
-	return s.chain.GetHeaders(req)
-}
-
 // HeadersMatch headersMatch returns whether the received headers match the given request
 func HeadersMatch(expected []*types.Header, headers []*types.Header) bool {
 	return reflect.DeepEqual(expected, headers)
@@ -668,15 +471,6 @@ func HeadersMatch(expected []*types.Header, headers []*types.Header) bool {
 	return total
 }*/
 
-// 辅助函数：计算总难度
-func calculateTotalDifficulty(chain *Chain) *big.Int {
-	td := new(big.Int).Set(chain.genesis.Difficulty)
-	for _, block := range chain.blocks {
-		td.Add(td, block.Difficulty())
-	}
-	return td
-}
-
 // InitializeAndConnect 封装了初始化、连接和对等过程
 func (s *Suite) InitializeAndConnect() error {
 	conn, err := s.dial()
@@ -687,7 +481,7 @@ func (s *Suite) InitializeAndConnect() error {
 	//	conn.Close()
 	//}()
 	//defer conn.Close()
-	if err := conn.peer(s.chain, nil); err != nil {
+	if err := conn.peer(nil); err != nil {
 		return fmt.Errorf("peer failed: %v", err)
 	}
 	////
@@ -706,17 +500,13 @@ func (s *Suite) SnapInitializeAndConnect() error {
 	//	conn.Close()
 	//}()
 	//defer conn.Close()
-	if err := conn.peer(s.chain, nil); err != nil {
+	if err := conn.peer(nil); err != nil {
 		return fmt.Errorf("peer failed: %v", err)
 	}
 	////
 
 	///
 	return nil
-}
-
-func (s *Suite) SendForkchoiceUpdated() error {
-	return s.engine.sendForkchoiceUpdated()
 }
 
 // SendTxs sends the given transactions to the node and
@@ -728,7 +518,7 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 		return fmt.Errorf("建立发送连接失败: %v", err)
 	}
 	defer sendConn.Close()
-	if err = sendConn.peer(s.chain, nil); err != nil {
+	if err = sendConn.peer(nil); err != nil {
 		return fmt.Errorf("sending peer failed: %v", err)
 	}
 
@@ -738,7 +528,7 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 		return fmt.Errorf("建立接收连接失败: %v", err)
 	}
 	defer recvConn.Close()
-	if err = recvConn.peer(s.chain, nil); err != nil {
+	if err = recvConn.peer(nil); err != nil {
 		return fmt.Errorf("receiving peer failed: %v", err)
 	}
 
@@ -766,15 +556,6 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 			for _, hash := range msg.Hashes {
 				got[hash] = true
 			}
-		case *GetBlockHeadersPacket:
-			headers, err := s.chain.GetHeaders(msg)
-			if err != nil {
-				return fmt.Errorf("invalid GetBlockHeaders request: %v", err)
-			}
-			recvConn.Write(ethProto, BlockHeadersMsg, &BlockHeadersPacket{
-				RequestId:           msg.RequestId,
-				BlockHeadersRequest: headers,
-			})
 		default:
 			return fmt.Errorf("unexpected eth wire msg: %s", pretty.Sdump(msg))
 		}
@@ -851,7 +632,7 @@ func (c *Conn) ReadEth() (any, error) {
 func (s *Suite) SetupConn() error {
 	s.conn, _ = s.dial()
 	//defer s.conn.Close()
-	if err := s.conn.Peer(s.Chain(), nil); err != nil {
+	if err := s.conn.Peer(nil); err != nil {
 		return fmt.Errorf("peer failed: %v", err)
 	}
 
@@ -866,7 +647,7 @@ func (s *Suite) Conn() *Conn {
 func (s *Suite) SetupSnapConn() error {
 	s.conn, _ = s.dialSnap()
 	//defer s.conn.Close()
-	if err := s.conn.Peer(s.Chain(), nil); err != nil {
+	if err := s.conn.Peer(nil); err != nil {
 		return fmt.Errorf("peer failed: %v", err)
 	}
 
