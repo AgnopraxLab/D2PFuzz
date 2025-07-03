@@ -58,6 +58,10 @@ type EthMaker struct {
 	Series []StateSeries
 	forks  []string
 
+	// State corpus for Generator
+	BlockCorpus  *BlockCorpus
+	NetworkState *NetworkState
+
 	root common.Hash
 	logs common.Hash
 }
