@@ -83,7 +83,7 @@ type ethPacketTestResult struct {
 	Valid        bool
 	Error        string `json:"error"`
 
-	DiffCode []int // 新增差分编码字段
+	DiffCode []int // Added differential encoding field
 }
 
 func NewEthMaker(targetDir string, chain string) *EthMaker {
@@ -134,6 +134,87 @@ func (m *EthMaker) ToSubTest() *stJSON {
 	return st
 }
 
+// QueryStart implements connection to dynamic nodes and sends fixed packets to obtain and save node states
+func (m *EthMaker) QueryStart(traceOutput io.Writer) error {
+	var (
+		logger *log.Logger
+		wg     sync.WaitGroup
+	)
+
+	if len(m.SuiteList) == 0 {
+		return fmt.Errorf("empty suite list")
+	}
+
+	if traceOutput != nil {
+		logger = log.New(traceOutput, "QUERY: ", log.Ldate|log.Ltime|log.Lmicroseconds)
+	}
+
+	wg.Add(len(m.SuiteList))
+	for i, suite := range m.SuiteList {
+		go func(nodeIndex int, nodeSuite *eth.Suite) {
+			defer wg.Done()
+
+			// Establish connection
+			if err := nodeSuite.SetupConn(); err != nil {
+				if logger != nil {
+					logger.Printf("Node %d connection failed: %v", nodeIndex, err)
+				}
+				return
+			}
+			defer nodeSuite.Conn().Close()
+
+			if logger != nil {
+				logger.Printf("Node %d connected: %s", nodeIndex, nodeSuite.DestList.String())
+			}
+
+			packet := &eth.GetBlockHeadersPacket{
+				RequestId: 33,
+				GetBlockHeadersRequest: &eth.GetBlockHeadersRequest{
+					// Origin: HashOrNumber{Hash: s.chain.blocks[1].Hash()},
+					Origin: eth.HashOrNumber{Number: uint64(1)},
+					// Origin:  HashOrNumber{Hash: s.chain.blocks[1].Hash(), Number: uint64(1)},
+					Amount:  100,
+					Skip:    0,
+					Reverse: false,
+				},
+			}
+
+			// Send packet and get response
+			resp, _, _, err := m.handlePacketWithResponse(packet, nodeSuite)
+			if err != nil {
+				if logger != nil {
+					logger.Printf("Node %d query failed: %v", nodeIndex, err)
+				}
+			}
+
+			// Process response data and convert to BlockCorpus
+			if resp != nil {
+				switch r := resp.(type) {
+				case *eth.BlockHeadersPacket:
+					// Create a BlockCorpus instance
+					blockCorpus := NewBlockCorpus()
+					// Add the block header in the response to BlockCorpus
+					blockCorpus.AddHeaders(r.BlockHeadersRequest)
+
+				default:
+					fmt.Printf("Wrong response type received!\n")
+				}
+			} else {
+				fmt.Printf("No response received (nil)\n")
+			}
+
+			if logger != nil {
+				logger.Printf("Node %d query completed", nodeIndex)
+			}
+
+		}(i, suite)
+	}
+
+	// wait for all goroutines finished
+	wg.Wait()
+	return nil
+}
+
 func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UDPPacketStats) error {
 	var (
 		logger *log.Logger
@@ -152,12 +233,12 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 	results := make([][]ethPacketTestResult, len(m.SuiteList))
 	currentSeed := seed
 
-	// 初始化 results 数组
+	// Initialize results array
 	for i := range results {
 		results[i] = make([]ethPacketTestResult, 0)
 	}
 
-	// 特殊连接处理
+	// Special connection handling
 	if seed.Kind() == eth.GetBlockHeadersMsg ||
 		seed.Kind() == eth.GetBlockBodiesMsg ||
 		seed.Kind() == eth.GetReceiptsMsg {
@@ -173,9 +254,9 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 		fmt.Printf("Start Mutate count: %d\n", i)
 		mutateSeed := cloneAndMutateEthPacket(mutator, currentSeed)
 
-		// 创建一个新的 WaitGroup 用于当前迭代
+		// Create a new WaitGroup for current iteration
 		var wg sync.WaitGroup
-		wg.Add(len(m.SuiteList)) // 在启动 goroutine 前添加计数
+		wg.Add(len(m.SuiteList)) // Add count before starting goroutines
 
 		for j := 0; j < len(m.SuiteList); j++ {
 			go func(j int, currentReq eth.Packet, packetStats *UDPPacketStats) {
@@ -230,13 +311,13 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 			}(j, mutateSeed, stats)
 		}
 
-		// 等待当前迭代的所有 goroutine 完成
+		// Wait for all goroutines in current iteration to complete
 		wg.Wait()
 		currentSeed = mutateSeed
 		time.Sleep(PacketSleepTime)
 	}
 
-	// 分析结果
+	// Analyze results
 	if SaveFlag {
 		for i, result := range results {
 			nodeOutputDir := filepath.Join(OutputDir, fmt.Sprintf("node_%d", i))
@@ -247,7 +328,7 @@ func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UD
 	return nil
 }
 
-// 辅助函数：打印results数组
+// Helper function: print results array
 // func printResults(results []ethPacketTestResult, logger *log.Logger) {
 // 	for i, r := range results {
 // 		resultBytes, err := json.MarshalIndent(r, "", "    ")
@@ -419,8 +500,8 @@ func (m *EthMaker) handleStatusPacket(p *eth.StatusPacket, suite *eth.Suite) eth
 
 	return ethPacketTestResult{
 		Response: resp,
-		Success:  success,                  // 使用handlePacketWithResponse返回的success值
-		Valid:    testValid && resp != nil, // 需要有响应且响应有效
+		Success:  success,                  // Use success value returned by handlePacketWithResponse
+		Valid:    testValid && resp != nil, // Need response and response must be valid
 		Error:    err.Error(),
 	}
 }
@@ -469,14 +550,14 @@ func (m *EthMaker) handleTransactionPacket(p *eth.TransactionsPacket, suite *eth
 		}
 	}
 	return ethPacketTestResult{
-		Success: true, // 发送成功
-		Valid:   true, // 交易被接受
+		Success: true, // Send successful
+		Valid:   true, // Transaction accepted
 	}
 }
 
 func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, suite *eth.Suite) ethPacketTestResult {
 
-	// 修改包内容进行测试
+	// Modify packet content for testing
 	// p.Origin.Number = 2944
 	// p.Amount = 11
 	// p.Skip = 18446744073709551615
@@ -484,7 +565,7 @@ func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, sui
 	// p.Reverse = false
 	// p.Origin.Hash = common.Hash{} // 确保使用Number而不是Hash
 
-	// 发送请求（无论检查是否通过都发送）
+	// Send request (send regardless of whether check passes)
 	if err := suite.SendMsg(eth.EthProto, eth.GetBlockHeadersMsg, p); err != nil {
 		return ethPacketTestResult{
 			Error: fmt.Errorf("could not send GetBlockHeadersMsg: %v", err).Error(),
@@ -492,7 +573,7 @@ func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, sui
 		}
 	}
 
-	// 读取响应
+	// Read response
 	headers := new(eth.BlockHeadersPacket)
 	if err := suite.ReadMsg(eth.EthProto, eth.BlockHeadersMsg, headers); err != nil {
 		return ethPacketTestResult{
@@ -501,7 +582,7 @@ func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, sui
 		}
 	}
 
-	// 检查请求ID
+	// Check request ID
 	if got, want := headers.RequestId, p.RequestId; got != want {
 		return ethPacketTestResult{
 			Response: headers,
@@ -519,7 +600,7 @@ func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, sui
 
 func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, suite *eth.Suite) ethPacketTestResult {
 
-	// 发送请求
+	// Send request
 	if err := suite.SendMsg(eth.EthProto, eth.GetBlockBodiesMsg, p); err != nil {
 		return ethPacketTestResult{
 			Error: fmt.Errorf("could not send GetBlockBodiesMsg: %v", err).Error(),
@@ -527,7 +608,7 @@ func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, suite
 		}
 	}
 
-	// 读取响应
+	// Read response
 	resp := new(eth.BlockBodiesPacket)
 	if err := suite.ReadMsg(eth.EthProto, eth.BlockBodiesMsg, resp); err != nil {
 		return ethPacketTestResult{
@@ -536,7 +617,7 @@ func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, suite
 		}
 	}
 
-	// 统计有效哈希数量
+	// Count valid hashes
 	validHashCount := 0
 	blockHashes := make(map[common.Hash]bool)
 
@@ -546,7 +627,7 @@ func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, suite
 		}
 	}
 
-	// 检查响应数量是否与有效哈希数量完全匹配
+	// Check if response count exactly matches valid hash count
 	if len(resp.BlockBodiesResponse) != validHashCount {
 		return ethPacketTestResult{
 			Response: resp,
@@ -555,7 +636,7 @@ func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, suite
 		}
 	}
 
-	// 检查请求ID
+	// Check request ID
 	if got, want := resp.RequestId, p.RequestId; got != want {
 		return ethPacketTestResult{
 			Response: resp,
@@ -564,7 +645,7 @@ func (m *EthMaker) handleGetBlockBodiesPacket(p *eth.GetBlockBodiesPacket, suite
 		}
 	}
 
-	// 所有检查通过
+	// All checks passed
 	return ethPacketTestResult{
 		Response: resp,
 		Valid:    true,
@@ -595,7 +676,7 @@ func (m *EthMaker) handlePooledTransactionHashesPacket(p *eth.NewPooledTransacti
 }
 
 func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransactionsPacket, suite *eth.Suite) ethPacketTestResult {
-	// 2. 生成交易
+	// 2. Generate transactions
 	var (
 		txs    []*types.Transaction
 		hashes []common.Hash
@@ -610,7 +691,7 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 		}
 	}
 
-	// 4. 等待交易确认
+	// 4. Wait for transaction confirmation
 	if err := suite.SetupConn(); err != nil {
 		return ethPacketTestResult{
 			Error:   fmt.Errorf("failed to setup connection: %v", err).Error(),
@@ -648,8 +729,8 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 		return ethPacketTestResult{
 			Request:  newRequest,
 			Response: msg,
-			Success:  true,  // 收到响应但内容不匹配
-			Valid:    false, // 请求ID不匹配
+			Success:  true,  // Received response but content doesn't match
+			Valid:    false, // Request ID mismatch
 			Error:    fmt.Sprintf("request ID mismatch: got %d, want %d", got, want),
 		}
 	}
@@ -658,8 +739,8 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 			return ethPacketTestResult{
 				Request:  newRequest,
 				Response: msg,
-				Success:  true,  // 收到响应但内容不匹配
-				Valid:    false, // 包含未知交易
+				Success:  true,  // Received response but content doesn't match
+			Valid:    false, // Contains unknown transaction
 				Error:    fmt.Sprintf("unexpected tx received: %v", got.Hash()),
 			}
 		}
@@ -673,13 +754,13 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 	return ethPacketTestResult{
 		Request:  newRequest,
 		Response: msg,
-		Success:  true, // 收到响应
-		Valid:    true, // 所有检查通过
+		Success:  true, // Received response
+		Valid:    true, // All checks passed
 	}
 }
 
 func (m *EthMaker) handleGetReceiptsPacket(p *eth.GetReceiptsPacket, suite *eth.Suite) ethPacketTestResult {
-	// 2. 发送请求
+	// 2. Send request
 	if err := suite.SendMsg(eth.EthProto, eth.GetReceiptsMsg, p); err != nil {
 		return ethPacketTestResult{
 			Error: fmt.Errorf("could not send GetReceiptsMsg: %v", err).Error(),
@@ -687,7 +768,7 @@ func (m *EthMaker) handleGetReceiptsPacket(p *eth.GetReceiptsPacket, suite *eth.
 		}
 	}
 
-	// 3. 读取响应
+	// 3. Read response
 	resp := new(eth.ReceiptsPacket)
 	if err := suite.ReadMsg(eth.EthProto, eth.ReceiptsMsg, resp); err != nil {
 		return ethPacketTestResult{
@@ -696,7 +777,7 @@ func (m *EthMaker) handleGetReceiptsPacket(p *eth.GetReceiptsPacket, suite *eth.
 		}
 	}
 
-	// 4. 统计有效哈希数量
+	// 4. Count valid hashes
 	validHashCount := 0
 	blockHashes := make(map[common.Hash]bool)
 
@@ -706,7 +787,7 @@ func (m *EthMaker) handleGetReceiptsPacket(p *eth.GetReceiptsPacket, suite *eth.
 		}
 	}
 
-	// 5. 检查响应数量是否与有效哈希数量完全匹配
+	// 5. Check if response count exactly matches valid hash count
 	if len(resp.ReceiptsResponse) != validHashCount {
 		return ethPacketTestResult{
 			Response: resp,
@@ -715,7 +796,7 @@ func (m *EthMaker) handleGetReceiptsPacket(p *eth.GetReceiptsPacket, suite *eth.
 		}
 	}
 
-	// 6. 检查请求ID
+	// 6. Check request ID
 	if got, want := resp.RequestId, p.RequestId; got != want {
 		return ethPacketTestResult{
 			Response: resp,
@@ -724,7 +805,7 @@ func (m *EthMaker) handleGetReceiptsPacket(p *eth.GetReceiptsPacket, suite *eth.
 		}
 	}
 
-	// 所有检查通过
+	// All checks passed
 	return ethPacketTestResult{
 		Response: resp,
 		Valid:    true,
@@ -789,14 +870,14 @@ func isValidTransaction(tx *types.Transaction) bool {
 		return false
 	}
 
-	// 基本字段检查
+	// Basic field checks
 	if tx.Gas() == 0 ||
 		tx.GasPrice().Sign() < 0 ||
 		tx.Value().Sign() < 0 {
 		return false
 	}
 
-	// 根据交易类型进行特定检查
+	// Perform specific checks based on transaction type
 	switch tx.Type() {
 	case types.DynamicFeeTxType:
 		if tx.GasTipCap().Cmp(tx.GasFeeCap()) > 0 {
@@ -811,9 +892,9 @@ func isValidTransaction(tx *types.Transaction) bool {
 	return true
 }
 
-// analyzeResultsEth 分析测试结果并保存到文件
+// analyzeResultsEth analyzes test results and saves to file
 func analyzeResultsEth(results []ethPacketTestResult, logger *log.Logger, outputDir string) error {
-	// 创建输出目录
+	// Create output directory
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %v", err)
 	}
@@ -825,7 +906,7 @@ func analyzeResultsEth(results []ethPacketTestResult, logger *log.Logger, output
 
 	filename := filepath.Join(fullPath, fmt.Sprintf("analysis_results_%s.json", time.Now().Format("2006-01-02_15-04-05")))
 
-	//Save to file
+	// Save to file
 	data, err := json.MarshalIndent(results, "", "    ")
 	if err != nil {
 		return fmt.Errorf("JSON serialization failed: %v", err)
@@ -840,23 +921,23 @@ func analyzeResultsEth(results []ethPacketTestResult, logger *log.Logger, output
 	return nil
 }
 
-// cloneAndMutateV4Packet clones and mutates the packet
+// cloneAndMutateEthPacket clones and mutates the packet
 func cloneAndMutateEthPacket(mutator *fuzzing.Mutator, seed eth.Packet) eth.Packet {
 	switch p := seed.(type) {
 	case *eth.StatusPacket:
-		// 创建深拷贝
+		// Create deep copy
 		newPacket := *p
 		return mutateStatusPacket(mutator, &newPacket)
 	case *eth.NewBlockHashesPacket:
 		newPacket := *p
 		return mutateNewBlockHashesPacket(mutator, &newPacket)
 	case *eth.TransactionsPacket:
-		// 创建深拷贝
+		// Create deep copy
 		newPacket := make(eth.TransactionsPacket, len(*p))
 		copy(newPacket, *p)
 		return mutateTransactionsPacket(mutator, &newPacket)
 	case *eth.GetBlockHeadersPacket:
-		// 创建深拷贝
+		// Create deep copy
 		newPacket := *p
 		newRequest := *p.GetBlockHeadersRequest
 		newPacket.GetBlockHeadersRequest = &newRequest
@@ -902,7 +983,7 @@ func cloneAndMutateEthPacket(mutator *fuzzing.Mutator, seed eth.Packet) eth.Pack
 func mutateStatusPacket(mutator *fuzzing.Mutator, original *eth.StatusPacket) *eth.StatusPacket {
 	mutated := *original
 
-	// 各字段有30%的概率进行变异
+	// Each field has 30% probability of mutation
 	if rand.Float32() < 0.3 {
 		mutated.ProtocolVersion = mutator.MutateProtocolVersion()
 	}
@@ -928,20 +1009,20 @@ func mutateStatusPacket(mutator *fuzzing.Mutator, original *eth.StatusPacket) *e
 func mutateNewBlockHashesPacket(mutator *fuzzing.Mutator, original *eth.NewBlockHashesPacket) eth.Packet {
 	mutated := *original
 
-	// 各字段有30%的概率进行变异
-	// 变异现有元素
+	// Each field has 30% probability of mutation
+	// Mutate existing elements
 	if rand.Float32() < 0.3 && len(mutated) > 0 {
 		idx := mutator.RandRange(0, uint64(len(mutated)))
 		if mutator.Bool() {
-			// 变异哈希
+			// Mutate hash
 			mutated[idx].Hash = mutator.MutateHash()
 		} else {
-			// 变异区块号
+			// Mutate block number
 			mutated[idx].Number = mutator.RandRange(0, 1000000)
 		}
 	}
 
-	// 添加新元素
+	// Add new element
 	if rand.Float32() < 0.3 {
 		mutated = append(mutated, struct {
 			Hash   common.Hash
@@ -952,7 +1033,7 @@ func mutateNewBlockHashesPacket(mutator *fuzzing.Mutator, original *eth.NewBlock
 		})
 	}
 
-	// 删除随机元素
+	// Remove random element
 	if rand.Float32() < 0.3 && len(mutated) > 1 {
 		idx := mutator.RandRange(0, uint64(len(mutated)))
 		mutated = append(mutated[:idx], mutated[idx+1:]...)
@@ -989,35 +1070,35 @@ func mutateGetBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.GetBloc
 	mutated := *original
 
 	mutator.MutateRequestId(&mutated.RequestId)
-	// 各字段有30%的概率进行变异
+	// Each field has 30% probability of mutation
 	if rand.Float32() < 1 {
-		// 简单地生成一个随机区块号
+		// Simply generate a random block number
 		mutated.Origin.Number = mutator.RandRange(0, 999)
-		mutated.Origin.Hash = common.Hash{} // 清空Hash，使用Number
+		mutated.Origin.Hash = common.Hash{} // Clear Hash, use Number
 	}
 	if rand.Float32() < 1 {
 		switch mutator.RandChoice(3) {
 		case 0:
-			// 生成一个较小的值
+			// Generate a smaller value
 			mutated.Amount = mutator.RandRange(1, 100)
 		case 1:
-			// 生成一个较大的值
+			// Generate a larger value
 			mutated.Amount = mutator.RandRange(100, 10100)
 		case 2:
-			// 边界值
-			mutated.Amount = mutator.RandRange(0, 2) // 0 或 1
+			// Boundary value
+			mutated.Amount = mutator.RandRange(0, 2) // 0 or 1
 		}
 	}
 	if rand.Float32() < 1 {
 		switch mutator.RandChoice(3) {
 		case 0:
-			// 小值
+			// Small value
 			mutated.Skip = mutator.RandRange(0, 10)
 		case 1:
-			// 大值
+			// Large value
 			mutated.Skip = mutator.RandRange(100, 1100)
 		case 2:
-			// 极端值
+			// Extreme value
 			if mutator.Bool() {
 				mutated.Skip = 0
 			} else {
@@ -1035,18 +1116,18 @@ func mutateGetBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.GetBloc
 func mutateBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.BlockHeadersPacket) *eth.BlockHeadersPacket {
 	mutated := *original
 
-	// 变异请求ID
+	// Mutate request ID
 	if rand.Float32() < 0.3 {
 		mutator.MutateRequestId(&mutated.RequestId)
 	}
 
-	// 变异随机区块头
+	// Mutate random block header
 	if rand.Float32() < 0.3 && len(mutated.BlockHeadersRequest) > 0 {
 		idx := mutator.Rand(len(mutated.BlockHeadersRequest))
 		mutator.MutateBlockHeader(mutated.BlockHeadersRequest[idx])
 	}
 
-	// 添加新的区块头
+	// Add new block header
 	if rand.Float32() < 0.3 {
 		gasLimit := mutator.RandRange(0, 1000000)
 		newHeader := &types.Header{
@@ -1063,7 +1144,7 @@ func mutateBlockHeadersPacket(mutator *fuzzing.Mutator, original *eth.BlockHeade
 		}
 		mutated.BlockHeadersRequest = append(mutated.BlockHeadersRequest, newHeader)
 	}
-	// 删除随机区块头
+	// Remove random block header
 	if rand.Float32() < 0.3 {
 		if len(mutated.BlockHeadersRequest) > 1 {
 			idx := mutator.Rand(len(mutated.BlockHeadersRequest))
@@ -1084,7 +1165,7 @@ func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.GetBlock
 	if rand.Float32() < 1 {
 		switch mutator.RandChoice(2) {
 		case 0:
-			// 空列表
+			// Empty list
 			*mutated.GetBlockBodiesRequest = eth.GetBlockBodiesRequest{}
 
 		// case 1:
@@ -1101,7 +1182,7 @@ func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.GetBlock
 		// 	*mutated.GetBlockBodiesRequest = hashes
 
 		case 1:
-			// 生成1-5个随机哈希
+			// Generate 1-5 random hashes
 			count := mutator.RandRange(1, 6)
 			hashes := make(eth.GetBlockBodiesRequest, 0, count)
 			for i := uint64(0); i < count; i++ {
@@ -1131,55 +1212,55 @@ func mutateGetBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.GetBlock
 func mutateBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.BlockBodiesPacket) *eth.BlockBodiesPacket {
 	mutated := *original
 
-	// 变异请求ID
+	// Mutate request ID
 	if rand.Float32() < 0.3 {
 		mutator.MutateRequestId(&mutated.RequestId)
 	}
-	// 变异随机区块体
+	// Mutate random block body
 	if rand.Float32() < 0.3 && len(mutated.BlockBodiesResponse) > 0 {
 		idx := mutator.RandRange(0, uint64(len(mutated.BlockBodiesResponse)))
 		body := mutated.BlockBodiesResponse[idx]
 
-		// 变异交易列表
+		// Mutate transaction list
 		if mutator.Bool() && len(body.Transactions) > 0 {
 			txIdx := mutator.RandRange(0, uint64(len(body.Transactions)))
 			body.Transactions[txIdx] = mutator.MutateTransaction(body.Transactions[txIdx])
 		}
 
-		// 变异叔块列表
+		// Mutate uncle block list
 		if mutator.Bool() && len(body.Uncles) > 0 {
 			uncleIdx := mutator.RandRange(0, uint64(len(body.Uncles)))
 			mutator.MutateBlockHeader(body.Uncles[uncleIdx])
 		}
 
-		// 变异提款列表
+		// Mutate withdrawal list
 		if mutator.Bool() && len(body.Withdrawals) > 0 {
 			withdrawalIdx := mutator.RandRange(0, uint64(len(body.Withdrawals)))
 			mutator.MutateWithdrawal(body.Withdrawals[withdrawalIdx])
 		}
 	}
-	// 添加新的区块体
+	// Add new block body
 	if rand.Float32() < 0.3 {
-		// 创建新的区块体
+		// Create new block body
 		newBody := &eth.BlockBody{
-			Transactions: make([]*types.Transaction, mutator.RandRange(1, 6)), // 1-5个交易
-			Uncles:       make([]*types.Header, mutator.RandRange(0, 2)),      // 0-1个叔块
-			Withdrawals:  make([]*types.Withdrawal, mutator.RandRange(0, 3)),  // 0-2个提款
+			Transactions: make([]*types.Transaction, mutator.RandRange(1, 6)), // 1-5 transactions
+			Uncles:       make([]*types.Header, mutator.RandRange(0, 2)),      // 0-1 uncle blocks
+			Withdrawals:  make([]*types.Withdrawal, mutator.RandRange(0, 3)),  // 0-2 withdrawals
 		}
 
-		// 填充交易
+		// Fill transactions
 		for i := range newBody.Transactions {
 			newBody.Transactions[i] = mutator.MutateTransaction(nil)
 		}
 
-		// 填充叔块
+		// Fill uncle blocks
 		for i := range newBody.Uncles {
 			uncle := &types.Header{}
 			mutator.MutateBlockHeader(uncle)
 			newBody.Uncles[i] = uncle
 		}
 
-		// 填充提款
+		// Fill withdrawals
 		for i := range newBody.Withdrawals {
 			withdrawal := &types.Withdrawal{}
 			mutator.MutateWithdrawal(withdrawal)
@@ -1188,7 +1269,7 @@ func mutateBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.BlockBodies
 
 		mutated.BlockBodiesResponse = append(mutated.BlockBodiesResponse, newBody)
 	}
-	// 删除随机区块体
+	// Remove random block body
 	if rand.Float32() < 0.3 {
 		if len(mutated.BlockBodiesResponse) > 1 {
 			idx := mutator.RandRange(0, uint64(len(mutated.BlockBodiesResponse)))
@@ -1205,12 +1286,12 @@ func mutateBlockBodiesPacket(mutator *fuzzing.Mutator, original *eth.BlockBodies
 func mutateNewBlockPacket(mutator *fuzzing.Mutator, original *eth.NewBlockPacket) *eth.NewBlockPacket {
 	mutated := *original
 
-	// 变异区块
+	// Mutate block
 	if rand.Float32() < 0.5 {
 		mutator.MutateNewBlock(mutated.Block)
 	}
 
-	// 变异总难度
+	// Mutate total difficulty
 	if rand.Float32() < 0.3 {
 		mutated.TD = mutator.MutateTotalDifficulty()
 	}
@@ -1221,7 +1302,7 @@ func mutateNewBlockPacket(mutator *fuzzing.Mutator, original *eth.NewBlockPacket
 func mutateNewPooledTransactionHashesPacket(mutator *fuzzing.Mutator, original *eth.NewPooledTransactionHashesPacket) *eth.NewPooledTransactionHashesPacket {
 	mutated := *original
 
-	// 变异随机交易哈希
+	// Mutate random transaction hash
 	if rand.Float32() < 0.3 {
 		if len(mutated.Hashes) > 0 {
 			idx := mutator.RandRange(0, uint64(len(mutated.Hashes)))
@@ -1229,12 +1310,12 @@ func mutateNewPooledTransactionHashesPacket(mutator *fuzzing.Mutator, original *
 		}
 	}
 
-	// 添加新的交易哈希
+	// Add new transaction hash
 	if rand.Float32() < 0.3 {
 		mutated.Hashes = append(mutated.Hashes, mutator.MutateHash())
 	}
 
-	// 删除随机交易哈希
+	// Remove random transaction hash
 	if rand.Float32() < 0.3 {
 		if len(mutated.Hashes) > 1 {
 			idx := mutator.RandRange(0, uint64(len(mutated.Hashes)))
@@ -1256,11 +1337,11 @@ func mutateGetPooledTransactionsPacket(mutator *fuzzing.Mutator, original *eth.G
 
 		switch mutator.RandChoice(2) {
 		case 0:
-			// 空列表
+			// Empty list
 			request = eth.GetPooledTransactionsRequest{}
 
 		case 1:
-			// 生成1-5个随机哈希
+			// Generate 1-5 random hashes
 			count := uint64(mutator.RandRange(1, 6))
 			hashes := make(eth.GetPooledTransactionsRequest, count)
 			for i := uint64(0); i < count; i++ {
@@ -1278,12 +1359,12 @@ func mutateGetPooledTransactionsPacket(mutator *fuzzing.Mutator, original *eth.G
 func mutatePooledTransactionsPacket(mutator *fuzzing.Mutator, original *eth.PooledTransactionsPacket) *eth.PooledTransactionsPacket {
 	mutated := *original
 
-	// 变异请求ID
+	// Mutate request ID
 	if rand.Float32() < 0.3 {
 		mutator.MutateRequestId(&mutated.RequestId)
 	}
 
-	// 变异随机交易
+	// Mutate random transaction
 	if rand.Float32() < 0.3 {
 		if len(mutated.PooledTransactionsResponse) > 0 {
 			idx := mutator.RandRange(0, uint64(len(mutated.PooledTransactionsResponse)))
@@ -1293,7 +1374,7 @@ func mutatePooledTransactionsPacket(mutator *fuzzing.Mutator, original *eth.Pool
 		}
 	}
 
-	// 添加新的交易
+	// Add new transaction
 	if rand.Float32() < 0.3 {
 		newTx := mutator.MutateTransaction(nil)
 		mutated.PooledTransactionsResponse = append(
@@ -1302,7 +1383,7 @@ func mutatePooledTransactionsPacket(mutator *fuzzing.Mutator, original *eth.Pool
 		)
 	}
 
-	// 删除随机交易
+	// Remove random transaction
 	if rand.Float32() < 0.3 {
 		if len(mutated.PooledTransactionsResponse) > 1 {
 			idx := mutator.RandRange(0, uint64(len(mutated.PooledTransactionsResponse)))
@@ -1324,7 +1405,7 @@ func mutateGetReceiptsPacket(mutator *fuzzing.Mutator, original *eth.GetReceipts
 	if rand.Float32() < 1 {
 		switch mutator.RandChoice(2) {
 		case 0:
-			// 空列表
+			// Empty list
 			*mutated.GetReceiptsRequest = eth.GetReceiptsRequest{}
 
 		// case 1:
@@ -1341,7 +1422,7 @@ func mutateGetReceiptsPacket(mutator *fuzzing.Mutator, original *eth.GetReceipts
 		// 	*mutated.GetReceiptsRequest = hashes
 
 		case 1:
-			// 生成1-5个随机哈希
+			// Generate 1-5 random hashes
 			count := mutator.RandRange(1, 6)
 			hashes := make(eth.GetReceiptsRequest, 0, count)
 			for i := uint64(0); i < count; i++ {
@@ -1371,12 +1452,12 @@ func mutateGetReceiptsPacket(mutator *fuzzing.Mutator, original *eth.GetReceipts
 func mutateReceiptsPacket(mutator *fuzzing.Mutator, original *eth.ReceiptsPacket) *eth.ReceiptsPacket {
 	mutated := *original
 
-	// 变异请求ID
+	// Mutate request ID
 	if rand.Float32() < 0.3 {
 		mutator.MutateRequestId(&mutated.RequestId)
 	}
 
-	// 变异随机收据
+	// Mutate random receipt
 	if rand.Float32() < 0.3 {
 		if len(mutated.ReceiptsResponse) > 0 {
 			idx := mutator.RandRange(0, uint64(len(mutated.ReceiptsResponse)))
@@ -1386,7 +1467,7 @@ func mutateReceiptsPacket(mutator *fuzzing.Mutator, original *eth.ReceiptsPacket
 		}
 	}
 
-	// 添加新的收据
+	// Add new receipt
 	if rand.Float32() < 0.3 {
 		gasUsed := mutator.RandRange(0, 1000000)
 		newReceipt := &types.Receipt{
@@ -1403,7 +1484,7 @@ func mutateReceiptsPacket(mutator *fuzzing.Mutator, original *eth.ReceiptsPacket
 		)
 	}
 
-	// 删除随机收据
+	// Remove random receipt
 	if rand.Float32() < 0.3 {
 		if len(mutated.ReceiptsResponse) > 1 {
 			idx := mutator.RandRange(0, uint64(len(mutated.ReceiptsResponse)))

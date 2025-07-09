@@ -20,11 +20,12 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/types"
+
+	// "github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
 )
 
 type GeneralStateTest map[string]*stJSON
@@ -50,12 +51,12 @@ type stIndex struct {
 // BlockCorpus 用于保存所有已知的区块头
 type BlockCorpus struct {
 	mu      sync.RWMutex
-	headers map[common.Hash]*types.Header
+	headers map[int]*types.Header
 }
 
 func NewBlockCorpus() *BlockCorpus {
 	return &BlockCorpus{
-		headers: make(map[common.Hash]*types.Header),
+		headers: make(map[int]*types.Header),
 	}
 }
 
@@ -63,14 +64,14 @@ func (bc *BlockCorpus) AddHeaders(hds []*types.Header) {
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
 	for _, h := range hds {
-		bc.headers[h.Hash()] = h
+		bc.headers[int(h.Number.Uint64())] = h
 	}
 }
 
-func (bc *BlockCorpus) GetHeader(hash common.Hash) (*types.Header, bool) {
+func (bc *BlockCorpus) GetHeader(index int) (*types.Header, bool) {
 	bc.mu.RLock()
 	defer bc.mu.RUnlock()
-	h, ok := bc.headers[hash]
+	h, ok := bc.headers[index]
 	return h, ok
 }
 
@@ -94,13 +95,13 @@ type NetworkState struct {
 	ForkID          forkid.ID
 }
 
-func (ns *NetworkState) ToStatusPacket() *eth.StatusPacket {
-	return &eth.StatusPacket{
-		ProtocolVersion: ns.ProtocolVersion,
-		NetworkID:       ns.NetworkID,
-		TD:              ns.TD,
-		Head:            ns.Head,
-		Genesis:         ns.Genesis,
-		ForkID:          ns.ForkID,
-	}
-}
+// func (ns *NetworkState) ToStatusPacket() *eth.StatusPacket {
+// 	return &eth.StatusPacket{
+// 		ProtocolVersion: ns.ProtocolVersion,
+// 		NetworkID:       ns.NetworkID,
+// 		TD:              ns.TD,
+// 		Head:            ns.Head,
+// 		Genesis:         ns.Genesis,
+// 		ForkID:          ns.ForkID,
+// 	}
+// }
