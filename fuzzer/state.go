@@ -17,8 +17,15 @@
 package fuzzer
 
 import (
+	"math/big"
+	"sync"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/forkid"
+	"github.com/ethereum/go-ethereum/core/types"
+
+	// "github.com/AgnopraxLab/D2PFuzz/d2p/protocol/eth"
 )
 
 type GeneralStateTest map[string]*stJSON
@@ -40,3 +47,61 @@ type stIndex struct {
 	Gas   int `json:"gas"`
 	Value int `json:"value"`
 }
+
+// BlockCorpus 用于保存所有已知的区块头
+type BlockCorpus struct {
+	mu      sync.RWMutex
+	headers map[int]*types.Header
+}
+
+func NewBlockCorpus() *BlockCorpus {
+	return &BlockCorpus{
+		headers: make(map[int]*types.Header),
+	}
+}
+
+func (bc *BlockCorpus) AddHeaders(hds []*types.Header) {
+	bc.mu.Lock()
+	defer bc.mu.Unlock()
+	for _, h := range hds {
+		bc.headers[int(h.Number.Uint64())] = h
+	}
+}
+
+func (bc *BlockCorpus) GetHeader(index int) (*types.Header, bool) {
+	bc.mu.RLock()
+	defer bc.mu.RUnlock()
+	h, ok := bc.headers[index]
+	return h, ok
+}
+
+func (bc *BlockCorpus) AllHeaders() []*types.Header {
+	bc.mu.RLock()
+	defer bc.mu.RUnlock()
+	result := make([]*types.Header, 0, len(bc.headers))
+	for _, h := range bc.headers {
+		result = append(result, h)
+	}
+	return result
+}
+
+// NetworkState 保存 handshake 阶段的网络状态信息
+type NetworkState struct {
+	ProtocolVersion uint32
+	NetworkID       uint64
+	TD              *big.Int
+	Head            common.Hash
+	Genesis         common.Hash
+	ForkID          forkid.ID
+}
+
+// func (ns *NetworkState) ToStatusPacket() *eth.StatusPacket {
+// 	return &eth.StatusPacket{
+// 		ProtocolVersion: ns.ProtocolVersion,
+// 		NetworkID:       ns.NetworkID,
+// 		TD:              ns.TD,
+// 		Head:            ns.Head,
+// 		Genesis:         ns.Genesis,
+// 		ForkID:          ns.ForkID,
+// 	}
+// }

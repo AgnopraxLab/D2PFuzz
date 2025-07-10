@@ -64,42 +64,6 @@ func NewOracleState() *OracleState {
 func InitOracleState(client *Suite) *OracleState {
 	state := NewOracleState()
 
-	chain := client.chain
-
-	// 设置基本信息
-	state.LatestBlockNumber = uint64(len(chain.blocks) - 1)
-	state.TotalDifficulty.Set(chain.blocks[len(chain.blocks)-1].Difficulty())
-	state.GenesisHash = chain.blocks[0].Hash()
-	state.GasLimit = chain.genesis.GasLimit
-
-	// 复制账户状态
-	for addr, account := range chain.state {
-		state.AccountBalances[addr] = account.Balance
-		state.AccountNonces[addr] = account.Nonce
-	}
-
-	// 复制区块哈希
-	for i, block := range chain.blocks {
-		state.BlockHashes[uint64(i)] = block.Hash()
-	}
-
-	// 设置网络ID和协议版本
-	state.NetworkID = chain.config.ChainID.Uint64()
-	state.ProtocolVersion = 66 // 假设使用的是ETH66协议版本
-
-	// 复制创世块配置
-	state.GenesisConfig = chain.config
-	state.GenesisAlloc = chain.genesis.Alloc
-	state.GenesisBlock = chain.blocks[0] // check client.chain.blocks[0] 是否为创世区块
-
-	// 设置当前区块头
-	state.CurrentHeader = chain.blocks[len(chain.blocks)-1].Header()
-
-	// 复制发送者信息
-	for addr, info := range chain.senders {
-		state.Senders[addr] = info.Nonce
-	}
-
 	return state
 }
 
@@ -113,8 +77,6 @@ func OracleCheck(packet interface{}, state *OracleState, s *Suite) (interface{},
 		checkedPacket, err = checkStatusPacket(p, state)
 	case *NewBlockHashesPacket:
 		checkedPacket, err = checkNewBlockHashesPacket(p, state)
-	case *TransactionsPacket:
-		checkedPacket, err = checkTransactionsPacket(p, state, s)
 	case *GetBlockHeadersPacket:
 		checkedPacket, err = checkGetBlockHeadersPacket(p, state)
 	case *BlockHeadersPacket:
@@ -234,122 +196,6 @@ func checkNewBlockHashesPacket(p *NewBlockHashesPacket, state *OracleState) (*Ne
 	}
 
 	*p = validBlocks
-	return p, nil
-}
-
-func checkTransactionsPacket(p *TransactionsPacket, state *OracleState, s *Suite) (*TransactionsPacket, error) {
-	validTxs := make([]*types.Transaction, 0)
-	seenNonces := make(map[common.Address]uint64)
-	invalidCount := 0
-
-	for _, tx := range *p {
-		// 1. 基本有效性检查
-		if tx == nil {
-			invalidCount++
-			continue // 跳过空交易
-		}
-
-		// 2. 检查签名和发送者
-		from, err := types.Sender(types.NewEIP155Signer(tx.ChainId()), tx)
-		if err != nil {
-			invalidCount++
-			continue // 跳过无效签名的交易
-		}
-
-		// 3. 检查 nonce
-		expectedNonce, exists := seenNonces[from]
-		if !exists {
-			expectedNonce = state.AccountNonces[from]
-		}
-		if tx.Nonce() < expectedNonce {
-			invalidCount++
-			continue // 跳过 nonce 过低的交易
-		}
-		if tx.Nonce() > expectedNonce {
-			// 修正 nonce
-			newTx := types.NewTx(&types.DynamicFeeTx{
-				ChainID:   tx.ChainId(),
-				Nonce:     expectedNonce,
-				GasTipCap: tx.GasTipCap(),
-				GasFeeCap: tx.GasFeeCap(),
-				Gas:       tx.Gas(),
-				To:        tx.To(),
-				Value:     tx.Value(),
-				Data:      tx.Data(),
-			})
-			signedTx, err := s.chain.SignTx(from, newTx)
-			if err != nil {
-				invalidCount++
-				continue // 跳过无法签名的交易
-			}
-			tx = signedTx
-		}
-
-		// 4. 检查 gas 相关字段
-		if tx.GasFeeCap().Cmp(tx.GasTipCap()) < 0 {
-			// 修正 GasFeeCap
-			newTx := types.NewTx(&types.DynamicFeeTx{
-				ChainID:   tx.ChainId(),
-				Nonce:     tx.Nonce(),
-				GasTipCap: tx.GasTipCap(),
-				GasFeeCap: new(big.Int).Add(tx.GasTipCap(), big.NewInt(1)), // GasFeeCap = GasTipCap + 1
-				Gas:       tx.Gas(),
-				To:        tx.To(),
-				Value:     tx.Value(),
-				Data:      tx.Data(),
-			})
-			signedTx, err := s.chain.SignTx(from, newTx)
-			if err != nil {
-				invalidCount++
-				continue // 跳过无法签名的交易
-			}
-			tx = signedTx
-		}
-
-		// 5. 检查余额是否足够支付交易
-		balance, ok := new(big.Int).SetString(state.AccountBalances[from], 10)
-		if !ok {
-			invalidCount++
-			// 如果无法解析余额字符串，记录错误并跳过这个交易
-			log.Printf("Error parsing balance for address %s: %s", from.Hex(), state.AccountBalances[from])
-			continue
-		}
-		cost := new(big.Int).Mul(tx.GasFeeCap(), new(big.Int).SetUint64(tx.Gas()))
-		cost.Add(cost, tx.Value())
-		if balance.Cmp(cost) < 0 {
-			// 尝试修改交易金额
-			maxValue := new(big.Int).Sub(balance, new(big.Int).Mul(tx.GasFeeCap(), new(big.Int).SetUint64(tx.Gas())))
-			if maxValue.Sign() > 0 {
-				newTx := types.NewTx(&types.DynamicFeeTx{
-					ChainID:   tx.ChainId(),
-					Nonce:     tx.Nonce(),
-					GasTipCap: tx.GasTipCap(),
-					GasFeeCap: tx.GasFeeCap(),
-					Gas:       tx.Gas(),
-					To:        tx.To(),
-					Value:     maxValue,
-					Data:      tx.Data(),
-				})
-				signedTx, err := s.chain.SignTx(from, newTx)
-				if err != nil {
-					invalidCount++
-					continue // 跳过无法签名的交易
-				}
-				tx = signedTx
-				log.Printf("Modified transaction value for address %s: original %s, new %s", from.Hex(), tx.Value().String(), maxValue.String())
-			} else {
-				invalidCount++
-				log.Printf("Insufficient balance for address %s: balance %s, required %s", from.Hex(), balance.String(), cost.String())
-				continue
-			}
-		}
-		// 将有效交易添加到列表
-		validTxs = append(validTxs, tx)
-		seenNonces[from] = tx.Nonce() + 1
-	}
-
-	*p = validTxs
-	log.Printf("Total invalid transactions: %d", invalidCount)
 	return p, nil
 }
 

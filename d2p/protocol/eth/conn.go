@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"reflect"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -215,21 +214,21 @@ func (s *Suite) SnapRequest(code uint64, msg any) (any, error) {
 
 // peer performs both the protocol handshake and the status message
 // exchange with the node to peer with it.
-func (c *Conn) peer(chain *Chain, status *StatusPacket) error {
+func (c *Conn) peer(status *StatusPacket) error {
 	if err := c.handshake(); err != nil {
 		return fmt.Errorf("handshake failed: %v", err)
 	}
-	if err := c.statusExchange(chain, status); err != nil {
+	if err := c.statusExchange(status); err != nil {
 		return fmt.Errorf("status exchange failed: %v", err)
 	}
 	return nil
 }
 
-func (c *Conn) Peer(chain *Chain, status *StatusPacket) error {
+func (c *Conn) Peer(status *StatusPacket) error {
 	if err := c.handshake(); err != nil {
 		return fmt.Errorf("handshake failed: %v", err)
 	}
-	if err := c.statusExchange(chain, status); err != nil {
+	if err := c.statusExchange(status); err != nil {
 		return fmt.Errorf("status exchange failed: %v", err)
 	}
 	return nil
@@ -298,7 +297,7 @@ func (c *Conn) negotiateEthProtocol(caps []p2p.Cap) {
 }
 
 // statusExchange performs a `Status` message exchange with the given node.
-func (c *Conn) statusExchange(chain *Chain, status *StatusPacket) error {
+func (c *Conn) statusExchange(status *StatusPacket) error {
 loop:
 	for {
 		code, data, err := c.Read()
@@ -312,26 +311,15 @@ loop:
 			if err := rlp.DecodeBytes(data, &msg); err != nil {
 				return fmt.Errorf("error decoding status packet: %w", err)
 			}
-			// fmt.Println("pass 1")
-			if have, want := msg.Head, chain.blocks[chain.Len()-1].Hash(); have != want {
-				return fmt.Errorf("wrong head block in status, want:  %#x (block %d) have %#x",
-					want, chain.blocks[chain.Len()-1].NumberU64(), have)
+			status = &StatusPacket{
+				ProtocolVersion: uint32(c.negotiatedProtoVersion),
+				NetworkID:       msg.NetworkID,
+				TD:              msg.TD,
+				Head:            msg.Head,
+				Genesis:         msg.Genesis,
+				ForkID:          msg.ForkID,
 			}
-			// fmt.Println("pass 2")
-			if have, want := msg.TD.Cmp(chain.TD()), 0; have != want {
-				return fmt.Errorf("wrong TD in status: have %v want %v", have, want)
-			}
-			// fmt.Println("pass 3")
-			if have, want := msg.ForkID, chain.ForkID(); !reflect.DeepEqual(have, want) {
-				// fmt.Println("have", have)
-				// fmt.Println("want", want)
-				return fmt.Errorf("wrong fork ID in status: have %v, want %v", have, want)
-			}
-			// fmt.Println("pass 4")
-			if have, want := msg.ProtocolVersion, c.ourHighestProtoVersion; have != uint32(want) {
-				return fmt.Errorf("wrong protocol version: have %v, want %v", have, want)
-			}
-			// fmt.Println("pass 5")
+
 			break loop
 		case discMsg:
 			var msg []p2p.DiscReason
@@ -353,14 +341,7 @@ loop:
 	}
 	if status == nil {
 		// default status message
-		status = &StatusPacket{
-			ProtocolVersion: uint32(c.negotiatedProtoVersion),
-			NetworkID:       chain.config.ChainID.Uint64(),
-			TD:              chain.TD(),
-			Head:            chain.blocks[chain.Len()-1].Hash(),
-			Genesis:         chain.blocks[0].Hash(),
-			ForkID:          chain.ForkID(),
-		}
+		status = status
 	}
 	if err := c.Write(ethProto, StatusMsg, status); err != nil {
 		return fmt.Errorf("write to connection failed: %v", err)

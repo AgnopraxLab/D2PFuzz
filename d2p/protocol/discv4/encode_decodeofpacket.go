@@ -21,7 +21,6 @@ func Expired(ts uint64) bool {
 }
 
 // Encoder/decoder.
-
 const (
 	macSize  = 32
 	sigSize  = crypto.SignatureLength

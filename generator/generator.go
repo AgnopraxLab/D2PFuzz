@@ -131,7 +131,7 @@ func Initeth(dest *enode.Node, dir string) (*eth.Suite, error) {
 	// }
 
 	// Create Suite
-	client, err := eth.NewSuite(dest, dir, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
+	client, err := eth.NewSuite(dest, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("failed to create suite: %v", err)
@@ -164,7 +164,7 @@ func Initsnap(dest *enode.Node, dir string) (*eth.Suite, error) {
 	// }
 
 	// Create Suite
-	client, err := eth.NewSuite(dest, dir, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
+	client, err := eth.NewSuite(dest, geth.HTTPAuthEndpoint(), common.Bytes2Hex(secret[:]))
 	if err != nil {
 		cleanup()
 		return nil, fmt.Errorf("failed to create suite: %v", err)

@@ -51,7 +51,6 @@ var runCommand = &cli.Command{
 		protocolFlag,
 		targetFlag,
 		engineFlag,
-		chainEnvDirFlag,
 	},
 }
 
@@ -62,7 +61,6 @@ var genCommand = &cli.Command{
 	Flags: []cli.Flag{
 		protocolFlag,
 		targetFlag,
-		chainEnvDirFlag,
 		packetTypeFlag,
 	},
 }

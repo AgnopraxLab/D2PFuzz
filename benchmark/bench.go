@@ -94,6 +94,7 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 			testMaker := fuzzer.NewEthMaker(target, chainDir)
 			if engine == 1 {
 				testMaker.Start(os.Stdout)
+				// testMaker.QueryStart(os.Stdout)
 			} else {
 				packetTypeInt := getEthPacketType(packetType)
 				packet, err := testMaker.SuiteList[0].GenPacket(packetTypeInt)
@@ -106,7 +107,8 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 					CheckFalsePass: 0,
 					CheckTruePass:  0,
 				}
-				testMaker.PacketStart(os.Stdout, packet, globalEthStats[packet.Name()])
+				testMaker.QueryStart(os.Stdout)
+				//testMaker.PacketStart(os.Stdout, packet, globalEthStats[packet.Name()])
 				fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePassOK: %d, CheckFalsePassBad: %d, CheckTruePass: %d\n",
 					packet.Name(),
 					globalEthStats[packet.Name()].ExecuteCount,

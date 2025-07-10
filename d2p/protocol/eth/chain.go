@@ -67,25 +67,8 @@ func NewChain(dir string) (*Chain, error) {
 	if err != nil {
 		return nil, err
 	}
-	gblock := gen.ToBlock()
-
-	blocks, err := blocksFromFile(filepath.Join(dir, "chain.rlp"), gblock)
-	if err != nil {
-		return nil, err
-	}
-	sTate, err := readState(filepath.Join(dir, "headstate.json"))
-	if err != nil {
-		return nil, err
-	}
-	accounts, err := readAccounts(filepath.Join(dir, "accounts.json"))
-	if err != nil {
-		return nil, err
-	}
 	return &Chain{
 		genesis: gen,
-		blocks:  blocks,
-		state:   sTate,
-		senders: accounts,
 		config:  gen.Config,
 	}, nil
 }
@@ -347,8 +330,7 @@ func setupGeth(stack *node.Node, dir string) error {
 	if err := catalyst.Register(stack, backend); err != nil {
 		return fmt.Errorf("failed to register catalyst service: %v", err)
 	}
-	_, err = backend.BlockChain().InsertChain(chain.blocks[1:])
-	return err
+	return nil
 }
 
 // IncNonce increases the specified signing account's pending nonce.

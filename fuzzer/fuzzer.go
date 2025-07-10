@@ -492,9 +492,12 @@ func ethFuzzer(engine int, target, chain string) error {
 					itration,
 					len(testMaker.PakcetSeed),
 					seed.Name())
-				if err = testMaker.PacketStart(traceFile, seed, globalEthStats[seed.Name()]); err != nil {
+				if err = testMaker.QueryStart(traceFile); err != nil {
 					return err
 				}
+				// if err = testMaker.PacketStart(traceFile, seed, globalEthStats[seed.Name()]); err != nil {
+				// 	return err
+				// }
 				globalEthStats[seed.Name()].ExecuteCount = globalEthStats[seed.Name()].ExecuteCount + 1
 				for name, stats := range globalEthStats {
 					fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePass: %d, CheckTruePass: %d\n",
