@@ -1,16 +1,12 @@
 # D2PFuzz
 
-D2PFuzz is a distributed P2P network fuzzing tool for testing and analyzing the security and stability of P2P network protocols.
+D2PFuzz is a fuzzer tool for analyze the Ethernet DevP2P protocol. It is able to generate data corresponding to various sub-protocols including discv4 (e.g., Ping, Pong, etc.), discv5, rlpx, and eth according to the specification of Ethernet network communication protocols. and constructs data sequences according to the chain state and time, and adds mutation functions to them to detect the security of Ethernet network communication protocols.
 
 ## Project Structure
 
 ```
 D2PFuzz/
-├── .gitignore          # Git ignore file configuration
-├── LICENSE             # Project license
-├── README.md           # Project documentation
 ├── config.yaml         # Main configuration file
-├── go.mod              # Go module dependency management
 ├── main.go             # Program entry point
 ├── cmd/                # Command-line tools directory
 ├── config/             # Configuration related modules
@@ -24,14 +20,6 @@ D2PFuzz/
 └── utils/              # Utility functions modules
 ```
 
-## Features
-
-- 🔍 **Distributed Fuzzing**: Support multi-node collaborative P2P network testing
-- 📊 **Real-time Monitoring**: Provide real-time monitoring and status feedback during testing
-- 📋 **Detailed Reports**: Generate detailed test reports and analysis results
-- ⚙️ **Flexible Configuration**: Support various configuration options and custom test scenarios
-- 🚀 **High Performance**: Optimized concurrent processing and resource management
-
 ## Quick Start
 
 ### Requirements
@@ -43,7 +31,7 @@ D2PFuzz/
 
 ```bash
 # Clone the project
-git clone https://github.com/zhouCode/D2PFuzz.git
+git clone https://github.com/AgnopraxLab/D2PFuzz.git
 cd D2PFuzz
 
 # Install dependencies
@@ -60,10 +48,6 @@ Edit the `config.yaml` file to configure test parameters:
 ```yaml
 # Configure your test parameters in config.yaml
 ```
-
-## Contributing
-
-Welcome to submit Issues and Pull Requests to help improve this project.
 
 ## License
 
