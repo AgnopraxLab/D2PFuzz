@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/AgnopraxLab/D2PFuzz/d2p/protocol/snap"
+	"github.com/AgnopraxLab/D2PFuzz/fuzzing"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -61,29 +63,81 @@ func (s *Suite) Close() error {
 }
 
 func (s *Suite) GenPacket(packetType int) (Packet, error) {
+	// 使用全局共享的随机数生成器
+	mutator := fuzzing.NewMutator(fuzzing.GetGlobalRand())
 	switch packetType {
-	case GetBlockHeadersMsg:
-		return &GetBlockHeadersPacket{
-			RequestId: 33,
-			GetBlockHeadersRequest: &GetBlockHeadersRequest{
-				// Origin: HashOrNumber{Hash: s.chain.blocks[1].Hash()},
-				Origin: HashOrNumber{Number: uint64(1)},
-				// Origin:  HashOrNumber{Hash: s.chain.blocks[1].Hash(), Number: uint64(1)},
-				Amount:  2,
-				Skip:    1,
-				Reverse: false,
+	case StatusMsg:
+		return &StatusPacket{
+			ProtocolVersion: uint32(68),
+			NetworkID:       uint64(1),
+			TD:              common.Big0,
+			Head:            common.Hash{},
+			Genesis:         common.Hash{},
+			ForkID: forkid.ID{
+				Hash: [4]byte{1, 0, 0, 0},
+				Next: uint64(1),
 			},
 		}, nil
+	case NewBlockHashesMsg:
+		return &NewBlockHashesPacket{
+			{
+				Hash:   common.Hash{},
+				Number: uint64(1),
+			},
+		}, nil
+	case TransactionsMsg:
+		return &TransactionsPacket{}, nil
+	case GetBlockHeadersMsg:
+		return &GetBlockHeadersPacket{
+			
+			RequestId: uint64(mutator.Rand(1000)), // 使用Rand()生成一个0-1000之间的随机RequestId
+			GetBlockHeadersRequest: &GetBlockHeadersRequest{
+				Origin:  HashOrNumber{Number: uint64(mutator.Rand(32))},
+				Amount:  uint64(mutator.Rand(100)),
+				Skip:    uint64(mutator.Rand(5)),
+				Reverse: mutator.Bool(),
+			},
+		}, nil
+	// case BlockHeadersMsg:
+	// 	fmt.Println("GenPacket BlockHeadersMsg")
+	// 	return &BlockHeadersPacket{}, nil
+	case GetBlockBodiesMsg:
+		return &GetBlockBodiesPacket{
+			RequestId: uint64(1),
+			GetBlockBodiesRequest: &GetBlockBodiesRequest{
+				common.Hash{}, common.Hash{},
+			},
+		}, nil
+	// case BlockBodiesMsg:
+	// 	fmt.Println("GenPacket BlockBodiesMsg")
+	// 	return &BlockBodiesPacket{}, nil
+	case NewBlockMsg:
+		return &NewBlockPacket{}, nil
+	case NewPooledTransactionHashesMsg:
+		return &NewPooledTransactionHashesPacket{}, nil
+	case GetPooledTransactionsMsg:
+		return &GetPooledTransactionsPacket{}, nil
+	case PooledTransactionsMsg:
+		return &PooledTransactionsPacket{}, nil
+	case GetReceiptsMsg:
+		return &GetReceiptsPacket{
+			RequestId: uint64(1),
+			GetReceiptsRequest: &GetReceiptsRequest{
+				common.Hash{}, common.Hash{},
+			},
+		}, nil
+	case ReceiptsMsg:
+		return &ReceiptsPacket{}, nil
 	default:
 		return nil, errors.New("unknown packet type")
 	}
 }
 
-var (
-	acct   = common.HexToAddress("0x8bebc8ba651aee624937e7d897853ac30c95a067")
-	ffHash = common.MaxHash
-	zero   = common.Hash{}
-)
+// var (
+// 	acct   = common.HexToAddress("0x8bebc8ba651aee624937e7d897853ac30c95a067")
+// 	ffHash = common.MaxHash
+// 	zero   = common.Hash{}
+// )
 
 // GenPacket 生成指定类型的 snap 协议数据包
 func (s *Suite) GenSnapPacket(packetType int) (Packet, error) {
@@ -481,12 +535,10 @@ func (s *Suite) InitializeAndConnect() error {
 	//	conn.Close()
 	//}()
 	//defer conn.Close()
-	if err := conn.peer(nil); err != nil {
+	if err := conn.Peer(nil); err != nil {
 		return fmt.Errorf("peer failed: %v", err)
 	}
-	////
 
-	///
 	return nil
 }
 
@@ -500,12 +552,10 @@ func (s *Suite) SnapInitializeAndConnect() error {
 	//	conn.Close()
 	//}()
 	//defer conn.Close()
-	if err := conn.peer(nil); err != nil {
+	if err := conn.Peer(nil); err != nil {
 		return fmt.Errorf("peer failed: %v", err)
 	}
-	////
 
-	///
 	return nil
 }
 
@@ -518,7 +568,7 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 		return fmt.Errorf("建立发送连接失败: %v", err)
 	}
 	defer sendConn.Close()
-	if err = sendConn.peer(nil); err != nil {
+	if err = sendConn.Peer(nil); err != nil {
 		return fmt.Errorf("sending peer failed: %v", err)
 	}
 
@@ -528,7 +578,7 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 		return fmt.Errorf("建立接收连接失败: %v", err)
 	}
 	defer recvConn.Close()
-	if err = recvConn.peer(nil); err != nil {
+	if err = recvConn.Peer(nil); err != nil {
 		return fmt.Errorf("receiving peer failed: %v", err)
 	}
 

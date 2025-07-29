@@ -51,8 +51,9 @@ func printResult(name string, time time.Duration, err error) {
 func testExcution(prot, target, chainDir, packetType string, N int, engine int) (time.Duration, error) {
 	// var traceFile *os.File
 	start := time.Now()
-
+	
 	for i := 0; i < N; i++ {
+		fmt.Println("==============count: ",i,"=================")
 		switch prot {
 		case "discv4":
 			testMaker := fuzzer.NewV4Maker(target)
@@ -108,6 +109,8 @@ func testExcution(prot, target, chainDir, packetType string, N int, engine int) 
 					CheckTruePass:  0,
 				}
 				testMaker.QueryStart(os.Stdout)
+				fmt.Println("QueryStart=======End")
+				testMaker.PrintCorpus()
 				//testMaker.PacketStart(os.Stdout, packet, globalEthStats[packet.Name()])
 				fmt.Printf("Packet: %s, Executed: %d, CheckTrueFail: %d, CheckFalsePassOK: %d, CheckFalsePassBad: %d, CheckTruePass: %d\n",
 					packet.Name(),

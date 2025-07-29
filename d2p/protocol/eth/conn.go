@@ -214,15 +214,15 @@ func (s *Suite) SnapRequest(code uint64, msg any) (any, error) {
 
 // peer performs both the protocol handshake and the status message
 // exchange with the node to peer with it.
-func (c *Conn) peer(status *StatusPacket) error {
-	if err := c.handshake(); err != nil {
-		return fmt.Errorf("handshake failed: %v", err)
-	}
-	if err := c.statusExchange(status); err != nil {
-		return fmt.Errorf("status exchange failed: %v", err)
-	}
-	return nil
-}
+// func (c *Conn) peer(status *StatusPacket) error {
+// 	if err := c.handshake(); err != nil {
+// 		return fmt.Errorf("handshake failed: %v", err)
+// 	}
+// 	if err := c.statusExchange(status); err != nil {
+// 		return fmt.Errorf("status exchange failed: %v", err)
+// 	}
+// 	return nil
+// }
 
 func (c *Conn) Peer(status *StatusPacket) error {
 	if err := c.handshake(); err != nil {

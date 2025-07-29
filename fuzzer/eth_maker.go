@@ -43,8 +43,9 @@ var (
 	// 	eth.BlockHeadersMsg, eth.GetBlockBodiesMsg, eth.BlockBodiesMsg, eth.NewBlockMsg,
 	// 	eth.NewPooledTransactionHashesMsg, eth.GetPooledTransactionsMsg, eth.PooledTransactionsMsg,
 	// 	eth.GetReceiptsMsg, eth.ReceiptsMsg}
-	ethoptions = []int{eth.GetBlockHeadersMsg, eth.GetBlockBodiesMsg, eth.GetReceiptsMsg}
-	ethstate   = []int{eth.StatusMsg, eth.GetReceiptsMsg}
+	ethoptions   = []int{eth.GetBlockHeadersMsg, eth.GetBlockBodiesMsg, eth.GetReceiptsMsg}
+	ethstate     = []int{eth.StatusMsg, eth.GetReceiptsMsg}
+	elCorpusList = []*BlockCorpus{}
 )
 
 type EthMaker struct {
@@ -139,8 +140,8 @@ func (m *EthMaker) QueryStart(traceOutput io.Writer) error {
 	var (
 		logger *log.Logger
 		wg     sync.WaitGroup
+		mu     sync.Mutex
 	)
-
 	if len(m.SuiteList) == 0 {
 		return fmt.Errorf("empty suite list")
 	}
@@ -150,6 +151,16 @@ func (m *EthMaker) QueryStart(traceOutput io.Writer) error {
 	}
 
 	wg.Add(len(m.SuiteList))
+	// fmt.Println("m.SuiteList: ", m.SuiteList)
+	// for i, suite := range m.SuiteList {
+	// 	jsonData, err := json.MarshalIndent(suite, "", "  ")
+	// 	if err != nil {
+	// 		fmt.Printf("could not marshal suite %d: %v\n", i, err)
+	// 		continue
+	// 	}
+	// 	fmt.Printf("Suite %d details:\n%s\n", i, string(jsonData))
+	// }
+
 	for i, suite := range m.SuiteList {
 		go func(nodeIndex int, nodeSuite *eth.Suite) {
 			defer wg.Done()
@@ -167,16 +178,12 @@ func (m *EthMaker) QueryStart(traceOutput io.Writer) error {
 				logger.Printf("Node %d connected: %s", nodeIndex, nodeSuite.DestList.String())
 			}
 
-			packet := &eth.GetBlockHeadersPacket{
-				RequestId: 33,
-				GetBlockHeadersRequest: &eth.GetBlockHeadersRequest{
-					// Origin: HashOrNumber{Hash: s.chain.blocks[1].Hash()},
-					Origin: eth.HashOrNumber{Number: uint64(1)},
-					// Origin:  HashOrNumber{Hash: s.chain.blocks[1].Hash(), Number: uint64(1)},
-					Amount:  100,
-					Skip:    0,
-					Reverse: false,
-				},
+			packet, err := suite.GenPacket(eth.GetBlockHeadersMsg)
+			if err != nil {
+				if logger != nil {
+					logger.Printf("Node %d failed to generate packet: %v", nodeIndex, err)
+				}
+				return
 			}
 
 			// Send packet and get response
@@ -185,16 +192,67 @@ func (m *EthMaker) QueryStart(traceOutput io.Writer) error {
 				if logger != nil {
 					logger.Printf("Node %d query failed: %v", nodeIndex, err)
 				}
+				return
 			}
 
 			// Process response data and convert to BlockCorpus
 			if resp != nil {
+				fmt.Printf("resp.(type): %T\n", resp)
 				switch r := resp.(type) {
 				case *eth.BlockHeadersPacket:
 					// Create a BlockCorpus instance
 					blockCorpus := NewBlockCorpus()
 					// Add the block header in the response to BlockCorpus
+					fmt.Printf("Node %d received %d headers\n", nodeIndex, len(r.BlockHeadersRequest))
 					blockCorpus.AddHeaders(r.BlockHeadersRequest)
+					// 只有当 blockCorpus 不为空时才添加到 elCorpusList
+					if len(blockCorpus.AllHeaders()) > 0 {
+						// 使用互斥锁保护对 elCorpusList 的并发访问
+						mu.Lock()
+						elCorpusList = append(elCorpusList, blockCorpus)
+						mu.Unlock()
+					} else {
+						fmt.Printf("Node %d returned empty headers, skipping\n", nodeIndex)
+					}
+					// fmt.Println("blockCorpus.headers-len:", len(blockCorpus.headers))
+					// // Format and output all properties of blockCorpus
+					// fmt.Printf("=== BlockCorpus Properties ===\n")
+					// fmt.Printf("Type: *BlockCorpus\n")
+					// fmt.Printf("Address: %p\n", blockCorpus)
+
+					// // Access headers map (need to lock for safe access)
+					// blockCorpus.mu.RLock()
+					// fmt.Printf("Headers map size: %d\n", len(blockCorpus.headers))
+					// fmt.Printf("Headers map contents:\n")
+					// for blockNum, header := range blockCorpus.headers {
+					// 	if header != nil {
+					// 		fmt.Printf("  Block %d: Hash=%s, Number=%d, ParentHash=%s, Time=%d\n",
+					// 			blockNum,
+					// 			header.Hash().Hex(),
+					// 			header.Number.Uint64(),
+					// 			header.ParentHash.Hex(),
+					// 			header.Time)
+					// 	} else {
+					// 		fmt.Printf("  Block %d: <nil header>\n", blockNum)
+					// 	}
+					// }
+					// blockCorpus.mu.RUnlock()
+
+					// // Show mutex state (read-only info)
+					// fmt.Printf("Mutex: sync.RWMutex (internal state not directly accessible)\n")
+
+					// // Show all headers using the AllHeaders() method
+					// allHeaders := blockCorpus.AllHeaders()
+					// fmt.Printf("Total headers via AllHeaders(): %d\n", len(allHeaders))
+					// for i, header := range allHeaders {
+					// 	if header != nil {
+					// 		fmt.Printf("  Header[%d]: Block=%d, Hash=%s\n",
+					// 			i,
+					// 			header.Number.Uint64(),
+					// 			header.Hash().Hex())
+					// 	}
+					// }
+					// fmt.Printf("=== End BlockCorpus Properties ===\n\n")
 
 				default:
 					fmt.Printf("Wrong response type received!\n")
@@ -212,7 +270,16 @@ func (m *EthMaker) QueryStart(traceOutput io.Writer) error {
 
 	// wait for all goroutines finished
 	wg.Wait()
+
 	return nil
+}
+
+func (m *EthMaker) PrintCorpus() {
+	fmt.Println("PrintCorpus======Start")
+	fmt.Println("elCorpusList====Len:", len(elCorpusList))
+	for _, corpus := range elCorpusList {
+		fmt.Println("corpus: ", corpus)
+	}
 }
 
 func (m *EthMaker) PacketStart(traceOutput io.Writer, seed eth.Packet, stats *UDPPacketStats) error {
@@ -561,7 +628,6 @@ func (m *EthMaker) handleGetBlockHeadersPacket(p *eth.GetBlockHeadersPacket, sui
 	// p.Origin.Number = 2944
 	// p.Amount = 11
 	// p.Skip = 18446744073709551615
-	// //p.Skip = 18446744073709551615
 	// p.Reverse = false
 	// p.Origin.Hash = common.Hash{} // 确保使用Number而不是Hash
 
@@ -740,7 +806,7 @@ func (m *EthMaker) handleGetPooledTransactionsPacket(p *eth.GetPooledTransaction
 				Request:  newRequest,
 				Response: msg,
 				Success:  true,  // Received response but content doesn't match
-			Valid:    false, // Contains unknown transaction
+				Valid:    false, // Contains unknown transaction
 				Error:    fmt.Sprintf("unexpected tx received: %v", got.Hash()),
 			}
 		}

@@ -19,9 +19,11 @@ package fuzzing
 import (
 	"bytes"
 	"encoding/binary"
+	"log"
 	"math/big"
 	"math/rand"
 	"net"
+	"time"
 	"unsafe"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -33,12 +35,22 @@ import (
 )
 
 var (
+	// 全局共享的随机数生成器
+	GlobalRand *rand.Rand
+	Seed uint64
 	interesting8  = []int8{-128, -1, 0, 1, 16, 32, 64, 100, 127}
 	interesting16 = []int16{-32768, -129, 128, 255, 256, 512, 1000, 1024, 4096, 32767}
 	interesting32 = []int32{-2147483648, -100663046, -32769, 32768, 65535, 65536, 100663045, 2147483647}
 )
 
 func init() {
+	// 初始化全局共享的随机数种子
+	Seed := time.Now().UnixNano()
+	GlobalRand = rand.New(rand.NewSource(Seed))
+	
+	// 记录随机数种子值
+	log.Printf("Global random seed initialized: %d", Seed)
+	
 	for _, v := range interesting8 {
 		interesting16 = append(interesting16, int16(v))
 	}
@@ -53,6 +65,11 @@ type Mutator struct {
 
 func NewMutator(r *rand.Rand) *Mutator {
 	return &Mutator{r: r}
+}
+
+// GetGlobalRand 返回全局共享的随机数生成器
+func GetGlobalRand() *rand.Rand {
+	return GlobalRand
 }
 
 func (m *Mutator) Rand(n int) int {
@@ -319,6 +336,7 @@ func (m *Mutator) MutateNodes(nodes *[]*enr.Record) {
 
 // MutateRequestId 对 RequestId 进行变异
 func (m *Mutator) MutateRequestId(id *uint64) {
+	
 	switch m.Rand(4) {
 	case 0:
 		// 随机增加

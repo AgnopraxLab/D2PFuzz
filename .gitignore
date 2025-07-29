@@ -23,3 +23,10 @@
 # Go workspace file
 go.work
 go.work.sum
+
+# Project executable
+D2PFuzz
+
+# IDE and deployment files
+.idea/
+.vercel/

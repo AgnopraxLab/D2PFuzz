@@ -62,6 +62,7 @@ var genCommand = &cli.Command{
 		protocolFlag,
 		targetFlag,
 		packetTypeFlag,
+		chainEnvDirFlag,
 	},
 }
 
