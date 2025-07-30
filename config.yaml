@@ -6,13 +6,16 @@ server:
   port: 8080
   timeout: 30
 
+# mode: fuzz/test/bench
+mode: "fuzz"
+
 # P2P Network Configuration
 p2p:
   max_peers: 50
   listen_port: 30303
   bootstrap_nodes:
-    - "enode://d860a01f9722d78051619d1e2351aba3f43f943f6f00718d1b9baa4101932a1f5011f16bb2b1bb35db20d6fe28fa0bf09636d26a87d31de9ec6203eeedb1f666@18.138.108.67:30303"
-    - "enode://22a8232c3abc76a16ae9d6c3b164f98775fe226f0917b0ca871128a74a8e9630b458460865bab457221f1d448dd9791d24c4e5d88786180ac185df813a68d4de@3.209.45.79:30303"
+    - "enode://c662256b97629f5337fcfc15577a5795967be785cd8df680d3cb7a3df61dac63ac123df31605a449578b7190b83fa35d9ac500fb6f48c0a2c80e6c34bc9fb3d3@172.16.0.11:30303"
+    - "enode://e18b77e75e7d52c245abb7f5455c7b6509278c38077bcb62fce11d9e1de5e893a8f70c2a0506aa5df3a4fd1bab593a2e9e37b10b77a541c4411d0fcd048f77ab@172.16.0.12:30303"
 
 # Fuzzing Configuration
 fuzzing:
