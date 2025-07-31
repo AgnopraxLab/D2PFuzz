@@ -10,6 +10,7 @@ import (
 // Config represents the main configuration structure
 type Config struct {
 	Server     ServerConfig     `yaml:"server"`
+	Mode       string           `yaml:"mode"`
 	P2P        P2PConfig        `yaml:"p2p"`
 	Fuzzing    FuzzingConfig    `yaml:"fuzzing"`
 	Monitoring MonitoringConfig `yaml:"monitoring"`
