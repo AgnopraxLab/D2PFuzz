@@ -1,0 +1,50 @@
+# D2PFuzz Configuration File
+
+# Server Configuration
+server:
+  host: "localhost"
+  port: 8080
+  timeout: 30
+
+# mode: fuzz/test/bench
+mode: "fuzz"
+
+# P2P Network Configuration
+p2p:
+  max_peers: 50
+  listen_port: 30303
+  bootstrap_nodes:
+    - "enode://c662256b97629f5337fcfc15577a5795967be785cd8df680d3cb7a3df61dac63ac123df31605a449578b7190b83fa35d9ac500fb6f48c0a2c80e6c34bc9fb3d3@172.16.0.11:30303"
+    - "enode://e18b77e75e7d52c245abb7f5455c7b6509278c38077bcb62fce11d9e1de5e893a8f70c2a0506aa5df3a4fd1bab593a2e9e37b10b77a541c4411d0fcd048f77ab@172.16.0.12:30303"
+
+# Fuzzing Configuration
+fuzzing:
+  enabled: true
+  max_iterations: 1000
+  mutation_rate: 0.1
+  seed: 12345
+  protocols:
+    - "discv4"
+    - "discv5"
+    - "rlpx"
+    - "eth"
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  log_level: "info"
+  metrics_port: 9090
+  report_interval: 60
+
+# Output Configuration
+output:
+  directory: "./output"
+  format: "json"
+  compress: true
+
+# Report Configuration
+report:
+  directory: "./reports"
+  template: "default"
+  auto_generate: true
+  include_details: true

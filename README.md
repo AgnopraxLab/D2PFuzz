@@ -4,39 +4,55 @@ D2PFuzz is a fuzzer tool for analyze the Ethernet DevP2P protocol. It is able to
 
 ## Project Structure
 
-Introduction of some files and directories:
-
-- `README.md`: basic information about D2PFuzz
-- `generator/`: Generator tool for fuzzer
-- `d2p/`: Ethereum devp2p protocol related
-- `fuzzing/` : Mutation tools used in fuzz testing
-- `fuzzer` : Fuzzer testing tool
-- `filler` : Data fill tool
-- `utils/` : External Toolkit
-- `test/`: Test Data
-
-## Environment
-You need to have golang and go-ethereum installed
-
-## Install instructions
-
-```shell
-# Clone the repo to a place of your liking using
-git clone git@github.com:AgnopraxLab/D2PFuzz.git
-# Enter the repo
-cd D2PFuzz
-# Build the binary
-go build
-# Run the generator
-./D2PFuzz generator
-# Run the bench
-./D2PFuzz bench
-# Run the fuzzer
-./D2PFuzz run
 ```
-# Generator
-Package generation tests can be performed with this tool
-# Run
-Start Fuzzer for DevP2P
-# Bench
-Start Benchmarking for DevP2P
+D2PFuzz/
+├── config.yaml         # Main configuration file
+├── main.go             # Program entry point
+├── cmd/                # Command-line tools directory
+├── config/             # Configuration related modules
+├── fuzzer/             # Fuzzing core modules
+├── monitor/            # Monitoring modules
+├── output/             # Output files directory
+├── p2p/                # P2P network protocol modules
+├── report/             # Report generation modules
+├── reports/            # Test reports storage directory
+├── templates/          # Template files directory
+└── utils/              # Utility functions modules
+```
+
+## Quick Start
+
+### Requirements
+
+- Go 1.19+
+- Linux/macOS/Windows
+
+### Installation and Running
+
+```bash
+# Clone the project
+git clone https://github.com/AgnopraxLab/D2PFuzz.git
+cd D2PFuzz
+
+# Install dependencies
+go mod tidy
+
+# Run the program
+go run main.go
+```
+
+### Configuration
+
+Edit the `config.yaml` file to configure test parameters:
+
+```yaml
+# Configure your test parameters in config.yaml
+```
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Version
+
+Current version: v0.3
