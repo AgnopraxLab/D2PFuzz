@@ -56,3 +56,5 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## Version
 
 Current version: v0.3
+
+Tip: For fully tested versions of the past, see branches archive-v0.1 and v0.2
