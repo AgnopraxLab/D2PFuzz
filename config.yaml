@@ -42,9 +42,9 @@ output:
   format: "json"
   compress: true
 
-# Report Configuration
-report:
-  directory: "./reports"
+# Log Configuration
+log:
+  directory: "./logs"
   template: "default"
   auto_generate: true
   include_details: true

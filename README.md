@@ -6,18 +6,19 @@ D2PFuzz is a fuzzer tool for analyze the Ethernet DevP2P protocol. It is able to
 
 ```
 D2PFuzz/
-├── config.yaml         # Main configuration file
-├── main.go             # Program entry point
 ├── cmd/                # Command-line tools directory
 ├── config/             # Configuration related modules
 ├── fuzzer/             # Fuzzing core modules
+├── logs/               # Log files directory
 ├── monitor/            # Monitoring modules
-├── output/             # Output files directory
+├── output/             # Reports storage directory
 ├── p2p/                # P2P network protocol modules
 ├── report/             # Report generation modules
-├── reports/            # Test reports storage directory
-├── templates/          # Template files directory
-└── utils/              # Utility functions modules
+├── templates/          # Template config files directory
+├── test/               # Test cases directory
+├── utils/              # Utility functions modules
+├── config.yaml         # Main configuration file
+└── main.go             # Program entry point
 ```
 
 ## Quick Start
@@ -39,6 +40,9 @@ go mod tidy
 
 # Run the program
 go run main.go
+
+# Run test
+go run test/real_connection/main.go
 ```
 
 ### Configuration
