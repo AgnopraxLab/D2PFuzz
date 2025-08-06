@@ -6,14 +6,15 @@ D2PFuzz is a fuzzer tool for analyze the Ethernet DevP2P protocol. It is able to
 
 ```
 D2PFuzz/
+├── analysis/           # Result analysis
 ├── cmd/                # Command-line tools directory
 ├── config/             # Configuration related modules
 ├── fuzzer/             # Fuzzing core modules
 ├── logs/               # Log files directory
 ├── monitor/            # Monitoring modules
-├── output/             # Reports storage directory
+├── mutation/           # Mutation Strategy
+├── outputs/            # Reports storage directory
 ├── p2p/                # P2P network protocol modules
-├── report/             # Report generation modules
 ├── templates/          # Template config files directory
 ├── test/               # Test cases directory
 ├── utils/              # Utility functions modules

@@ -7,6 +7,8 @@
 *.dll
 *.so
 *.dylib
+d2pfuzz
+D2PFuzz
 
 # Mac OS X
 .DS_Store
@@ -29,5 +31,4 @@ go.work.sum
 
 # Project output directories
 output/
-reports/
 logs/

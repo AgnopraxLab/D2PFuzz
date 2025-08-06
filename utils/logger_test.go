@@ -47,7 +47,7 @@ func TestLogger_Info(t *testing.T) {
 
 	// Log an info message
 	testMessage := "This is an info message"
-	logger.Info(testMessage)
+	logger.Info("%s", testMessage)
 
 	// Give some time for the write to complete
 	time.Sleep(10 * time.Millisecond)
@@ -77,7 +77,7 @@ func TestLogger_Error(t *testing.T) {
 
 	// Log an error message
 	testMessage := "This is an error message"
-	logger.Error(testMessage)
+	logger.Error("%s", testMessage)
 
 	// Give some time for the write to complete
 	time.Sleep(10 * time.Millisecond)
@@ -105,9 +105,9 @@ func TestLogger_Warn(t *testing.T) {
 	require.NoError(t, err)
 	defer logger.Close()
 
-	// Log a warning message
-	testMessage := "This is a warning message"
-	logger.Warn(testMessage)
+	// Log a warn message
+	testMessage := "This is a warn message"
+	logger.Warn("%s", testMessage)
 
 	// Give some time for the write to complete
 	time.Sleep(10 * time.Millisecond)
@@ -137,7 +137,7 @@ func TestLogger_Debug(t *testing.T) {
 
 	// Log a debug message
 	testMessage := "This is a debug message"
-	logger.Debug(testMessage)
+	logger.Debug("%s", testMessage)
 
 	// Give some time for the write to complete
 	time.Sleep(10 * time.Millisecond)
@@ -327,7 +327,7 @@ func TestLogger_LongMessages(t *testing.T) {
 
 	// Test logging a very long message
 	longMessage := strings.Repeat("This is a very long message that should be handled properly by the logger. ", 100)
-	logger.Info(longMessage)
+	logger.Info("%s", longMessage)
 
 	// Give some time for the write to complete
 	time.Sleep(50 * time.Millisecond)
@@ -357,7 +357,7 @@ func TestLogger_SpecialCharacters(t *testing.T) {
 
 	// Test logging messages with special characters
 	specialMessage := "Message with special chars: ñáéíóú 中文 🚀 \n\t\r"
-	logger.Info(specialMessage)
+	logger.Info("%s", specialMessage)
 
 	// Give some time for the write to complete
 	time.Sleep(50 * time.Millisecond)

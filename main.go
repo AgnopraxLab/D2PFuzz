@@ -3,13 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	"D2PFuzz/config"
-	"D2PFuzz/p2p"
 	"D2PFuzz/utils"
+	"D2PFuzz/fuzzer"
 )
 
 func main() {
@@ -57,6 +54,13 @@ func main() {
 	logger.Info("Max peers: %d", cfg.P2P.MaxPeers)
 	logger.Info("Bootstrap nodes: %d configured", len(cfg.P2P.BootstrapNodes))
 
+	// Create fuzz client
+	fuzzClient, err := fuzzer.NewFuzzClient(*logger)
+	if err != nil {
+		logger.Fatal("Failed to create fuzz client: %v", err)
+	}
+	fuzzClient.Start()
+
 	// Create output directories if they don't exist
 	logger.Info("Creating output directories...")
 	
@@ -72,53 +76,5 @@ func main() {
 	}
 	logger.Info("Report directory created/verified: %s", reportPath)
 
-	// Initialize P2P manager
-	p2pManager, err := p2p.NewManager(&p2p.Config{
-		MaxPeers:       cfg.P2P.MaxPeers,
-		ListenPort:     cfg.P2P.ListenPort,
-		BootstrapNodes: cfg.P2P.BootstrapNodes,
-	}, logger)
-	if err != nil {
-		logger.Fatal("Failed to create P2P manager: %v", err)
-	}
-
-	// Start P2P manager if fuzzing is enabled
-	if cfg.IsFuzzingEnabled() {
-		logger.Info("Starting P2P fuzzing operations...")
-		if err := p2pManager.Start(); err != nil {
-			logger.Fatal("Failed to start P2P manager: %v", err)
-		}
-		logger.Info("P2P fuzzing started successfully")
-	}
-
-	logger.Info("D2PFuzz initialization completed!")
-	logger.Info("Configuration loaded and validated.")
-	logger.Info("Ready to start fuzzing operations...")
-
-	// Setup graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	// Main loop - print stats periodically
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-sigChan:
-			logger.Info("Received shutdown signal, stopping D2PFuzz...")
-			if err := p2pManager.Stop(); err != nil {
-				logger.Error("Error stopping P2P manager: %v", err)
-			}
-			logger.Info("D2PFuzz stopped gracefully")
-			return
-		case <-ticker.C:
-			// Print periodic stats
-			stats := p2pManager.GetStats()
-			fuzzStats := p2pManager.GetFuzzingStats()
-			logger.Info("P2P Stats - Connected: %d/%d peers, Messages sent: %d, received: %d",
-				stats["connected_peers"], stats["max_peers"],
-				fuzzStats.MessagesSent, fuzzStats.MessagesReceived)
-		}
-	}
+	
 }
