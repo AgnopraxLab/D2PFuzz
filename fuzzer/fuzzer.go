@@ -4,16 +4,14 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/ethereum/go-ethereum/p2p/rlpx"
 
-	"D2PFuzz/p2p/connection/rlpx"
 	"D2PFuzz/utils"
 )
 
@@ -54,21 +52,10 @@ func NewFuzzClient(logger utils.Logger) (*FuzzClient, error) {
 		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
-	// Create local node
-	db, err := enode.OpenDB("")
-	if err != nil {
-		return nil, fmt.Errorf("failed to open node database: %w", err)
-	}
-
-	localNode := enode.NewLocalNode(db, privateKey)
-	localNode.Set(enr.IP(net.IPv4(127, 0, 0, 1)))
-	localNode.Set(enr.TCP(0)) // Will be set when we start listening
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &FuzzClient{
 		privateKey: privateKey,
-		localNode:  localNode,
 		peers:      make(map[enode.ID]*Peer),
 		ctx:        ctx,
 		cancel:     cancel,

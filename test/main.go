@@ -1,52 +1,35 @@
 package main
 
 import (
-	"encoding/hex"
-	"errors"
+	"crypto/ecdsa"
+	"crypto/rand"
 	"fmt"
-	"log"
 	"math/big"
 	"net"
 	"os"
-	"time"
+	"path"
+
+	// "time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/txpool"
-	"github.com/ethereum/go-ethereum/core/txpool/blobpool"
-	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
-	"github.com/ethereum/go-ethereum/event"
+
+	// "github.com/ethereum/go-ethereum/common/hexutil"
+
+	// "github.com/ethereum/go-ethereum/core/forkid"
+
+	"github.com/ethereum/go-ethereum/core/types"
+
+	// "github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/rlpx"
-	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/trie"
-	"github.com/stretchr/testify/mock"
 	"gopkg.in/yaml.v2"
+
+	ethtest "D2PFuzz/devp2p/protocol/eth"
 )
-
-// lLogger 实际使用的日志实现
-// MockLogger is a mock implementation of Logger interface for testing
-type MockLogger struct {
-	mock.Mock
-}
-
-func (m *MockLogger) Debug(msg string, args ...interface{}) {
-	m.Called(msg, args)
-}
-
-func (m *MockLogger) Info(msg string, args ...interface{}) {
-	m.Called(msg, args)
-}
-
-func (m *MockLogger) Error(msg string, args ...interface{}) {
-	m.Called(msg, args)
-}
 
 // Config 配置结构体
 type Config struct {
@@ -57,395 +40,479 @@ type Config struct {
 	} `yaml:"p2p"`
 }
 
-type Hello struct {
+type protocolHandshake struct {
 	Version    uint64
 	Name       string
 	Caps       []p2p.Cap
 	ListenPort uint64
-	ID         []byte
+	ID         []byte // secp256k1 public key
+
+	// Ignore additional fields (for forward compatibility).
+	Rest []rlp.RawValue `rlp:"tail"`
 }
 
-func main() {
-	// mockLogger := &MockLogger{}
-	// 创建peer
-	fmt.Println("=== 使用配置文件中的enode创建Peer对象示例 ===")
-
-	// 1. 读取配置文件
-	configData, err := os.ReadFile("config.yaml")
+// loadConfig 读取配置文件
+func loadConfig(filename string) (*Config, error) {
+	data, err := os.ReadFile(filename)
 	if err != nil {
-		fmt.Printf("读取配置文件失败: %v\n", err)
-		return
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
 	var config Config
-	err = yaml.Unmarshal(configData, &config)
+	err = yaml.Unmarshal(data, &config)
 	if err != nil {
-		fmt.Printf("解析配置文件失败: %v\n", err)
+		return nil, fmt.Errorf("failed to parse config file: %w", err)
+	}
+
+	return &config, nil
+}
+
+// createRLPxConnection 创建RLPx连接
+func createRLPxConnection(node *enode.Node, privateKey *ecdsa.PrivateKey) (*rlpx.Conn, error) {
+
+	// 连接到节点
+	addr := fmt.Sprintf("%s:%d", node.IP(), node.TCP())
+	tcpConn, err := net.Dial("tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial TCP: %w", err)
+	}
+
+	// 执行RLPx握手
+	conn := rlpx.NewConn(tcpConn, node.Pubkey())
+	fmt.Printf("conn: %v\n", conn)
+
+	_, err = conn.Handshake(privateKey)
+	if err != nil {
+		tcpConn.Close()
+		return nil, fmt.Errorf("failed to perform RLPx handshake: %w", err)
+	}
+	// fmt.Println("publickKey: ", publicKey)
+	fmt.Println("RLPx handshake completed successfully")
+
+	return conn, nil
+}
+
+// // testGetBlockHeaders 测试GetBlockHeaders请求
+// func testGetBlockHeaders(conn *rlpx.Conn) error {
+// 	// 首先进行ETH协议握手
+// 	err := performETHHandshake(conn)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to perform ETH handshake: %w", err)
+// 	}
+
+// 	request := &eth.GetBlockHeadersPacket{
+// 		RequestId: 1,
+// 		GetBlockHeadersRequest: &eth.GetBlockHeadersRequest{
+// 			Origin: eth.HashOrNumber{
+// 				Number: 1,
+// 			}, // 请求从区块1开始
+// 			Amount:  10, // 请求10个区块头
+// 			Skip:    0,
+// 			Reverse: false,
+// 		},
+// 	}
+
+// 	// 使用RLP编码发送消息
+// 	data, err := rlp.EncodeToBytes(request)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to encode GetBlockHeaders request: %w", err)
+// 	}
+
+// 	_, err = conn.Write(0x03, data) // GetBlockHeadersMsg = 0x03
+// 	if err != nil {
+// 		return fmt.Errorf("failed to send GetBlockHeaders request: %w", err)
+// 	}
+// 	fmt.Println("GetBlockHeaders request sent successfully")
+
+// 	// 接收响应
+// 	code, responseData, _, err := conn.Read()
+// 	if err != nil {
+// 		return fmt.Errorf("failed to read response: %w", err)
+// 	}
+// 	fmt.Printf("Received message with code: %d, size: %d\n", code, len(responseData))
+
+// 	if code == 0x04 { // BlockHeadersMsg = 0x04
+// 		type BlockHeadersPacket struct {
+// 			RequestId uint64
+// 			Headers   []*types.Header
+// 		}
+// 		var response BlockHeadersPacket
+// 		err = rlp.DecodeBytes(responseData, &response)
+// 		if err != nil {
+// 			return fmt.Errorf("failed to decode block headers: %w", err)
+// 		}
+// 		fmt.Printf("Received %d block headers:\n", len(response.Headers))
+
+// 		for i, header := range response.Headers {
+// 			fmt.Printf("  Header %d: Block #%d, Hash: %s\n", i+1, header.Number.Uint64(), header.Hash().Hex())
+// 		}
+// 	} else {
+// 		fmt.Printf("Unexpected message code: %d\n", code)
+// 	}
+
+// 	return nil
+// }
+
+// // performETHHandshake 执行ETH协议握手
+// func performETHHandshake(conn *rlpx.Conn) error {
+// 	// 使用默认的主网配置创建状态包
+// 	genesisHash := common.HexToHash("0x307b844cd0697aeebd02d2ee2443f0fa7e990258ec48e980d97c81669d00affd")
+// 	latestHash := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
+// 	td := big.NewInt(0)
+
+// 	// 创建一个虚拟的创世区块用于forkid计算
+// 	genesisHeader := &types.Header{
+// 		Number:     big.NewInt(0),
+// 		Time:       0,
+// 		Difficulty: big.NewInt(1),
+// 	}
+
+// 	// 创建一个虚拟区块用于forkid计算
+// 	body := &types.Body{}
+// 	genesisBlock := types.NewBlock(genesisHeader, body, nil, nil)
+// 	fmt.Println("genesisBlock: ", genesisBlock)
+// 	status := &eth.StatusPacket68{
+// 		ProtocolVersion: 68, // ETH68
+// 		NetworkID:       1,  // 主网
+// 		TD:              td,
+// 		Head:            latestHash,
+// 		Genesis:         genesisHash,
+// 		ForkID:          forkid.NewID(params.MainnetChainConfig, genesisBlock, 0, 0),
+// 	}
+
+// 	// 发送状态包
+// 	statusData, err := rlp.EncodeToBytes(status)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to encode status packet: %w", err)
+// 	} else {
+// 		fmt.Println("statusData: ", statusData)
+// 	}
+// 	code1, err := conn.Write(0x00, statusData) // StatusMsg = 0x00
+// 	if err != nil {
+// 		return fmt.Errorf("failed to send status packet: %w", err)
+// 	} else {
+// 		fmt.Println("code1: ", code1)
+// 	}
+
+// 	fmt.Println("ETH status packet sent")
+
+// 	// 接收对方的状态包
+// 	code, data, _, err := conn.Read()
+// 	if err != nil {
+// 		return fmt.Errorf("failed to read status response: %w", err)
+// 	}
+
+// 	fmt.Printf("Received message - Code: %d, Data length: %d\n", code, len(data))
+// 	fmt.Printf("Raw data (hex): %x\n", data)
+
+// 	// 解析原始数据为可读格式
+// 	handshake := parseRawData(data)
+// 	fmt.Printf("Parsed data: %v\n", handshake)
+
+// 	// 专门解析P2P握手数据
+// 	parseP2PHandshakeData(data)
+
+// 	if code == 0x00 {
+// 		fmt.Println("\nThis appears to be a P2P handshake message, not an ETH status message.")
+// 		fmt.Println("The peer is responding with its protocol capabilities.")
+// 	} else {
+// 		fmt.Printf("Received message with code %d\n", code)
+// 	}
+
+// 	return nil
+// }
+
+// parseRawData 解析原始数据为可读格式
+func parseRawData(data []byte) *protocolHandshake {
+	if len(data) == 0 {
+		fmt.Println("empty data")
+		return nil
+	}
+
+	// 尝试解析为RLP结构
+	var result interface{}
+	err := rlp.DecodeBytes(data, &result)
+	if err != nil {
+		fmt.Println("rlp decode error")
+		return nil
+	}
+	fmt.Println("解析前data:", data)
+	// 尝试解析为P2P握手消息
+	var handshake protocolHandshake
+	err = rlp.DecodeBytes(data, &handshake)
+	if err == nil {
+		fmt.Println("decode bytes error")
+		return nil
+	}
+
+	return &protocolHandshake{
+		Version:    handshake.Version,
+		Name:       handshake.Name,
+		Caps:       handshake.Caps,
+		ListenPort: handshake.ListenPort,
+	}
+}
+
+// parseP2PHandshakeData 专门解析P2P握手数据
+func parseP2PHandshakeData(data []byte) {
+	var handshake protocolHandshake
+	err := rlp.DecodeBytes(data, &handshake)
+	if err != nil {
+		fmt.Printf("Failed to decode P2P handshake: %v\n", err)
 		return
 	}
 
-	// 2. 从配置文件中获取第一个enode
+	fmt.Printf("=== P2P Handshake Details ===\n")
+	fmt.Printf("Version: %d\n", handshake.Version)
+	fmt.Printf("Name: %s\n", handshake.Name)
+	fmt.Printf("Listen Port: %d\n", handshake.ListenPort)
+	fmt.Printf("Node ID: %x\n", handshake.ID)
+	fmt.Printf("Capabilities:\n")
+	for i, cap := range handshake.Caps {
+		fmt.Printf("  %d. %s/%d\n", i+1, cap.Name, cap.Version)
+	}
+	fmt.Printf("==============================\n")
+}
+
+func main() {
+	// 1. 读取当前目录下config.yaml文件的配置
+	config, err := loadConfig("config.yaml")
+	if err != nil {
+		fmt.Printf("Failed to load config: %v\n", err)
+		return
+	}
+
+	// 2. 获取其中的enode值，解析之后获取其中的IP和端口
 	if len(config.P2P.BootstrapNodes) == 0 {
-		fmt.Println("配置文件中没有找到bootstrap节点")
+		fmt.Println("No bootstrap nodes found in config")
 		return
 	}
 
-	enodeURL := config.P2P.BootstrapNodes[0]
-	fmt.Printf("使用的enode URL: %s\n", enodeURL)
-
-	// 3. 解析enode URL
-	node, err := enode.Parse(enode.ValidSchemes, enodeURL)
+	// 使用第一个bootstrap node
+	enodeStr := config.P2P.BootstrapNodes[0]
+	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
 	if err != nil {
-		fmt.Printf("解析enode URL失败: %v\n", err)
+		fmt.Printf("Failed to parse enode: %v\n", err)
 		return
 	}
 
-	nodeID := node.ID()
-	fmt.Printf("解析的节点ID: %s\n", nodeID.String())
+	fmt.Printf("Connecting to node: %s\n", node.String())
+	fmt.Printf("IP: %s, Port: %d\n", node.IP(), node.TCP())
 
-	// 建立 TCP 连接，RLPx 握手，协议握手
-	conn, err := CreateRLPxConnection(node)
+	// 先创建suite，suite通过dial返回conn
+
+	_, secret, err := MakeJWTSecret()
 	if err != nil {
-		fmt.Printf("连接建立失败: %v\n", err)
-	}
-	hello, data, err := rlpxPing(conn, node)
-	if hello == nil || err != nil {
-		fmt.Printf("hello信息发送失败: %v\n", err)
+		fmt.Printf("Failed to make JWT secret: %v\n", err)
 		return
 	}
-	fmt.Println("\n=== RLPx Ping 成功！===")
-	fmt.Printf("协议版本: %d\n", hello.Version)
-	fmt.Printf("节点名称: %s\n", hello.Name)
-	fmt.Printf("监听端口: %d\n", hello.ListenPort)
-	fmt.Printf("节点ID: %s\n", hex.EncodeToString(hello.ID))
-	fmt.Println("支持的协议:")
-	for _, cap := range hello.Caps {
-		fmt.Printf("  - %s/%d\n", cap.Name, cap.Version)
+	suite, err := ethtest.NewSuite(node, "./testdata", node.IP().String()+":8551", common.Bytes2Hex(secret[:]))
+	if err != nil {
+		fmt.Printf("Failed to create suite: %v\n", err)
+		return
 	}
-	fmt.Printf("\n原始数据 (hex): %s\n", hex.EncodeToString(data))
-	fmt.Printf("数据长度: %d 字节\n", len(data))
+	conn, err := suite.Dial()
+	if err != nil {
+		fmt.Printf("Failed to dial: %v\n", err)
+		return
+	}
 
-	// 4. 定义节点能力（支持的协议）
-	caps := hello.Caps
-
-	// 5. 创建Peer对象，使用从enode解析出的信息
-	peer := p2p.NewPeer(nodeID, node.Hostname(), caps)
-	fmt.Printf("创建的Peer对象: %s\n", peer.String())
-
-	// rw1, rw2 := p2p.MsgPipe()
-	// msgReadWriter := &p2p.MsgPipeRW{
-	// 	w:       rw1,
-	// 	r:       rw2,
-	// 	closing: make(chan struct{}),
-	// 	closed:  new(atomic.Bool),
+	status := &eth.StatusPacket69{
+		ProtocolVersion: uint32(69),
+		NetworkID:       uint64(3151908),
+		Genesis:         suite.GetChain().GetGenesis().Mixhash,
+		ForkID:          suite.GetChain().ForkID(),
+		EarliestBlock:   1,
+		LatestBlock:     1,
+		LatestBlockHash: common.Hash{0xaa},
+	}
+	fmt.Println("localchain: ", suite.GetChain().Len())
+	fmt.Println("status: ", status)
+	// 发送状态包
+	err = conn.StatusExchange(suite.GetChain(), status)
+	if err != nil {
+		fmt.Printf("Failed to send status packet: %v\n", err)
+		return
+	}
+	fmt.Println("localchain: ", suite.GetChain().Len())
+	fmt.Println("status: ", status)
+	// // 生成私钥
+	// privateKey, err := crypto.GenerateKey()
+	// if err != nil {
+	// 	fmt.Println("privateKey generate fail!")
+	// 	return
 	// }
-	// 创建消息管道
-	app, net := p2p.MsgPipe()
-	_ = app
-	txPool, err := createSimpleTxPool()
-	if err != nil {
-		fmt.Printf("创建TxPool失败: %v\n", err)
-		return
-	}
+	// // fmt.Println("publickKey: ", privateKey.PublicKey)
 
-	ethPeer := eth.NewPeer(69, peer, net, txPool)
+	// 3. 根据获取到的端口，向其发送握手协议，建立连接，获取返回的信息并解析输出
+	// conn, err := createRLPxConnection(node, privateKey)
+	// if err != nil {
+	// 	fmt.Printf("Failed to create RLPx connection: %v\n", err)
+	// 	return
+	// }
+	// defer conn.Close()
 
-	TestEthPeerCreation(ethPeer)
-	testErrorHandling(ethPeer)
-
-	// 记住在完成后关闭 peer
-	defer ethPeer.Close()
-
-	// 6. 显示Peer信息
-	// fmt.Printf("节点名称: %s\n", peer.Name())
-	// fmt.Printf("完整名称: %s\n", peer.Fullname())
-	// fmt.Printf("节点ID: %s\n", peer.ID().String())
-	// fmt.Printf("节点IP地址: %s\n", node.IP().String())
-	// fmt.Printf("节点端口: %d\n", node.TCP())
-	// fmt.Printf("支持的协议: %v\n", peer.Caps())
-
-	// // 5. 检查协议支持
-	// if peer.RunningCap("eth", []uint{68, 69}) {
-	// 	fmt.Println("✓ 支持 ETH 协议版本 69")
-	// } else {
-	// 	fmt.Println("✗ 不支持 ETH 协议版本 69")
+	// 4. 从conn中读取数据
+	// _, data, _, err := conn.Read()
+	// if err != nil {
+	// 	fmt.Printf("Failed to read message: %v\n", err)
+	// 	return
 	// }
 
-	// if peer.RunningCap("snap", []uint{1}) {
-	// 	fmt.Println("✓ 支持 SNAP 协议版本 1")
-	// } else {
-	// 	fmt.Println("✗ 不支持 SNAP 协议版本 1")
+	// 5. 解析数据
+	// // handshake := parseRawData(data)
+	// parser := RLPxDataParser.NewRLPxDataParser()
+	// _, err = parser.ParseRLPStructure(data)
+	// if err != nil {
+	// 	fmt.Printf("Failed to parse RLP structure: %v\n", err)
+	// 	return
+	// }
+	// fmt.Printf("Parsed data:type: %T value: %v\n", parsedData, parsedData)
+
+	// // 6. 根据上一步创建的链接，进行ETH协议的交互，测试GetBlockHeaders的请求并获取返回值
+	// jwtPath, secret, err := MakeJWTSecret()
+	// if err != nil {
+	// 	fmt.Printf("Failed to make JWT secret: %v\n", err)
+	// 	return
+	// }
+	// defer os.Remove(jwtPath)
+	// fmt.Println("node ip: " + node.IP().String() + ":8551")
+	// suite, err := ethtest.NewSuite(node, "./testdata", node.IP().String()+":8551", common.Bytes2Hex(secret[:]))
+	// if err != nil {
+	// 	fmt.Printf("Failed to create suite: %v\n", err)
+	// 	return
+	// }
+	// headers, err := GetBlockHeaders(conn, suite)
+	// if headers == nil {
+	// 	fmt.Printf("Failed to get block headers: %v\n", err)
+	// 	return
+	// }
+	// if err != nil {
+	// 	fmt.Printf("Failed to test GetBlockHeaders: %v\n", err)
+	// 	return
 	// }
 
-	// fmt.Println("\n=== Peer 对象创建完成 ===")
+	// printHeaders(headers)
+	// fmt.Println("GetBlockHeaders test completed successfully")
+	// // 7. 测试是否可以发送交易数据
+	// if err := sendTransaction(conn, suite); err != nil {
+	// 	fmt.Printf("Failed to send transaction: %v\n", err)
+	// 	return
+	// }
+	// // 建立 eth 连接
+	// ethconn, err := suite.DialAs(privateKey)
+	// println("ethconn: ", ethconn)
+	// if err != nil {
+	// 	fmt.Printf("Failed to dial as: %v\n", err)
+	// 	return
+	// }
+	// // 读取 eth 协议返回的消息
+	// msg, err := ethconn.ReadEth()
+	// if err != nil {
+	// 	fmt.Printf("Failed to read eth message: %v\n", err)
+	// 	return
+	// }
+	// printMsg(msg)
+	// fmt.Println("Transaction sent successfully")
+
+}
+func printMsg(msg any) {
+	fmt.Printf("Msg: %v\n", msg)
 }
 
-func CreateRLPxConnection(node *enode.Node) (*rlpx.Conn, error) {
-	tcpEndpoint, ok := node.TCPEndpoint()
-	if !ok {
-		err := errors.New("node has no TCP endpoint")
+func sendTransaction(conn *rlpx.Conn, s *ethtest.Suite) error {
+	// backend := s.Chain.Backend()
+
+	_, nonce := s.GetChain().GetSender(0)
+	txdata := &types.DynamicFeeTx{
+		ChainID:   big.NewInt(3151908),
+		Nonce:     nonce,
+		GasTipCap: common.Big1,
+		GasFeeCap: s.GetChain().Head().BaseFee(),
+		Gas:       30000,
+		To:        &common.Address{0xaa},
+		Value:     common.Big1,
+	}
+	// 输出txdata的每个属性的值
+	fmt.Printf("交易数据详情:\n")
+	fmt.Printf("  ChainID: %v\n", txdata.ChainID)
+	fmt.Printf("  Nonce: %d\n", txdata.Nonce)
+	fmt.Printf("  GasTipCap: %v\n", txdata.GasTipCap)
+	fmt.Printf("  GasFeeCap: %v\n", txdata.GasFeeCap)
+	fmt.Printf("  Gas: %d\n", txdata.Gas)
+	fmt.Printf("  To: %v\n", txdata.To)
+	fmt.Printf("  Value: %v\n", txdata.Value)
+	fmt.Println()
+
+	// inner := &types.DynamicFeeTx{
+	// 	ChainID:   s.Chain.Config.ChainID,
+	// 	Nonce:     nonce,
+	// 	GasTipCap: common.Big1,
+	// 	GasFeeCap: s.Chain.Head().BaseFee(),
+	// 	Gas:       30000,
+	// 	To:        &common.Address{0xaa},
+	// 	Value:     common.Big1,
+	// }
+	// tx, err := s.GetChain().SignTx(from, types.NewTx(txdata))
+	// if err != nil {
+	// 	fmt.Printf("failed to sign tx: %v", err)
+	// 	return err
+	// }
+
+	// 记录发送时间
+	// sendStart := time.Now()
+	// if err := s.SendTxs(nil, []*types.Transaction{tx}); err != nil {
+	// 	elapsed := time.Since(sendStart)
+	// 	fmt.Printf("交易发送失败，耗时: %v\n", elapsed)
+	// 	return err
+	// }
+	// s.Chain.IncNonce(from, 1)
+	return nil
+}
+
+func printHeaders(headers []*types.Header) {
+	for i, header := range headers {
+		fmt.Printf("=== Header %d ===\n", i+1)
+		fmt.Printf("区块号: %d\n", header.Number.Uint64())
+		fmt.Printf("区块哈希: %s\n", header.Hash().Hex())
+		fmt.Printf("父区块哈希: %s\n", header.ParentHash.Hex())
+		fmt.Printf("时间戳: %d\n", header.Time)
+		fmt.Printf("Gas限制: %d\n", header.GasLimit)
+		fmt.Printf("Gas使用量: %d\n", header.GasUsed)
+		fmt.Printf("难度: %s\n", header.Difficulty.String())
+		fmt.Printf("矿工地址: %s\n", header.Coinbase.Hex())
+		fmt.Printf("状态根: %s\n", header.Root.Hex())
+		fmt.Printf("交易根: %s\n", header.TxHash.Hex())
+		fmt.Printf("收据根: %s\n", header.ReceiptHash.Hex())
+		fmt.Println()
+	}
+}
+func MakeJWTSecret() (jwtPath string, secret [32]byte, err error) {
+	if _, err := rand.Read(secret[:]); err != nil {
+		return "", secret, fmt.Errorf("failed to create jwt secret: %v", err)
+	}
+	jwtPath = path.Join(os.TempDir(), "jwt_secret")
+	if err := os.WriteFile(jwtPath, []byte(hexutil.Encode(secret[:])), 0600); err != nil {
+		return "", secret, fmt.Errorf("failed to prepare jwt secret file: %v", err)
+	}
+	return jwtPath, secret, nil
+}
+
+func GetBlockHeaders(conn *rlpx.Conn, suite *ethtest.Suite) (headers []*types.Header, err error) {
+	chain, err := ethtest.NewChain("./testdata")
+	if err != nil {
 		return nil, err
 	}
-	fd, err := net.Dial("tcp", tcpEndpoint.String())
-	if err != nil {
-		return nil, err
-	}
-	conn := rlpx.NewConn(fd, node.Pubkey())
-	return conn, err
-}
-
-func rlpxPing(conn *rlpx.Conn, n *enode.Node) (*Hello, []byte, error) {
-
-	defer func() {
-		if closeErr := conn.Close(); closeErr != nil {
-			fmt.Printf("关闭连接时出错: %v\n", closeErr)
-		}
-	}()
-
-	ourKey, _ := crypto.GenerateKey()
-
-	publicKey, err := conn.Handshake(ourKey)
-	// 格式化密钥输出
-	fmt.Printf("私钥: %s\n", hex.EncodeToString(crypto.FromECDSA(ourKey)))
-	fmt.Printf("公钥: %s\n", hex.EncodeToString(crypto.FromECDSAPub(publicKey)))
-	if err != nil {
-		return nil, nil, err
-	}
-
-	code, data, _, err := conn.Read()
-	if err != nil {
-		return nil, nil, err
-	}
-	switch code {
-	case 0:
-		var hello Hello
-		if err := rlp.DecodeBytes(data, &hello); err != nil {
-			return nil, data, fmt.Errorf("invalid handshake: %v", err)
-		}
-		return &hello, data, nil
-	case 1:
-		var msg []p2p.DiscReason
-		if rlp.DecodeBytes(data, &msg); len(msg) == 0 {
-			return nil, data, errors.New("invalid disconnect message")
-		}
-		return nil, data, fmt.Errorf("received disconnect message: %v", msg[0])
-	default:
-		return nil, data, fmt.Errorf("invalid message code %d, expected handshake (code zero) or disconnect (code one)", code)
-	}
-}
-
-// TxPool创建
-// 创建最小化的区块链实现
-type BlockChain struct {
-	config        *params.ChainConfig
-	statedb       *state.StateDB
-	chainHeadFeed *event.Feed
-}
-
-func (bc *BlockChain) Config() *params.ChainConfig {
-	return bc.config
-}
-
-func (bc *BlockChain) CurrentBlock() *types.Header {
-	return &types.Header{
-		Number:     big.NewInt(0),
-		GasLimit:   10000000,
-		BaseFee:    big.NewInt(1000000000), // 1 gwei
-		Difficulty: big.NewInt(1),
-		Time:       1000000,
-		GasUsed:    0,
-	}
-}
-
-func (bc *BlockChain) GetBlock(hash common.Hash, number uint64) *types.Block {
-	return types.NewBlock(bc.CurrentBlock(), nil, nil, trie.NewStackTrie(nil))
-}
-
-func (bc *BlockChain) StateAt(common.Hash) (*state.StateDB, error) {
-	return bc.statedb, nil
-}
-
-func (bc *BlockChain) SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription {
-	return bc.chainHeadFeed.Subscribe(ch)
-}
-
-func (bc *BlockChain) CurrentFinalBlock() *types.Header {
-	// 返回当前区块作为最终区块
-	return bc.CurrentBlock()
-}
-
-// 创建简单的 TxPool
-func createSimpleTxPool() (*txpool.TxPool, error) {
-	// 1. 创建状态数据库
-	statedb, _ := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
-
-	// 2. 创建最小化区块链
-	b := &BlockChain{
-		config:        params.TestChainConfig, // 或者使用 params.MainnetChainConfig
-		statedb:       statedb,
-		chainHeadFeed: new(event.Feed),
-	}
-	blobchain := blobpool.BlockChain(b)
-
-	// 3. 创建子池
-	legacyConfig := legacypool.DefaultConfig
-	legacyPool := legacypool.New(legacyConfig, b)
-
-	blobConfig := blobpool.DefaultConfig
-	blobPool := blobpool.New(blobConfig, blobchain, nil) // nil 表示没有 pending auth 检查
-
-	// 4. 创建 TxPool
-	subpools := []txpool.SubPool{legacyPool, blobPool}
-	pool, err := txpool.New(1000000000, b, subpools) // gasTip = 1 gwei
-	if err != nil {
-		fmt.Printf("创建TxPool失败: %v\n", err)
-		return nil, err
-	}
-	return pool, err
-}
-
-// 检测 ethPeer 的功能
-// 检查 ethpeer 基本属性
-func testPeerBasicInfo(peer *eth.Peer) {
-	// 检查 ID 是否正确设置
-	if peer.ID() == "" {
-		fmt.Println("Peer ID is empty")
-	} else {
-		fmt.Printf("✓ Peer ID: %s\n", peer.ID())
-	}
-
-	// 检查协议版本
-	version := peer.Version()
-	if version == 0 {
-		fmt.Println("Peer version is not set")
-	} else {
-		fmt.Printf("✓ Protocol Version: %d\n", version)
-	}
-
-	// 检查是否有 BlockRange (仅适用于 ETH69+)
-	if version >= eth.ETH69 {
-		blockRange := peer.BlockRange()
-		fmt.Printf("✓ Block Range: %v\n", blockRange)
-	} else {
-		fmt.Println("Block Range is not used")
-	}
-}
-
-// 测试 ethpeer 的交易处理能力：
-func testTransactionFunctionality(peer *eth.Peer) {
-	// 创建测试交易哈希
-	testHashes := []common.Hash{
-		common.HexToHash("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"),
-		common.HexToHash("0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"),
-	}
-
-	// 测试交易标记功能
-	for _, hash := range testHashes {
-		// 检查交易是否已知（应该返回 false）
-		if peer.KnownTransaction(hash) {
-			fmt.Printf("⚠ Transaction %s already known\n", hash.Hex())
-		} else {
-			fmt.Printf("✓ Transaction %s is new\n", hash.Hex())
-		}
-	}
-
-	// 测试异步交易发送
-	fmt.Println("✓ Testing async transaction broadcast...")
-	peer.AsyncSendTransactions(testHashes)
-
-	// 测试异步交易通知
-	fmt.Println("✓ Testing async transaction announcement...")
-	peer.AsyncSendPooledTransactionHashes(testHashes)
-
-	// 验证交易现在是否被标记为已知
-	for _, hash := range testHashes {
-		if !peer.KnownTransaction(hash) {
-			fmt.Printf("⚠ Transaction %s should be known after sending\n", hash.Hex())
-		} else {
-			fmt.Printf("✓ Transaction %s correctly marked as known\n", hash.Hex())
-		}
-	}
-}
-
-// 测试 ethpeer 的数据请求能力
-func testRequestFunctionality(peer *eth.Peer) {
-	fmt.Println("✓ Testing request functionality (non-blocking)...")
-
-	// 由于实际的以太坊节点可能不会响应测试请求，而且这些请求函数可能会阻塞
-	// 我们跳过所有请求测试，只验证peer对象的基本功能
-
-	// 注意：跳过所有可能阻塞的请求函数：
-	// - RequestOneHeader: 可能等待响应而阻塞
-	// - RequestHeadersByNumber: 可能等待响应而阻塞
-	// - RequestBodies: 可能等待响应而阻塞
-	// - RequestTxs: 也可能阻塞
-	fmt.Println("✓ Skipping all request functions to avoid blocking")
-	fmt.Println("✓ In a real application, these requests would be handled asynchronously")
-	fmt.Println("✓ Request functionality test completed (skipped for stability)")
-}
-
-// 测试 ethpeer 的连接状态和生命周期
-func testConnectionState(peer *eth.Peer) {
-	// 检查底层 P2P 连接
-	p2pPeer := peer.Peer
-	if p2pPeer == nil {
-		log.Fatal("P2P peer is nil")
-	}
-
-	fmt.Printf("✓ P2P Peer Name: %s\n", p2pPeer.Name())
-	fmt.Printf("✓ P2P Peer Caps: %v\n", p2pPeer.Caps())
-	fmt.Printf("✓ P2P Peer RemoteAddr: %s\n", p2pPeer.RemoteAddr())
-
-	// 检查连接是否活跃
-	// select {
-	// case <-p2pPeer.losed:
-	// 	fmt.Println("⚠ Peer connection is closed")
-	// default:
-	// 	fmt.Println("✓ Peer connection is active")
+	fmt.Println(chain)
+	// chainLen := uint64(chain.Len())
+	// req := eth.GetBlockHeadersPacket{
+	// 	GetBlockHeadersRequest: &eth.GetBlockHeadersRequest{
+	// 		Origin:  eth.HashOrNumber{Number: uint64(1)},
+	// 		Amount:  uint64(10),
+	// 		Skip:    0,
+	// 		Reverse: false,
+	// 	},
 	// }
-}
 
-// 将所有 ethpeer 测试组合成一个完整的测试函数
-func TestEthPeerCreation(peer *eth.Peer) {
-	fmt.Println("=== Testing ethPeer Creation and Functionality ===")
-
-	// 基本信息测试
-	fmt.Println("\n1. Basic Information Test:")
-	testPeerBasicInfo(peer)
-
-	// 连接状态测试
-	fmt.Println("\n2. Connection State Test:")
-	testConnectionState(peer)
-
-	// 交易功能测试
-	fmt.Println("\n3. Transaction Functionality Test:")
-	testTransactionFunctionality(peer)
-
-	// 请求功能测试
-	fmt.Println("\n4. Request Functionality Test:")
-	testRequestFunctionality(peer)
-
-	// 等待一段时间让异步操作完成
-	time.Sleep(100 * time.Millisecond)
-
-	fmt.Println("\n=== All Tests Completed ===")
-	fmt.Println("✓ ethPeer created successfully and all basic functions are working!")
-}
-
-// ethPeer 错误处理和辩解测试
-func testErrorHandling(peer *eth.Peer) {
-	fmt.Println("\n5. Error Handling Test:")
-
-	// 测试空哈希请求
-	emptyHashes := []common.Hash{}
-	peer.AsyncSendTransactions(emptyHashes)
-	fmt.Println("✓ Empty transaction list handled")
-
-	// 测试大量哈希请求
-	largeHashes := make([]common.Hash, 1000)
-	for i := range largeHashes {
-		largeHashes[i] = common.BytesToHash([]byte(fmt.Sprintf("hash%d", i)))
-	}
-	peer.AsyncSendTransactions(largeHashes)
-	fmt.Println("✓ Large transaction list handled")
+	return headers, nil
 }
