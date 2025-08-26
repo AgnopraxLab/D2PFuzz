@@ -2,17 +2,22 @@ package main
 
 import (
 	"crypto/ecdsa"
-	"crypto/rand"
+	"reflect"
+
+	// "crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"net"
 	"os"
-	"path"
+
+	// "path"
+	"strings"
 
 	// "time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
+	// "github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 
 	// "github.com/ethereum/go-ethereum/common/hexutil"
@@ -37,6 +42,7 @@ type Config struct {
 		MaxPeers       int      `yaml:"max_peers"`
 		ListenPort     int      `yaml:"listen_port"`
 		BootstrapNodes []string `yaml:"bootstrap_nodes"`
+		JWTSecret      string   `yaml:"jwt_secret"`
 	} `yaml:"p2p"`
 }
 
@@ -274,6 +280,28 @@ func parseP2PHandshakeData(data []byte) {
 	fmt.Printf("==============================\n")
 }
 
+// 直接解析十六进制字符串
+func parseJWTSecretFromHexString(hexString string) ([]byte, error) {
+	// 去除可能的0x前缀和空白字符
+	hexString = strings.TrimSpace(hexString)
+	if strings.HasPrefix(hexString, "0x") {
+		hexString = hexString[2:]
+	}
+
+	// 转换为字节数组
+	jwtSecret, err := hex.DecodeString(hexString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode hex string: %w", err)
+	}
+
+	// 验证长度
+	if len(jwtSecret) != 32 {
+		return nil, fmt.Errorf("invalid JWT secret length: expected 32 bytes, got %d", len(jwtSecret))
+	}
+
+	return jwtSecret, nil
+}
+
 func main() {
 	// 1. 读取当前目录下config.yaml文件的配置
 	config, err := loadConfig("config.yaml")
@@ -300,42 +328,48 @@ func main() {
 	fmt.Printf("IP: %s, Port: %d\n", node.IP(), node.TCP())
 
 	// 先创建suite，suite通过dial返回conn
-
-	_, secret, err := MakeJWTSecret()
+	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
+	if err != nil {
+		fmt.Printf("Failed to parse JWT secret: %v\n", err)
+		return
+	}
+	// _, secret, err := MakeJWTSecret()
 	if err != nil {
 		fmt.Printf("Failed to make JWT secret: %v\n", err)
 		return
 	}
-	suite, err := ethtest.NewSuite(node, "./testdata", node.IP().String()+":8551", common.Bytes2Hex(secret[:]))
+	suite, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]))
 	if err != nil {
 		fmt.Printf("Failed to create suite: %v\n", err)
 		return
 	}
-	conn, err := suite.Dial()
-	if err != nil {
-		fmt.Printf("Failed to dial: %v\n", err)
-		return
-	}
 
-	status := &eth.StatusPacket69{
-		ProtocolVersion: uint32(69),
-		NetworkID:       uint64(3151908),
-		Genesis:         suite.GetChain().GetGenesis().Mixhash,
-		ForkID:          suite.GetChain().ForkID(),
-		EarliestBlock:   1,
-		LatestBlock:     1,
-		LatestBlockHash: common.Hash{0xaa},
-	}
-	fmt.Println("localchain: ", suite.GetChain().Len())
-	fmt.Println("status: ", status)
-	// 发送状态包
-	err = conn.StatusExchange(suite.GetChain(), status)
+	headers, err := GetBlockHeaders(suite)
 	if err != nil {
-		fmt.Printf("Failed to send status packet: %v\n", err)
+		fmt.Printf("Failed to get block headers: %v\n", err)
 		return
 	}
-	fmt.Println("localchain: ", suite.GetChain().Len())
-	fmt.Println("status: ", status)
+	printHeaders(headers)
+
+	// status := &eth.StatusPacket69{
+	// 	ProtocolVersion: uint32(69),
+	// 	NetworkID:       uint64(3151908),
+	// 	Genesis:         suite.GetChain().GetGenesis().Mixhash,
+	// 	ForkID:          suite.GetChain().ForkID(),
+	// 	EarliestBlock:   1,
+	// 	LatestBlock:     1,
+	// 	LatestBlockHash: common.Hash{0xaa},
+	// }
+	// fmt.Println("localchain: ", suite.GetChain().Len())
+	// fmt.Println("status: ", status)
+	// // 发送状态包
+	// err = conn.StatusExchange(suite.GetChain(), status)
+	// if err != nil {
+	// 	fmt.Printf("Failed to send status packet: %v\n", err)
+	// 	return
+	// }
+	// fmt.Println("localchain: ", suite.GetChain().Len())
+	// fmt.Println("status: ", status)
 	// // 生成私钥
 	// privateKey, err := crypto.GenerateKey()
 	// if err != nil {
@@ -470,8 +504,8 @@ func sendTransaction(conn *rlpx.Conn, s *ethtest.Suite) error {
 	return nil
 }
 
-func printHeaders(headers []*types.Header) {
-	for i, header := range headers {
+func printHeaders(headers *eth.BlockHeadersPacket) {
+	for i, header := range headers.BlockHeadersRequest {
 		fmt.Printf("=== Header %d ===\n", i+1)
 		fmt.Printf("区块号: %d\n", header.Number.Uint64())
 		fmt.Printf("区块哈希: %s\n", header.Hash().Hex())
@@ -487,32 +521,51 @@ func printHeaders(headers []*types.Header) {
 		fmt.Println()
 	}
 }
-func MakeJWTSecret() (jwtPath string, secret [32]byte, err error) {
-	if _, err := rand.Read(secret[:]); err != nil {
-		return "", secret, fmt.Errorf("failed to create jwt secret: %v", err)
-	}
-	jwtPath = path.Join(os.TempDir(), "jwt_secret")
-	if err := os.WriteFile(jwtPath, []byte(hexutil.Encode(secret[:])), 0600); err != nil {
-		return "", secret, fmt.Errorf("failed to prepare jwt secret file: %v", err)
-	}
-	return jwtPath, secret, nil
-}
 
-func GetBlockHeaders(conn *rlpx.Conn, suite *ethtest.Suite) (headers []*types.Header, err error) {
-	chain, err := ethtest.NewChain("./testdata")
+func GetBlockHeaders(suite *ethtest.Suite) (*eth.BlockHeadersPacket, error) {
+	// chain, err := ethtest.NewChain("./testdata")
+	// if err != nil {
+	// 	return nil, err
+	// }
+	conn, err := suite.DialAndPeer(nil)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(chain)
-	// chainLen := uint64(chain.Len())
-	// req := eth.GetBlockHeadersPacket{
-	// 	GetBlockHeadersRequest: &eth.GetBlockHeadersRequest{
-	// 		Origin:  eth.HashOrNumber{Number: uint64(1)},
-	// 		Amount:  uint64(10),
-	// 		Skip:    0,
-	// 		Reverse: false,
-	// 	},
-	// }
+	defer conn.Close()
 
+	req := &eth.GetBlockHeadersPacket{
+		RequestId: 33,
+		GetBlockHeadersRequest: &eth.GetBlockHeadersRequest{
+			Origin:  eth.HashOrNumber{Number: uint64(0)},
+			Amount:  uint64(10),
+			Skip:    0,
+			Reverse: false,
+		},
+	}
+	// Read headers response.
+	if err := conn.Write(1, eth.GetBlockHeadersMsg, req); err != nil {
+		fmt.Printf("could not write to connection: %v", err)
+	}
+	headers := new(eth.BlockHeadersPacket)
+	if err := conn.ReadMsg(1, eth.BlockHeadersMsg, &headers); err != nil {
+		fmt.Printf("error reading msg: %v", err)
+	}
+	if got, want := headers.RequestId, req.RequestId; got != want {
+		fmt.Printf("unexpected request id")
+	}
+	fmt.Println("req: ", req.GetBlockHeadersRequest)
+	// Check for correct headers.
+	expected, err := suite.GetChain().GetHeaders(req)
+	if err != nil {
+		fmt.Printf("failed to get headers for given request: %v", err)
+	}
+	if !headersMatch(expected, headers.BlockHeadersRequest) {
+		fmt.Printf("header mismatch: \nexpected %v \ngot %v", expected, headers)
+	}
 	return headers, nil
+}
+
+// headersMatch returns whether the received headers match the given request
+func headersMatch(expected []*types.Header, headers []*types.Header) bool {
+	return reflect.DeepEqual(expected, headers)
 }

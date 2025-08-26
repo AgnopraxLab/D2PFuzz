@@ -1,13 +1,14 @@
+
 Container images used in this run:
-> ethpandaops/teku:master - locally cached
-> ethpandaops/ethereum-genesis-generator:5.0.2 - locally cached
-> badouralix/curl-jq - locally cached
-> protolambda/eth2-val-tools:latest - locally cached
-> sigp/lighthouse:latest - locally cached
-> ethpandaops/nethermind:master - locally cached
+> ethpandaops/dora:latest - locally cached
 > ethereum/client-go:latest - locally cached
 > ethpandaops/tx-fuzz:master - locally cached
-> ethpandaops/dora:latest - locally cached
+> badouralix/curl-jq - locally cached
+> ethpandaops/ethereum-genesis-generator:5.0.2 - remotely downloaded
+> ethpandaops/teku:master - remotely downloaded
+> protolambda/eth2-val-tools:latest - locally cached
+> ethpandaops/nethermind:master - locally cached
+> sigp/lighthouse:latest - locally cached
 
 Printing a message
 Sanity check passed
@@ -16,10 +17,10 @@ Printing a message
 Docker cache is disabled
 
 Uploading file '/static_files/jwt/jwtsecret' to files artifact 'jwt_file'
-Files with artifact name 'jwt_file' uploaded with artifact UUID '029e0addd64b4b9c8fc531ee5b2aea63'
+Files with artifact name 'jwt_file' uploaded with artifact UUID 'd066c263d2d642c49a005fb2043023e4'
 
 Uploading file '/static_files/keymanager/keymanager.txt' to files artifact 'keymanager_file'
-Files with artifact name 'keymanager_file' uploaded with artifact UUID '6854d8d60fee40208f11d1d80b42b699'
+Files with artifact name 'keymanager_file' uploaded with artifact UUID 'ce908a46022f4e558bd6ffe5cd956b8a'
 
 Printing a message
 Read the prometheus, grafana templates
@@ -31,7 +32,7 @@ Printing a message
 Generating cl validator key stores
 
 Adding service with name 'validator-key-generation-cl-validator-keystore' and image 'protolambda/eth2-val-tools:latest'
-Service 'validator-key-generation-cl-validator-keystore' added with service UUID 'c17a82ae025c40c3bd7bc7f237ed87a9'
+Service 'validator-key-generation-cl-validator-keystore' added with service UUID 'b949f32077804220961b30d4064dddcd'
 
 Generating keystores
 Command returned with exit code '0' with no output
@@ -40,10 +41,10 @@ Verifying whether two values meet a certain condition '=='
 Verification succeeded. Value is '0'.
 
 Storing files from service 'validator-key-generation-cl-validator-keystore' at path '/node-0-keystores/' to files artifact with name '1-lighthouse-geth-0-63'
-Files with artifact name '1-lighthouse-geth-0-63' uploaded with artifact UUID '76c7f9661c29460ab56dec1c32083f48'
+Files with artifact name '1-lighthouse-geth-0-63' uploaded with artifact UUID 'b44d0f5b4cec40a1908ce2b365ab772b'
 
 Storing files from service 'validator-key-generation-cl-validator-keystore' at path '/node-1-keystores/' to files artifact with name '2-teku-nethermind-64-127'
-Files with artifact name '2-teku-nethermind-64-127' uploaded with artifact UUID 'f68976a1bfbc4f2bb972b953f0760f7e'
+Files with artifact name '2-teku-nethermind-64-127' uploaded with artifact UUID 'c1b45d9ee8084c86a78c2b9ac4fc6420'
 
 Storing prysm password in a file
 Command returned with exit code '0' with no output
@@ -52,7 +53,7 @@ Verifying whether two values meet a certain condition '=='
 Verification succeeded. Value is '0'.
 
 Storing files from service 'validator-key-generation-cl-validator-keystore' at path '/tmp/prysm-password.txt' to files artifact with name 'prysm-password'
-Files with artifact name 'prysm-password' uploaded with artifact UUID '87f96320d625428fb971eccf28d20714'
+Files with artifact name 'prysm-password' uploaded with artifact UUID 'cb8a8836075b4d25858d414443b5b88d'
 
 Printing a message
 {
@@ -83,13 +84,13 @@ Printing a message
 }
 
 Getting final genesis timestamp
-Command returned with exit code '0' and the following output: 1755862369
+Command returned with exit code '0' and the following output: 1755865119
 
 Printing a message
 Generating EL CL data
 
 Rendering a template to a files artifact with name 'genesis-el-cl-env-file'
-Templates artifact name 'genesis-el-cl-env-file' rendered with artifact UUID 'a7a6ed4d56104e47b7e093d8e978f528'
+Templates artifact name 'genesis-el-cl-env-file' rendered with artifact UUID '48ae3699936148d2b5b8ecd9865561cc'
 
 Creating genesis
 Command returned with exit code '0' and the following output:
@@ -144,17 +145,17 @@ Adding additional contracts...
 Applying allocations to genesis files...
 + '[' -f /data/metadata/genesis.ssz ']'
 ++ mktemp -d -t ci-XXXXXXXXXX
-+ tmp_dir=/tmp/ci-i5rzGtruz0
++ tmp_dir=/tmp/ci-nQO9MfAOvp
 + mkdir -p /data/metadata
 + mkdir -p /data/parsed
-++ date -u -d @1755862369 '+%Y-%b-%d %I:%M:%S %p %Z'
-+ HUMAN_READABLE_TIMESTAMP='2025-Aug-22 11:32:49 AM UTC'
-+ COMMENT='# 2025-Aug-22 11:32:49 AM UTC'
+++ date -u -d @1755865119 '+%Y-%b-%d %I:%M:%S %p %Z'
++ HUMAN_READABLE_TIMESTAMP='2025-Aug-22 12:18:39 PM UTC'
++ COMMENT='# 2025-Aug-22 12:18:39 PM UTC'
 + export MAX_REQUEST_BLOB_SIDECARS_ELECTRA=1152
 + MAX_REQUEST_BLOB_SIDECARS_ELECTRA=1152
-+ sed '/^BLOB_SCHEDULE:/,/^[a-zA-Z]/ d'
 + cat /config/cl/config.yaml
-+ sed 's/#HUMAN_TIME_PLACEHOLDER/# 2025-Aug-22 11:32:49 AM UTC/'
++ sed '/^BLOB_SCHEDULE:/,/^[a-zA-Z]/ d'
++ sed 's/#HUMAN_TIME_PLACEHOLDER/# 2025-Aug-22 12:18:39 PM UTC/'
 + envsubst
 + add_blob_schedule /data/metadata/config.yaml
 + local config_file=/data/metadata/config.yaml
@@ -191,7 +192,7 @@ Applying allocations to genesis files...
 BLOB_SCHEDULE: []'
 + envsubst
 + [[ mainnet == \m\i\n\i\m\a\l ]]
-+ cp /tmp/ci-i5rzGtruz0/mnemonics.yaml /data/metadata/mnemonics.yaml
++ cp /tmp/ci-nQO9MfAOvp/mnemonics.yaml /data/metadata/mnemonics.yaml
 + grep DEPOSIT_CONTRACT_ADDRESS /data/metadata/config.yaml
 + cut -d ' ' -f2
 + echo 0
@@ -204,27 +205,27 @@ BLOB_SCHEDULE: []'
 + [[ '' != '' ]]
 + [[ '' != '' ]]
 + '[' -z '' ']'
-+ /usr/local/bin/eth-genesis-state-generator beaconchain --config /data/metadata/config.yaml --eth1-config /data/metadata/genesis.json --mnemonics /tmp/ci-i5rzGtruz0/mnemonics.yaml --state-output /data/metadata/genesis.ssz --json-output /data/parsed/parsedConsensusGenesis.json
-time="2025-08-22T11:32:23Z" level=info msg="eth-beacon-genesis version: git-143f2f3"
-time="2025-08-22T11:32:23Z" level=info msg="loaded execution genesis. chainid: 3151908"
-time="2025-08-22T11:32:23Z" level=info msg="loaded consensus config. genesis fork version: 0x10000038"
-time="2025-08-22T11:32:23Z" level=info msg="processing mnemonic 0, for 128 validators"
-time="2025-08-22T11:32:23Z" level=info msg="...validator 100/128"
-time="2025-08-22T11:32:23Z" level=info msg="loaded 128 validators. total balance: 4096 ETH"
-time="2025-08-22T11:32:24Z" level=info msg="genesis version: electra"
-time="2025-08-22T11:32:24Z" level=info msg="genesis time: 1755862369"
-time="2025-08-22T11:32:24Z" level=info msg="genesis validators root: 0xd1ec305b97bf6336571c2348e4a8bf173684b0cdb7e55f7e6554d51f8478b5a3"
-time="2025-08-22T11:32:24Z" level=info msg="successfully built genesis state."
-time="2025-08-22T11:32:24Z" level=info msg="serialized genesis state to SSZ file: /data/metadata/genesis.ssz"
++ /usr/local/bin/eth-genesis-state-generator beaconchain --config /data/metadata/config.yaml --eth1-config /data/metadata/genesis.json --mnemonics /tmp/ci-nQO9MfAOvp/mnemonics.yaml --state-output /data/metadata/genesis.ssz --json-output /data/parsed/parsedConsensusGenesis.json
+time="2025-08-22T12:18:15Z" level=info msg="eth-beacon-genesis version: git-143f2f3"
+time="2025-08-22T12:18:15Z" level=info msg="loaded execution genesis. chainid: 3151908"
+time="2025-08-22T12:18:15Z" level=info msg="loaded consensus config. genesis fork version: 0x10000038"
+time="2025-08-22T12:18:15Z" level=info msg="processing mnemonic 0, for 128 validators"
+time="2025-08-22T12:18:15Z" level=info msg="...validator 100/128"
+time="2025-08-22T12:18:15Z" level=info msg="loaded 128 validators. total balance: 4096 ETH"
+time="2025-08-22T12:18:15Z" level=info msg="genesis version: electra"
+time="2025-08-22T12:18:15Z" level=info msg="genesis time: 1755865119"
+time="2025-08-22T12:18:15Z" level=info msg="genesis validators root: 0xd1ec305b97bf6336571c2348e4a8bf173684b0cdb7e55f7e6554d51f8478b5a3"
+time="2025-08-22T12:18:15Z" level=info msg="successfully built genesis state."
+time="2025-08-22T12:18:15Z" level=info msg="serialized genesis state to SSZ file: /data/metadata/genesis.ssz"
 serialized genesis state to JSON file: /data/parsed/parsedConsensusGenesis.json
-+ echo 'Genesis args: beaconchain' --config /data/metadata/config.yaml --eth1-config /data/metadata/genesis.json --mnemonics /tmp/ci-i5rzGtruz0/mnemonics.yaml --state-output /data/metadata/genesis.ssz --json-output /data/parsed/parsedConsensusGenesis.json
-Genesis args: beaconchain --config /data/metadata/config.yaml --eth1-config /data/metadata/genesis.json --mnemonics /tmp/ci-i5rzGtruz0/mnemonics.yaml --state-output /data/metadata/genesis.ssz --json-output /data/parsed/parsedConsensusGenesis.json
+Genesis args: beaconchain --config /data/metadata/config.yaml --eth1-config /data/metadata/genesis.json --mnemonics /tmp/ci-nQO9MfAOvp/mnemonics.yaml --state-output /data/metadata/genesis.ssz --json-output /data/parsed/parsedConsensusGenesis.json
++ echo 'Genesis args: beaconchain' --config /data/metadata/config.yaml --eth1-config /data/metadata/genesis.json --mnemonics /tmp/ci-nQO9MfAOvp/mnemonics.yaml --state-output /data/metadata/genesis.ssz --json-output /data/parsed/parsedConsensusGenesis.json
 ++ jq -r .latest_execution_payload_header.block_number /data/parsed/parsedConsensusGenesis.json
 + echo 'Genesis block number: 0'
 Genesis block number: 0
 ++ jq -r .latest_execution_payload_header.block_hash /data/parsed/parsedConsensusGenesis.json
-+ echo 'Genesis block hash: 0x3095cc66f7e0220107e8abfda1e0b3a9898059231de100d3c09189eea09c70d5'
-Genesis block hash: 0x3095cc66f7e0220107e8abfda1e0b3a9898059231de100d3c09189eea09c70d5
+Genesis block hash: 0xe55828db721d34e99cb5f1a147f36b5394ced0eb414bfcd479df2e715b584ae8
++ echo 'Genesis block hash: 0xe55828db721d34e99cb5f1a147f36b5394ced0eb414bfcd479df2e715b584ae8'
 + jq -r .eth1_data.block_hash /data/parsed/parsedConsensusGenesis.json
 + tr -d '\n'
 + jq -r .genesis_validators_root /data/parsed/parsedConsensusGenesis.json
@@ -236,7 +237,7 @@ Genesis block hash: 0x3095cc66f7e0220107e8abfda1e0b3a9898059231de100d3c09189eea0
 + mkdir -p /data/jwt
 ++ openssl rand -hex 32
 ++ tr -d '\n'
-+ echo -n 0x65def33ee9af80e2df4002ec27d1ced094c350dd6e72d4693e146ea9ddbda029
++ echo -n 0x0bf5eac5716a3de44d7a8f6d130b9f1c3e07e6ad04e0d45214d5d0fb8b36e0e2
 + '[' -f /data/metadata/genesis.json ']'
 ++ cat /data/metadata/genesis.json
 ++ jq -r '.config.terminalTotalDifficulty | tostring'
@@ -260,22 +261,22 @@ false
 --------------------
 
 Adding service with name 'el-1-geth-lighthouse' and image 'ethereum/client-go:latest'
-Service 'el-1-geth-lighthouse' added with service UUID 'ea93363f5eb14aa8b7be884281180205'
+Service 'el-1-geth-lighthouse' added with service UUID '6df2a45faac34f8da1e457b65da804b6'
 
 Waiting for at most '30m0s' for service 'el-1-geth-lighthouse' to reach a certain state
-Wait took 1 tries (46.759291ms in total). Assertion passed with following:
-Request had response code '200' and body "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"id\":\"c54400dd3010317a432e9fa5c11e55b22eedff933068963a59c1f4af0af7ab98\",\"name\":\"Geth/v1.16.2-unstable-06303383-20250704/linux-amd64/go1.24.4\",\"enode\":\"enode://c7802468201c4eeb277251124c0b37312272ee43da85437208cc253809c0fd29d8432099f6a95946c04075e472f2c2a7e5ea5d5f242af78955c07e8672270625@172.16.0.11:30303\",\"enr\":\"enr:-KO4QAchdQTihwLr1ElX_NFsK9cLYSzYD6cakyHxDub7Y9VlBBdL7S3tEF4G149uYYueJN91i0d3tTdVYn8Zt5mh5AKGAZjRjW4Gg2V0aMfGhAgC4LWAgmlkgnY0gmlwhKwQAAuJc2VjcDI1NmsxoQPHgCRoIBxO6ydyURJMCzcxInLuQ9qFQ3IIzCU4CcD9KYRzbmFwwIN0Y3CCdl-DdWRwgnZf\",\"ip\":\"172.16.0.11\",\"ports\":{\"discovery\":30303,\"listener\":30303},\"listenAddr\":\"[::]:30303\",\"protocols\":{\"eth\":{\"network\":3151908,\"genesis\":\"0x3095cc66f7e0220107e8abfda1e0b3a9898059231de100d3c09189eea09c70d5\",\"config\":{\"chainId\":3151908,\"homesteadBlock\":0,\"eip150Block\":0,\"eip155Block\":0,\"eip158Block\":0,\"byzantiumBlock\":0,\"constantinopleBlock\":0,\"petersburgBlock\":0,\"istanbulBlock\":0,\"berlinBlock\":0,\"londonBlock\":0,\"mergeNetsplitBlock\":0,\"shanghaiTime\":0,\"cancunTime\":0,\"pragueTime\":0,\"terminalTotalDifficulty\":0,\"depositContractAddress\":\"0x00000000219ab540356cbb839cbe05303d7705fa\",\"blobSchedule\":{\"cancun\":{\"target\":3,\"max\":6,\"baseFeeUpdateFraction\":3338477},\"prague\":{\"target\":6,\"max\":9,\"baseFeeUpdateFraction\":5007716}}},\"head\":\"0x3095cc66f7e0220107e8abfda1e0b3a9898059231de100d3c09189eea09c70d5\"},\"snap\":{}}}}\n", with extracted fields:
-'extract.enode': "enode://c7802468201c4eeb277251124c0b37312272ee43da85437208cc253809c0fd29d8432099f6a95946c04075e472f2c2a7e5ea5d5f242af78955c07e8672270625@172.16.0.11:30303"
-'extract.enr': "enr:-KO4QAchdQTihwLr1ElX_NFsK9cLYSzYD6cakyHxDub7Y9VlBBdL7S3tEF4G149uYYueJN91i0d3tTdVYn8Zt5mh5AKGAZjRjW4Gg2V0aMfGhAgC4LWAgmlkgnY0gmlwhKwQAAuJc2VjcDI1NmsxoQPHgCRoIBxO6ydyURJMCzcxInLuQ9qFQ3IIzCU4CcD9KYRzbmFwwIN0Y3CCdl-DdWRwgnZf"
+Wait took 1 tries (82.059028ms in total). Assertion passed with following:
+Request had response code '200' and body "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"id\":\"0866d8857dc5281bcbf1c7b8ac3a4882ffb0d717d3434f4e365e16d7f5368b95\",\"name\":\"Geth/v1.16.2-unstable-06303383-20250704/linux-amd64/go1.24.4\",\"enode\":\"enode://b59208e17c0e3c3da7754c03f3b70a4596b9c5bfe0cab01d77b7421a2be38d696796684f5cf742df2f2af6983c2875cba2db25a17b8a3dcd81bcc9c4e6abc001@172.16.0.11:30303\",\"enr\":\"enr:-KO4QFE-5_lgzPn5d7p-EfOQwlQ4bMsuYnz2kGxwB_cUlFvSY8D86TlfmK5x9cq7oy7EDT5oHmdCE9L_KSoSy_AAFbKGAZjRt3sFg2V0aMfGhKqEMhmAgmlkgnY0gmlwhKwQAAuJc2VjcDI1NmsxoQO1kgjhfA48Pad1TAPztwpFlrnFv-DKsB13t0IaK-ONaYRzbmFwwIN0Y3CCdl-DdWRwgnZf\",\"ip\":\"172.16.0.11\",\"ports\":{\"discovery\":30303,\"listener\":30303},\"listenAddr\":\"[::]:30303\",\"protocols\":{\"eth\":{\"network\":3151908,\"genesis\":\"0xe55828db721d34e99cb5f1a147f36b5394ced0eb414bfcd479df2e715b584ae8\",\"config\":{\"chainId\":3151908,\"homesteadBlock\":0,\"eip150Block\":0,\"eip155Block\":0,\"eip158Block\":0,\"byzantiumBlock\":0,\"constantinopleBlock\":0,\"petersburgBlock\":0,\"istanbulBlock\":0,\"berlinBlock\":0,\"londonBlock\":0,\"mergeNetsplitBlock\":0,\"shanghaiTime\":0,\"cancunTime\":0,\"pragueTime\":0,\"terminalTotalDifficulty\":0,\"depositContractAddress\":\"0x00000000219ab540356cbb839cbe05303d7705fa\",\"blobSchedule\":{\"cancun\":{\"target\":3,\"max\":6,\"baseFeeUpdateFraction\":3338477},\"prague\":{\"target\":6,\"max\":9,\"baseFeeUpdateFraction\":5007716}}},\"head\":\"0xe55828db721d34e99cb5f1a147f36b5394ced0eb414bfcd479df2e715b584ae8\"},\"snap\":{}}}}\n", with extracted fields:
+'extract.enode': "enode://b59208e17c0e3c3da7754c03f3b70a4596b9c5bfe0cab01d77b7421a2be38d696796684f5cf742df2f2af6983c2875cba2db25a17b8a3dcd81bcc9c4e6abc001@172.16.0.11:30303"
+'extract.enr': "enr:-KO4QFE-5_lgzPn5d7p-EfOQwlQ4bMsuYnz2kGxwB_cUlFvSY8D86TlfmK5x9cq7oy7EDT5oHmdCE9L_KSoSy_AAFbKGAZjRt3sFg2V0aMfGhKqEMhmAgmlkgnY0gmlwhKwQAAuJc2VjcDI1NmsxoQO1kgjhfA48Pad1TAPztwpFlrnFv-DKsB13t0IaK-ONaYRzbmFwwIN0Y3CCdl-DdWRwgnZf"
 
 Adding '1' services with names 'el-2-nethermind-teku'
 Successfully added the following '1' services:
-  Service 'el-2-nethermind-teku' added with UUID '3ec0a58824d34f43b5ceb9bc6328cc72'
+  Service 'el-2-nethermind-teku' added with UUID '98d1e4a4240c48edbe82d2264936cb38'
 
 Waiting for at most '30m0s' for service 'el-2-nethermind-teku' to reach a certain state
-Wait took 1 tries (259.773672ms in total). Assertion passed with following:
-Request had response code '200' and body "{\"jsonrpc\":\"2.0\",\"result\":{\"enode\":\"enode://bfff2ebf578ee6ecd57e5fa5b8303a318d32d66bb8086bc3211b136f24c075782735cf889d44657b9b0fe2b9be22590ae8edec5791998fa53d6e42ae976f16e3@172.16.0.12:30303\",\"id\":\"568e5833c001382bbd143c0d2b99687d36b3613389430e33b500744cbe5da457\",\"ip\":\"172.16.0.12\",\"listenAddr\":\"172.16.0.12:30303\",\"name\":\"Nethermind/v1.33.0-unstable/linux-x64/dotnet9.0.6\",\"ports\":{\"discovery\":30303,\"listener\":30303},\"protocols\":{\"eth\":{\"difficulty\":\"0x0\",\"genesis\":\"0x3095cc66f7e0220107e8abfda1e0b3a9898059231de100d3c09189eea09c70d5\",\"head\":\"0x3095cc66f7e0220107e8abfda1e0b3a9898059231de100d3c09189eea09c70d5\",\"network\":\"0x301824\",\"chainId\":\"0x301824\",\"config\":{\"maxCodeSize\":\"0x6000\",\"maxCodeSizeTransition\":\"0x0\",\"gasLimitBoundDivisor\":\"0x400\",\"registrar\":\"0x0000000000000000000000000000000000000000\",\"maximumExtraDataSize\":\"0xffff\",\"minGasLimit\":\"0x1388\",\"eip150Transition\":\"0x0\",\"eip152Transition\":\"0x0\",\"eip160Transition\":\"0x0\",\"eip161abcTransition\":\"0x0\",\"eip161dTransition\":\"0x0\",\"eip155Transition\":\"0x0\",\"eip140Transition\":\"0x0\",\"eip211Transition\":\"0x0\",\"eip214Transition\":\"0x0\",\"eip658Transition\":\"0x0\",\"eip145Transition\":\"0x0\",\"eip1014Transition\":\"0x0\",\"eip1052Transition\":\"0x0\",\"eip1108Transition\":\"0x0\",\"eip1283Transition\":\"0x0\",\"eip1283DisableTransition\":\"0x0\",\"eip1344Transition\":\"0x0\",\"eip1884Transition\":\"0x0\",\"eip2028Transition\":\"0x0\",\"eip2200Transition\":\"0x0\",\"eip1559Transition\":\"0x0\",\"eip2537TransitionTimestamp\":\"0x0\",\"eip2565Transition\":\"0x0\",\"eip2929Transition\":\"0x0\",\"eip2930Transition\":\"0x0\",\"eip3198Transition\":\"0x0\",\"eip3529Transition\":\"0x0\",\"eip3541Transition\":\"0x0\",\"eip3607Transition\":\"0x0\",\"eip1559BaseFeeInitialValue\":\"0x3b9aca00\",\"eip1559BaseFeeMaxChangeDenominator\":\"0x8\",\"eip1559ElasticityMultiplier\":\"0x2\",\"mergeForkIdTransition\":\"0x0\",\"terminalTotalDifficulty\":\"0x0\",\"eip3651TransitionTimestamp\":\"0x0\",\"eip3855TransitionTimestamp\":\"0x0\",\"eip3860TransitionTimestamp\":\"0x0\",\"eip4895TransitionTimestamp\":\"0x0\",\"eip4844TransitionTimestamp\":\"0x0\",\"eip1153TransitionTimestamp\":\"0x0\",\"eip5656TransitionTimestamp\":\"0x0\",\"eip6780TransitionTimestamp\":\"0x0\",\"eip4788TransitionTimestamp\":\"0x0\",\"eip4788ContractAddress\":\"0x000f3df6d732807ef1319fb7b8bb8522d0beac02\",\"eip6110TransitionTimestamp\":\"0x0\",\"depositContractAddress\":\"0x00000000219ab540356cbb839cbe05303d7705fa\",\"eip7002TransitionTimestamp\":\"0x0\",\"eip7002ContractAddress\":\"0x00000961ef480eb55e80d19ad83579a64c007002\",\"eip7251TransitionTimestamp\":\"0x0\",\"eip7251ContractAddress\":\"0x0000bbddc7ce488642fb579f8b00f3a590007251\",\"eip2935TransitionTimestamp\":\"0x0\",\"eip2935ContractAddress\":\"0x0000f90827f1c53a10cb7a02335b175320002935\",\"eip7702TransitionTimestamp\":\"0x0\",\"eip7623TransitionTimestamp\":\"0x0\",\"eip7934MaxRlpBlockSize\":8388608,\"blobSchedule\":[{\"timestamp\":\"0x0\",\"target\":\"0x6\",\"max\":\"0x9\",\"baseFeeUpdateFraction\":\"0x4c6964\"}]}}}},\"id\":1}", with extracted fields:
-'extract.enode': "enode://bfff2ebf578ee6ecd57e5fa5b8303a318d32d66bb8086bc3211b136f24c075782735cf889d44657b9b0fe2b9be22590ae8edec5791998fa53d6e42ae976f16e3@172.16.0.12:30303"
+Wait took 1 tries (312.936905ms in total). Assertion passed with following:
+Request had response code '200' and body "{\"jsonrpc\":\"2.0\",\"result\":{\"enode\":\"enode://0b5f7f8d555c42847f62a43f08274f6ebeedcfde315bf9f929856c7971315ed0677dac3e40bce7cc7799db6e8f1bdd6475acf172daf792caec32fb275856f4d1@172.16.0.12:30303\",\"id\":\"baf4cb8f7115782f9474ac5e4e2e80319d46eec732611dd7f497d967b122e2f6\",\"ip\":\"172.16.0.12\",\"listenAddr\":\"172.16.0.12:30303\",\"name\":\"Nethermind/v1.33.0-unstable/linux-x64/dotnet9.0.6\",\"ports\":{\"discovery\":30303,\"listener\":30303},\"protocols\":{\"eth\":{\"difficulty\":\"0x0\",\"genesis\":\"0xe55828db721d34e99cb5f1a147f36b5394ced0eb414bfcd479df2e715b584ae8\",\"head\":\"0xe55828db721d34e99cb5f1a147f36b5394ced0eb414bfcd479df2e715b584ae8\",\"network\":\"0x301824\",\"chainId\":\"0x301824\",\"config\":{\"maxCodeSize\":\"0x6000\",\"maxCodeSizeTransition\":\"0x0\",\"gasLimitBoundDivisor\":\"0x400\",\"registrar\":\"0x0000000000000000000000000000000000000000\",\"maximumExtraDataSize\":\"0xffff\",\"minGasLimit\":\"0x1388\",\"eip150Transition\":\"0x0\",\"eip152Transition\":\"0x0\",\"eip160Transition\":\"0x0\",\"eip161abcTransition\":\"0x0\",\"eip161dTransition\":\"0x0\",\"eip155Transition\":\"0x0\",\"eip140Transition\":\"0x0\",\"eip211Transition\":\"0x0\",\"eip214Transition\":\"0x0\",\"eip658Transition\":\"0x0\",\"eip145Transition\":\"0x0\",\"eip1014Transition\":\"0x0\",\"eip1052Transition\":\"0x0\",\"eip1108Transition\":\"0x0\",\"eip1283Transition\":\"0x0\",\"eip1283DisableTransition\":\"0x0\",\"eip1344Transition\":\"0x0\",\"eip1884Transition\":\"0x0\",\"eip2028Transition\":\"0x0\",\"eip2200Transition\":\"0x0\",\"eip1559Transition\":\"0x0\",\"eip2537TransitionTimestamp\":\"0x0\",\"eip2565Transition\":\"0x0\",\"eip2929Transition\":\"0x0\",\"eip2930Transition\":\"0x0\",\"eip3198Transition\":\"0x0\",\"eip3529Transition\":\"0x0\",\"eip3541Transition\":\"0x0\",\"eip3607Transition\":\"0x0\",\"eip1559BaseFeeInitialValue\":\"0x3b9aca00\",\"eip1559BaseFeeMaxChangeDenominator\":\"0x8\",\"eip1559ElasticityMultiplier\":\"0x2\",\"mergeForkIdTransition\":\"0x0\",\"terminalTotalDifficulty\":\"0x0\",\"eip3651TransitionTimestamp\":\"0x0\",\"eip3855TransitionTimestamp\":\"0x0\",\"eip3860TransitionTimestamp\":\"0x0\",\"eip4895TransitionTimestamp\":\"0x0\",\"eip4844TransitionTimestamp\":\"0x0\",\"eip1153TransitionTimestamp\":\"0x0\",\"eip5656TransitionTimestamp\":\"0x0\",\"eip6780TransitionTimestamp\":\"0x0\",\"eip4788TransitionTimestamp\":\"0x0\",\"eip4788ContractAddress\":\"0x000f3df6d732807ef1319fb7b8bb8522d0beac02\",\"eip6110TransitionTimestamp\":\"0x0\",\"depositContractAddress\":\"0x00000000219ab540356cbb839cbe05303d7705fa\",\"eip7002TransitionTimestamp\":\"0x0\",\"eip7002ContractAddress\":\"0x00000961ef480eb55e80d19ad83579a64c007002\",\"eip7251TransitionTimestamp\":\"0x0\",\"eip7251ContractAddress\":\"0x0000bbddc7ce488642fb579f8b00f3a590007251\",\"eip2935TransitionTimestamp\":\"0x0\",\"eip2935ContractAddress\":\"0x0000f90827f1c53a10cb7a02335b175320002935\",\"eip7702TransitionTimestamp\":\"0x0\",\"eip7623TransitionTimestamp\":\"0x0\",\"eip7934MaxRlpBlockSize\":8388608,\"blobSchedule\":[{\"timestamp\":\"0x0\",\"target\":\"0x6\",\"max\":\"0x9\",\"baseFeeUpdateFraction\":\"0x4c6964\"}]}}}},\"id\":1}", with extracted fields:
+'extract.enode': "enode://0b5f7f8d555c42847f62a43f08274f6ebeedcfde315bf9f929856c7971315ed0677dac3e40bce7cc7799db6e8f1bdd6475acf172daf792caec32fb275856f4d1@172.16.0.12:30303"
 
 Printing a message
 Successfully added 2 EL participants
@@ -284,23 +285,23 @@ Printing a message
 Launching CL network
 
 Adding service with name 'cl-1-lighthouse-geth' and image 'sigp/lighthouse:latest'
-Service 'cl-1-lighthouse-geth' added with service UUID 'a6c15fef40c24fa29452d2b9c0af9622'
+Service 'cl-1-lighthouse-geth' added with service UUID '3ce004c008f5494098610ec61289f0ea'
 
 Running 'GET' request on service 'cl-1-lighthouse-geth'
-Request had response code '200' and body "{\"data\":{\"peer_id\":\"16Uiu2HAm7PqN8rLkbuc2QUwFriYo2BjSfFbdsi9hrHyoFbic7s99\",\"enr\":\"enr:-N24QAIDlst0BiS_hWyQf3fCpev08f4-Ov4PRxznqyKHJnGrILy4xmL-dnXN3cwsEDrIW2HdWfeotdeHVUjZ8rb7NLoDh2F0dG5ldHOIMAAAAAAAAACGY2xpZW500YpMaWdodGhvdXNlhTcuMC4xhGV0aDKQ0RwldmAAADj__________4JpZIJ2NIJpcISsEAANhHF1aWOCIymJc2VjcDI1NmsxoQKx07GCimOLA0jR714kgz1JMYpRaoDzlJL9sv7Eu4ddIIhzeW5jbmV0cwCDdGNwgiMog3VkcIIjKA\",\"p2p_addresses\":[\"/ip4/172.16.0.13/tcp/9000/p2p/16Uiu2HAm7PqN8rLkbuc2QUwFriYo2BjSfFbdsi9hrHyoFbic7s99\"],\"discovery_addresses\":[\"/ip4/172.16.0.13/udp/9000/p2p/16Uiu2HAm7PqN8rLkbuc2QUwFriYo2BjSfFbdsi9hrHyoFbic7s99\"],\"metadata\":{\"seq_number\":\"2\",\"attnets\":\"0x3000000000000000\",\"syncnets\":\"0x00\"}}}", with extracted fields:
-'extract.peer_id': "16Uiu2HAm7PqN8rLkbuc2QUwFriYo2BjSfFbdsi9hrHyoFbic7s99"
-'extract.enr': "enr:-N24QAIDlst0BiS_hWyQf3fCpev08f4-Ov4PRxznqyKHJnGrILy4xmL-dnXN3cwsEDrIW2HdWfeotdeHVUjZ8rb7NLoDh2F0dG5ldHOIMAAAAAAAAACGY2xpZW500YpMaWdodGhvdXNlhTcuMC4xhGV0aDKQ0RwldmAAADj__________4JpZIJ2NIJpcISsEAANhHF1aWOCIymJc2VjcDI1NmsxoQKx07GCimOLA0jR714kgz1JMYpRaoDzlJL9sv7Eu4ddIIhzeW5jbmV0cwCDdGNwgiMog3VkcIIjKA"
-'extract.multiaddr': "/ip4/172.16.0.13/tcp/9000/p2p/16Uiu2HAm7PqN8rLkbuc2QUwFriYo2BjSfFbdsi9hrHyoFbic7s99"
+Request had response code '200' and body "{\"data\":{\"peer_id\":\"16Uiu2HAmM189FqHDqarq9xyq5VdbtFX8Q6YSyMd4MKAmeU3pq4aG\",\"enr\":\"enr:-N24QOGu4rG2hMjJGjJeDDwO0V0O0e5rXhUlysFaaqI-ZW0hLF2hw8DOfUoiwRzdyflOlnBHDVLmfeOkIvXoq4I8ZPUDh2F0dG5ldHOIAAAGAAAAAACGY2xpZW500YpMaWdodGhvdXNlhTcuMC4xhGV0aDKQ0RwldmAAADj__________4JpZIJ2NIJpcISsEAANhHF1aWOCIymJc2VjcDI1NmsxoQN8BewxqN8JF3YW3ooGbg86SBS1hlu4gLarIR6px_xC5YhzeW5jbmV0cwCDdGNwgiMog3VkcIIjKA\",\"p2p_addresses\":[\"/ip4/172.16.0.13/tcp/9000/p2p/16Uiu2HAmM189FqHDqarq9xyq5VdbtFX8Q6YSyMd4MKAmeU3pq4aG\"],\"discovery_addresses\":[\"/ip4/172.16.0.13/udp/9000/p2p/16Uiu2HAmM189FqHDqarq9xyq5VdbtFX8Q6YSyMd4MKAmeU3pq4aG\"],\"metadata\":{\"seq_number\":\"2\",\"attnets\":\"0x0000060000000000\",\"syncnets\":\"0x00\"}}}", with extracted fields:
+'extract.multiaddr': "/ip4/172.16.0.13/tcp/9000/p2p/16Uiu2HAmM189FqHDqarq9xyq5VdbtFX8Q6YSyMd4MKAmeU3pq4aG"
+'extract.peer_id': "16Uiu2HAmM189FqHDqarq9xyq5VdbtFX8Q6YSyMd4MKAmeU3pq4aG"
+'extract.enr': "enr:-N24QOGu4rG2hMjJGjJeDDwO0V0O0e5rXhUlysFaaqI-ZW0hLF2hw8DOfUoiwRzdyflOlnBHDVLmfeOkIvXoq4I8ZPUDh2F0dG5ldHOIAAAGAAAAAACGY2xpZW500YpMaWdodGhvdXNlhTcuMC4xhGV0aDKQ0RwldmAAADj__________4JpZIJ2NIJpcISsEAANhHF1aWOCIymJc2VjcDI1NmsxoQN8BewxqN8JF3YW3ooGbg86SBS1hlu4gLarIR6px_xC5YhzeW5jbmV0cwCDdGNwgiMog3VkcIIjKA"
 
 Adding '1' services with names 'cl-2-teku-nethermind'
 Successfully added the following '1' services:
-  Service 'cl-2-teku-nethermind' added with UUID 'e5e9bb682083449eb2681f40777dc526'
+  Service 'cl-2-teku-nethermind' added with UUID 'd302f8adf5424ba89b5823b42b7f9e31'
 
 Running 'GET' request on service 'cl-2-teku-nethermind'
-Request had response code '200' and body "{\"data\":{\"peer_id\":\"16Uiu2HAmDbJ2RB8CfCrsKi2sm6wNN1eJgNvsUAV6meQtvHNxnRfa\",\"enr\":\"enr:-LK4QCxwTmH0LTkapoxptlS9tyeNIWl2ITuT6FJHE-3zIPcPKBEQEABWneJvIQPljIfGgUVqfpjVOmBJPvaSfaSX0CYEh2F0dG5ldHOIAAAAAAAADACEZXRoMpDRHCV2YAAAOP__________gmlkgnY0gmlwhKwQAA6Jc2VjcDI1NmsxoQMN6VkzhOH7EPtRkNl4ulf-_hPnVi3l1CVlbYLPdDyvNYN0Y3CCIyiDdWRwgiMo\",\"p2p_addresses\":[\"/ip4/172.16.0.14/tcp/9000/p2p/16Uiu2HAmDbJ2RB8CfCrsKi2sm6wNN1eJgNvsUAV6meQtvHNxnRfa\"],\"discovery_addresses\":[\"/ip4/172.16.0.14/udp/9000/p2p/16Uiu2HAmDbJ2RB8CfCrsKi2sm6wNN1eJgNvsUAV6meQtvHNxnRfa\"],\"metadata\":{\"seq_number\":\"1\",\"attnets\":\"0x0000000000000c00\",\"syncnets\":\"0x00\"}}}", with extracted fields:
-'extract.multiaddr': "/ip4/172.16.0.14/tcp/9000/p2p/16Uiu2HAmDbJ2RB8CfCrsKi2sm6wNN1eJgNvsUAV6meQtvHNxnRfa"
-'extract.peer_id': "16Uiu2HAmDbJ2RB8CfCrsKi2sm6wNN1eJgNvsUAV6meQtvHNxnRfa"
-'extract.enr': "enr:-LK4QCxwTmH0LTkapoxptlS9tyeNIWl2ITuT6FJHE-3zIPcPKBEQEABWneJvIQPljIfGgUVqfpjVOmBJPvaSfaSX0CYEh2F0dG5ldHOIAAAAAAAADACEZXRoMpDRHCV2YAAAOP__________gmlkgnY0gmlwhKwQAA6Jc2VjcDI1NmsxoQMN6VkzhOH7EPtRkNl4ulf-_hPnVi3l1CVlbYLPdDyvNYN0Y3CCIyiDdWRwgiMo"
+Request had response code '200' and body "{\"data\":{\"peer_id\":\"16Uiu2HAm3uUD7YCr54deLqxgCgTjhb47oqCK1kAkpNpR2GRUABuy\",\"enr\":\"enr:-LK4QJ2hDqrj5rH6UihZBoiBOQ6Iai1CW-zb1VDdmZf5sASaYRMNX-GEIkhwKGAJNf_RSQpib3dLQDgsV2m1myoxGTkEh2F0dG5ldHOIMAAAAAAAAACEZXRoMpDRHCV2YAAAOP__________gmlkgnY0gmlwhKwQAA6Jc2VjcDI1NmsxoQJ9_HME72VowLJz53bR7FkEPVC-xoW6f4kFIV_L_BTkwIN0Y3CCIyiDdWRwgiMo\",\"p2p_addresses\":[\"/ip4/172.16.0.14/tcp/9000/p2p/16Uiu2HAm3uUD7YCr54deLqxgCgTjhb47oqCK1kAkpNpR2GRUABuy\"],\"discovery_addresses\":[\"/ip4/172.16.0.14/udp/9000/p2p/16Uiu2HAm3uUD7YCr54deLqxgCgTjhb47oqCK1kAkpNpR2GRUABuy\"],\"metadata\":{\"seq_number\":\"1\",\"attnets\":\"0x3000000000000000\",\"syncnets\":\"0x00\"}}}", with extracted fields:
+'extract.peer_id': "16Uiu2HAm3uUD7YCr54deLqxgCgTjhb47oqCK1kAkpNpR2GRUABuy"
+'extract.enr': "enr:-LK4QJ2hDqrj5rH6UihZBoiBOQ6Iai1CW-zb1VDdmZf5sASaYRMNX-GEIkhwKGAJNf_RSQpib3dLQDgsV2m1myoxGTkEh2F0dG5ldHOIMAAAAAAAAACEZXRoMpDRHCV2YAAAOP__________gmlkgnY0gmlwhKwQAA6Jc2VjcDI1NmsxoQJ9_HME72VowLJz53bR7FkEPVC-xoW6f4kFIV_L_BTkwIN0Y3CCIyiDdWRwgiMo"
+'extract.multiaddr': "/ip4/172.16.0.14/tcp/9000/p2p/16Uiu2HAm3uUD7YCr54deLqxgCgTjhb47oqCK1kAkpNpR2GRUABuy"
 
 Printing a message
 Successfully added 2 CL participants
@@ -319,19 +320,19 @@ Start adding validators for participant #2
 
 Adding '1' services with names 'vc-1-geth-lighthouse'
 Successfully added the following '1' services:
-  Service 'vc-1-geth-lighthouse' added with UUID '4b377862d5f14cb5ba32d44950b1af89'
+  Service 'vc-1-geth-lighthouse' added with UUID '0bc4c36340c7499dbba2a6b491f92e6e'
 
 Printing a message
 NODE JSON RPC URI: '172.16.0.11:8545'
 
 Rendering a template to a files artifact with name 'validator-ranges'
-Templates artifact name 'validator-ranges' rendered with artifact UUID 'd7b0c1a0881747daa2fd3948aebc4aca'
+Templates artifact name 'validator-ranges' rendered with artifact UUID 'd46ae53c94f948d18c7429ee6cdd700d'
 
 Printing a message
 Launching tx-fuzz
 
 Adding service with name 'tx-fuzz' and image 'ethpandaops/tx-fuzz:master'
-Service 'tx-fuzz' added with service UUID 'd3d6c10023d34846bebe5b5b1b8f6561'
+Service 'tx-fuzz' added with service UUID '24a2c7ff11004beb8b6d52e9bccea0d9'
 
 Printing a message
 Successfully launched tx-fuzz
@@ -340,10 +341,10 @@ Printing a message
 Launching dora
 
 Rendering a template to a files artifact with name 'dora-config'
-Templates artifact name 'dora-config' rendered with artifact UUID '99387d45bc6544fc8d5da4b7e602c5e1'
+Templates artifact name 'dora-config' rendered with artifact UUID '0a12aef0b0ae4e6ab5579c6b60c5cefb'
 
 Adding service with name 'dora' and image 'ethpandaops/dora:latest'
-Service 'dora' added with service UUID '786b5867aea547b19e6b68c08cc642ea'
+Service 'dora' added with service UUID '03b10038012544a5ad052a1a83226541'
 
 Printing a message
 Successfully launched dora
@@ -368,11 +369,11 @@ Starlark code successfully run. Output was:
 					}
 				],
 				"client_name": "lighthouse",
-				"enr": "enr:-N24QAIDlst0BiS_hWyQf3fCpev08f4-Ov4PRxznqyKHJnGrILy4xmL-dnXN3cwsEDrIW2HdWfeotdeHVUjZ8rb7NLoDh2F0dG5ldHOIMAAAAAAAAACGY2xpZW500YpMaWdodGhvdXNlhTcuMC4xhGV0aDKQ0RwldmAAADj__________4JpZIJ2NIJpcISsEAANhHF1aWOCIymJc2VjcDI1NmsxoQKx07GCimOLA0jR714kgz1JMYpRaoDzlJL9sv7Eu4ddIIhzeW5jbmV0cwCDdGNwgiMog3VkcIIjKA",
+				"enr": "enr:-N24QOGu4rG2hMjJGjJeDDwO0V0O0e5rXhUlysFaaqI-ZW0hLF2hw8DOfUoiwRzdyflOlnBHDVLmfeOkIvXoq4I8ZPUDh2F0dG5ldHOIAAAGAAAAAACGY2xpZW500YpMaWdodGhvdXNlhTcuMC4xhGV0aDKQ0RwldmAAADj__________4JpZIJ2NIJpcISsEAANhHF1aWOCIymJc2VjcDI1NmsxoQN8BewxqN8JF3YW3ooGbg86SBS1hlu4gLarIR6px_xC5YhzeW5jbmV0cwCDdGNwgiMog3VkcIIjKA",
 				"http_port": 4000,
 				"ip_addr": "172.16.0.13",
-				"multiaddr": "/ip4/172.16.0.13/tcp/9000/p2p/16Uiu2HAm7PqN8rLkbuc2QUwFriYo2BjSfFbdsi9hrHyoFbic7s99",
-				"peer_id": "16Uiu2HAm7PqN8rLkbuc2QUwFriYo2BjSfFbdsi9hrHyoFbic7s99",
+				"multiaddr": "/ip4/172.16.0.13/tcp/9000/p2p/16Uiu2HAmM189FqHDqarq9xyq5VdbtFX8Q6YSyMd4MKAmeU3pq4aG",
+				"peer_id": "16Uiu2HAmM189FqHDqarq9xyq5VdbtFX8Q6YSyMd4MKAmeU3pq4aG",
 				"snooper_el_engine_context": null,
 				"snooper_enabled": false,
 				"supernode": false,
@@ -393,8 +394,8 @@ Starlark code successfully run. Output was:
 					}
 				],
 				"engine_rpc_port_num": 8551,
-				"enode": "enode://c7802468201c4eeb277251124c0b37312272ee43da85437208cc253809c0fd29d8432099f6a95946c04075e472f2c2a7e5ea5d5f242af78955c07e8672270625@172.16.0.11:30303",
-				"enr": "enr:-KO4QAchdQTihwLr1ElX_NFsK9cLYSzYD6cakyHxDub7Y9VlBBdL7S3tEF4G149uYYueJN91i0d3tTdVYn8Zt5mh5AKGAZjRjW4Gg2V0aMfGhAgC4LWAgmlkgnY0gmlwhKwQAAuJc2VjcDI1NmsxoQPHgCRoIBxO6ydyURJMCzcxInLuQ9qFQ3IIzCU4CcD9KYRzbmFwwIN0Y3CCdl-DdWRwgnZf",
+				"enode": "enode://b59208e17c0e3c3da7754c03f3b70a4596b9c5bfe0cab01d77b7421a2be38d696796684f5cf742df2f2af6983c2875cba2db25a17b8a3dcd81bcc9c4e6abc001@172.16.0.11:30303",
+				"enr": "enr:-KO4QFE-5_lgzPn5d7p-EfOQwlQ4bMsuYnz2kGxwB_cUlFvSY8D86TlfmK5x9cq7oy7EDT5oHmdCE9L_KSoSy_AAFbKGAZjRt3sFg2V0aMfGhKqEMhmAgmlkgnY0gmlwhKwQAAuJc2VjcDI1NmsxoQO1kgjhfA48Pad1TAPztwpFlrnFv-DKsB13t0IaK-ONaYRzbmFwwIN0Y3CCdl-DdWRwgnZf",
 				"ip_addr": "172.16.0.11",
 				"rpc_http_url": "http://172.16.0.11:8545",
 				"rpc_port_num": 8545,
@@ -442,11 +443,11 @@ Starlark code successfully run. Output was:
 					}
 				],
 				"client_name": "teku",
-				"enr": "enr:-LK4QCxwTmH0LTkapoxptlS9tyeNIWl2ITuT6FJHE-3zIPcPKBEQEABWneJvIQPljIfGgUVqfpjVOmBJPvaSfaSX0CYEh2F0dG5ldHOIAAAAAAAADACEZXRoMpDRHCV2YAAAOP__________gmlkgnY0gmlwhKwQAA6Jc2VjcDI1NmsxoQMN6VkzhOH7EPtRkNl4ulf-_hPnVi3l1CVlbYLPdDyvNYN0Y3CCIyiDdWRwgiMo",
+				"enr": "enr:-LK4QJ2hDqrj5rH6UihZBoiBOQ6Iai1CW-zb1VDdmZf5sASaYRMNX-GEIkhwKGAJNf_RSQpib3dLQDgsV2m1myoxGTkEh2F0dG5ldHOIMAAAAAAAAACEZXRoMpDRHCV2YAAAOP__________gmlkgnY0gmlwhKwQAA6Jc2VjcDI1NmsxoQJ9_HME72VowLJz53bR7FkEPVC-xoW6f4kFIV_L_BTkwIN0Y3CCIyiDdWRwgiMo",
 				"http_port": 4000,
 				"ip_addr": "172.16.0.14",
-				"multiaddr": "/ip4/172.16.0.14/tcp/9000/p2p/16Uiu2HAmDbJ2RB8CfCrsKi2sm6wNN1eJgNvsUAV6meQtvHNxnRfa",
-				"peer_id": "16Uiu2HAmDbJ2RB8CfCrsKi2sm6wNN1eJgNvsUAV6meQtvHNxnRfa",
+				"multiaddr": "/ip4/172.16.0.14/tcp/9000/p2p/16Uiu2HAm3uUD7YCr54deLqxgCgTjhb47oqCK1kAkpNpR2GRUABuy",
+				"peer_id": "16Uiu2HAm3uUD7YCr54deLqxgCgTjhb47oqCK1kAkpNpR2GRUABuy",
 				"snooper_el_engine_context": null,
 				"snooper_enabled": false,
 				"supernode": false,
@@ -467,7 +468,7 @@ Starlark code successfully run. Output was:
 					}
 				],
 				"engine_rpc_port_num": 8551,
-				"enode": "enode://bfff2ebf578ee6ecd57e5fa5b8303a318d32d66bb8086bc3211b136f24c075782735cf889d44657b9b0fe2b9be22590ae8edec5791998fa53d6e42ae976f16e3@172.16.0.12:30303",
+				"enode": "enode://0b5f7f8d555c42847f62a43f08274f6ebeedcfde315bf9f929856c7971315ed0677dac3e40bce7cc7799db6e8f1bdd6475acf172daf792caec32fb275856f4d1@172.16.0.12:30303",
 				"enr": "",
 				"ip_addr": "172.16.0.12",
 				"rpc_http_url": "http://172.16.0.12:8545",
@@ -489,7 +490,7 @@ Starlark code successfully run. Output was:
 		}
 	],
 	"blockscout_sc_verif_url": null,
-	"final_genesis_timestamp": "1755862369",
+	"final_genesis_timestamp": "1755865119",
 	"genesis_validators_root": "0xd1ec305b97bf6336571c2348e4a8bf173684b0cdb7e55f7e6554d51f8478b5a3",
 	"grafana_info": {
 		"dashboard_path": "/d/QdTOwy-nz/eth2-merge-kurtosis-module-dashboard?orgId=1",
@@ -652,49 +653,50 @@ Starlark code successfully run. Output was:
 
 ⭐ us on GitHub - https://github.com/kurtosis-tech/kurtosis
 Name:            my-testnet
-UUID:            9a994be834bd
+UUID:            22a6db0e91f2
 Status:          RUNNING
-Creation Time:   Fri, 22 Aug 2025 19:31:44 CST
+Creation Time:   Fri, 22 Aug 2025 12:15:50 UTC
 Flags:           
 
 ========================================= Files Artifacts =========================================
 UUID           Name
-76c7f9661c29   1-lighthouse-geth-0-63
-f68976a1bfbc   2-teku-nethermind-64-127
-99387d45bc65   dora-config
-f4590c3ed241   el_cl_genesis_data
-d5fdee431aef   final-genesis-timestamp
-a7a6ed4d5610   genesis-el-cl-env-file
-457e878bfaef   genesis_validators_root
-029e0addd64b   jwt_file
-6854d8d60fee   keymanager_file
-87f96320d625   prysm-password
-d7b0c1a08817   validator-ranges
+b44d0f5b4cec   1-lighthouse-geth-0-63
+c1b45d9ee808   2-teku-nethermind-64-127
+0a12aef0b0ae   dora-config
+23fc7588cd48   el_cl_genesis_data
+b1cba5344057   final-genesis-timestamp
+48ae36999361   genesis-el-cl-env-file
+abcc412d1481   genesis_validators_root
+d066c263d2d6   jwt_file
+ce908a46022f   keymanager_file
+cb8a8836075b   prysm-password
+d46ae53c94f9   validator-ranges
 
 ========================================== User Services ==========================================
 UUID           Name                                             Ports                                         Status
-a6c15fef40c2   cl-1-lighthouse-geth                             http: 4000/tcp -> http://127.0.0.1:32796      RUNNING
-                                                                metrics: 5054/tcp -> http://127.0.0.1:32797   
-                                                                quic-discovery: 9001/udp -> 127.0.0.1:32773   
-                                                                tcp-discovery: 9000/tcp -> 127.0.0.1:32798    
-                                                                udp-discovery: 9000/udp -> 127.0.0.1:32772    
-e5e9bb682083   cl-2-teku-nethermind                             http: 4000/tcp -> http://127.0.0.1:32799      RUNNING
-                                                                metrics: 8008/tcp -> http://127.0.0.1:32800   
-                                                                tcp-discovery: 9000/tcp -> 127.0.0.1:32801    
-                                                                udp-discovery: 9000/udp -> 127.0.0.1:32774    
-786b5867aea5   dora                                             http: 8080/tcp -> http://127.0.0.1:32803      RUNNING
-ea93363f5eb1   el-1-geth-lighthouse                             engine-rpc: 8551/tcp -> 127.0.0.1:32788       RUNNING
-                                                                metrics: 9001/tcp -> http://127.0.0.1:32789   
-                                                                rpc: 8545/tcp -> 127.0.0.1:32786              
-                                                                tcp-discovery: 30303/tcp -> 127.0.0.1:32790   
-                                                                udp-discovery: 30303/udp -> 127.0.0.1:32770   
-                                                                ws: 8546/tcp -> 127.0.0.1:32787               
-3ec0a58824d3   el-2-nethermind-teku                             engine-rpc: 8551/tcp -> 127.0.0.1:32793       RUNNING
+3ce004c008f5   cl-1-lighthouse-geth                             http: 4000/tcp -> http://127.0.0.1:32801      RUNNING
+                                                                metrics: 5054/tcp -> http://127.0.0.1:32802   
+                                                                quic-discovery: 9001/udp -> 127.0.0.1:32776   
+                                                                tcp-discovery: 9000/tcp -> 127.0.0.1:32803    
+                                                                udp-discovery: 9000/udp -> 127.0.0.1:32775    
+d302f8adf542   cl-2-teku-nethermind                             http: 4000/tcp -> http://127.0.0.1:32804      RUNNING
+                                                                metrics: 8008/tcp -> http://127.0.0.1:32805   
+                                                                tcp-discovery: 9000/tcp -> 127.0.0.1:32806    
+                                                                udp-discovery: 9000/udp -> 127.0.0.1:32777    
+03b100380125   dora                                             http: 8080/tcp -> http://127.0.0.1:32808      RUNNING
+6df2a45faac3   el-1-geth-lighthouse                             engine-rpc: 8551/tcp -> 127.0.0.1:32793       RUNNING
                                                                 metrics: 9001/tcp -> http://127.0.0.1:32794   
                                                                 rpc: 8545/tcp -> 127.0.0.1:32791              
                                                                 tcp-discovery: 30303/tcp -> 127.0.0.1:32795   
-                                                                udp-discovery: 30303/udp -> 127.0.0.1:32771   
+                                                                udp-discovery: 30303/udp -> 127.0.0.1:32773   
                                                                 ws: 8546/tcp -> 127.0.0.1:32792               
-d3d6c10023d3   tx-fuzz                                          <none>                                        RUNNING
-c17a82ae025c   validator-key-generation-cl-validator-keystore   <none>                                        RUNNING
-4b377862d5f1   vc-1-geth-lighthouse                             metrics: 8080/tcp -> http://127.0.0.1:32802   RUNNING
+98d1e4a4240c   el-2-nethermind-teku                             engine-rpc: 8551/tcp -> 127.0.0.1:32798       RUNNING
+                                                                metrics: 9001/tcp -> http://127.0.0.1:32799   
+                                                                rpc: 8545/tcp -> 127.0.0.1:32796              
+                                                                tcp-discovery: 30303/tcp -> 127.0.0.1:32800   
+                                                                udp-discovery: 30303/udp -> 127.0.0.1:32774   
+                                                                ws: 8546/tcp -> 127.0.0.1:32797               
+24a2c7ff1100   tx-fuzz                                          <none>                                        RUNNING
+b949f3207780   validator-key-generation-cl-validator-keystore   <none>                                        RUNNING
+0bc4c36340c7   vc-1-geth-lighthouse                             metrics: 8080/tcp -> http://127.0.0.1:32807   RUNNING
+

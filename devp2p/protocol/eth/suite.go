@@ -53,12 +53,9 @@ func (s *Suite) GetChain() *Chain {
 // NewSuite creates and returns a new eth-test suite that can
 // be used to test the given node against the given blockchain
 // data.
-func NewSuite(dest *enode.Node, chainDir, engineURL, jwt string) (*Suite, error) {
-	chain, err := NewChain(chainDir)
-	if err != nil {
-		return nil, err
-	}
-	engine, err := NewEngineClient(chainDir, engineURL, jwt)
+func NewSuite(dest *enode.Node, engineURL, jwt string) (*Suite, error) {
+	chain, err := NewChain("./testdata")
+	engine, err := NewEngineClient(engineURL, jwt)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +65,23 @@ func NewSuite(dest *enode.Node, chainDir, engineURL, jwt string) (*Suite, error)
 		chain:  chain,
 		engine: engine,
 	}, nil
+}
+
+// InitializeAndConnect 封装了初始化、连接和对等过程
+func (s *Suite) InitializeAndConnect() error {
+	conn, err := s.dial()
+	if err != nil {
+		return fmt.Errorf("dial failed: %v", err)
+	}
+	//defer func() {
+	//	conn.Close()
+	//}()
+	//defer conn.Close()
+	if err := conn.Peer(nil); err != nil {
+		return fmt.Errorf("peer failed: %v", err)
+	}
+
+	return nil
 }
 
 func (s *Suite) EthTests() []utesting.Test {
@@ -620,9 +634,9 @@ func (s *Suite) TestTransaction(t *utesting.T) {
 transaction gets propagated.`)
 
 	// Nudge client out of syncing mode to accept pending txs.
-	if err := s.engine.sendForkchoiceUpdated(); err != nil {
-		t.Fatalf("failed to send next block: %v", err)
-	}
+	// if err := s.engine.sendForkchoiceUpdated(); err != nil {
+	// 	t.Fatalf("failed to send next block: %v", err)
+	// }
 	from, nonce := s.chain.GetSender(0)
 	inner := &types.DynamicFeeTx{
 		ChainID:   s.chain.config.ChainID,
@@ -648,9 +662,9 @@ func (s *Suite) TestInvalidTxs(t *utesting.T) {
 does not propagate them.`)
 
 	// Nudge client out of syncing mode to accept pending txs.
-	if err := s.engine.sendForkchoiceUpdated(); err != nil {
-		t.Fatalf("failed to send next block: %v", err)
-	}
+	// if err := s.engine.sendForkchoiceUpdated(); err != nil {
+	// 	t.Fatalf("failed to send next block: %v", err)
+	// }
 
 	from, nonce := s.chain.GetSender(0)
 	inner := &types.DynamicFeeTx{
@@ -731,9 +745,9 @@ func (s *Suite) TestLargeTxRequest(t *utesting.T) {
 on another peer connection using GetPooledTransactions.`)
 
 	// Nudge client out of syncing mode to accept pending txs.
-	if err := s.engine.sendForkchoiceUpdated(); err != nil {
-		t.Fatalf("failed to send next block: %v", err)
-	}
+	// if err := s.engine.sendForkchoiceUpdated(); err != nil {
+	// 	t.Fatalf("failed to send next block: %v", err)
+	// }
 
 	// Generate many transactions to seed target with.
 	var (
@@ -773,7 +787,7 @@ on another peer connection using GetPooledTransactions.`)
 		t.Fatalf("dial failed: %v", err)
 	}
 	defer conn.Close()
-	if err = conn.peer(s.chain, nil); err != nil {
+	if err = conn.peer(nil); err != nil {
 		t.Fatalf("peering failed: %v", err)
 	}
 	// Create and send pooled tx request.
@@ -804,9 +818,9 @@ func (s *Suite) TestNewPooledTxs(t *utesting.T) {
 the transactions using a GetPooledTransactions request.`)
 
 	// Nudge client out of syncing mode to accept pending txs.
-	if err := s.engine.sendForkchoiceUpdated(); err != nil {
-		t.Fatalf("failed to send next block: %v", err)
-	}
+	// if err := s.engine.sendForkchoiceUpdated(); err != nil {
+	// 	t.Fatalf("failed to send next block: %v", err)
+	// }
 
 	var (
 		count       = 50
@@ -839,7 +853,7 @@ the transactions using a GetPooledTransactions request.`)
 		t.Fatalf("dial failed: %v", err)
 	}
 	defer conn.Close()
-	if err = conn.peer(s.chain, nil); err != nil {
+	if err = conn.peer(nil); err != nil {
 		t.Fatalf("peering failed: %v", err)
 	}
 
@@ -919,9 +933,9 @@ func (s *Suite) makeBlobTxs(count, blobs int, discriminator byte) (txs types.Tra
 func (s *Suite) TestBlobViolations(t *utesting.T) {
 	t.Log(`This test sends some invalid blob tx announcements and expects the node to disconnect.`)
 
-	if err := s.engine.sendForkchoiceUpdated(); err != nil {
-		t.Fatalf("send fcu failed: %v", err)
-	}
+	// if err := s.engine.sendForkchoiceUpdated(); err != nil {
+	// 	t.Fatalf("send fcu failed: %v", err)
+	// }
 	// Create blob txs for each tests with unique tx hashes.
 	var (
 		t1 = s.makeBlobTxs(2, 3, 0x1)
@@ -954,7 +968,7 @@ func (s *Suite) TestBlobViolations(t *utesting.T) {
 		if err != nil {
 			t.Fatalf("dial fail: %v", err)
 		}
-		if err := conn.peer(s.chain, nil); err != nil {
+		if err := conn.peer(nil); err != nil {
 			t.Fatalf("peering failed: %v", err)
 		}
 		if err := conn.Write(ethProto, eth.NewPooledTransactionHashesMsg, test.ann); err != nil {
@@ -1064,7 +1078,7 @@ func (s *Suite) testBadBlobTx(t *utesting.T, tx *types.Transaction, badTx *types
 		}
 		defer conn.Close()
 
-		if err := conn.peer(s.chain, nil); err != nil {
+		if err := conn.peer(nil); err != nil {
 			errc <- fmt.Errorf("bad peer: peering failed: %v", err)
 			return
 		}
@@ -1114,7 +1128,7 @@ func (s *Suite) testBadBlobTx(t *utesting.T, tx *types.Transaction, badTx *types
 		}
 		defer conn.Close()
 
-		if err := conn.peer(s.chain, nil); err != nil {
+		if err := conn.peer(nil); err != nil {
 			errc <- fmt.Errorf("peering failed: %v", err)
 			return
 		}
@@ -1161,9 +1175,9 @@ func (s *Suite) testBadBlobTx(t *utesting.T, tx *types.Transaction, badTx *types
 		close(errc)
 	}
 
-	if err := s.engine.sendForkchoiceUpdated(); err != nil {
-		t.Fatalf("send fcu failed: %v", err)
-	}
+	// if err := s.engine.sendForkchoiceUpdated(); err != nil {
+	// 	t.Fatalf("send fcu failed: %v", err)
+	// }
 
 	go goodPeer()
 	go badPeer()

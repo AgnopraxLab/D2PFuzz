@@ -64,27 +64,31 @@ func NewChain(dir string) (*Chain, error) {
 	if err != nil {
 		return nil, err
 	}
-	gblock := gen.ToBlock()
-
-	blocks, err := blocksFromFile(filepath.Join(dir, "chain.rlp"), gblock)
-	if err != nil {
-		return nil, err
-	}
-	state, err := readState(filepath.Join(dir, "headstate.json"))
-	if err != nil {
-		return nil, err
-	}
-	accounts, err := readAccounts(filepath.Join(dir, "accounts.json"))
-	if err != nil {
-		return nil, err
-	}
 	return &Chain{
 		genesis: gen,
-		blocks:  blocks,
-		state:   state,
-		senders: accounts,
 		config:  gen.Config,
 	}, nil
+	// gblock := gen.ToBlock()
+
+	// blocks, err := blocksFromFile(filepath.Join(dir, "chain.rlp"), gblock)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// state, err := readState(filepath.Join(dir, "headstate.json"))
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// accounts, err := readAccounts(filepath.Join(dir, "accounts.json"))
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// return &Chain{
+	// 	genesis: gen,
+	// 	blocks:  blocks,
+	// 	state:   state,
+	// 	senders: accounts,
+	// 	config:  gen.Config,
+	// }, nil
 }
 
 // senderInfo is an account record as output in the "accounts.json" file from

@@ -38,7 +38,7 @@ func (s *Suite) sendTxs(t *utesting.T, txs []*types.Transaction) error {
 		return err
 	}
 	defer sendConn.Close()
-	if err = sendConn.peer(s.chain, nil); err != nil {
+	if err = sendConn.peer(nil); err != nil {
 		return fmt.Errorf("peering failed: %v", err)
 	}
 
@@ -48,7 +48,7 @@ func (s *Suite) sendTxs(t *utesting.T, txs []*types.Transaction) error {
 		return err
 	}
 	defer recvConn.Close()
-	if err = recvConn.peer(s.chain, nil); err != nil {
+	if err = recvConn.peer(nil); err != nil {
 		return fmt.Errorf("peering failed: %v", err)
 	}
 
@@ -113,7 +113,7 @@ func (s *Suite) sendInvalidTxs(t *utesting.T, txs []*types.Transaction) error {
 		return err
 	}
 	defer sendConn.Close()
-	if err = sendConn.peer(s.chain, nil); err != nil {
+	if err = sendConn.peer(nil); err != nil {
 		return fmt.Errorf("peering failed: %v", err)
 	}
 	sendConn.SetDeadline(time.Now().Add(timeout))
@@ -124,7 +124,7 @@ func (s *Suite) sendInvalidTxs(t *utesting.T, txs []*types.Transaction) error {
 		return err
 	}
 	defer recvConn.Close()
-	if err = recvConn.peer(s.chain, nil); err != nil {
+	if err = recvConn.peer(nil); err != nil {
 		return fmt.Errorf("peering failed: %v", err)
 	}
 	recvConn.SetDeadline(time.Now().Add(timeout))

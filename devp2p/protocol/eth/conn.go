@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"reflect"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -46,6 +45,7 @@ var (
 // dial attempts to dial the given node and perform a handshake, returning the
 // created Conn if successful.
 func (s *Suite) dial() (*Conn, error) {
+	// 先不给suite包括privateKey属性
 	key, _ := crypto.GenerateKey()
 	return s.dialAs(key)
 }
@@ -56,23 +56,70 @@ func (s *Suite) Dial() (*Conn, error) {
 
 // dialAs attempts to dial a given node and perform a handshake using the given
 // private key.
+// func (s *Suite) dialAs(key *ecdsa.PrivateKey) (*Conn, error) {
+// 	tcpEndpoint, _ := s.Dest.TCPEndpoint()
+// 	fd, err := net.Dial("tcp", tcpEndpoint.String())
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	conn := Conn{Conn: rlpx.NewConn(fd, s.Dest.Pubkey())}
+// 	conn.ourKey = key
+// 	_, err = conn.Handshake(conn.ourKey)
+// 	if err != nil {
+// 		conn.Close()
+// 		return nil, err
+// 	}
+// 	conn.caps = []p2p.Cap{
+// 		{Name: "eth", Version: 69},
+// 	}
+// 	conn.ourHighestProtoVersion = 69
+// 	return &conn, nil
+// }
+
 func (s *Suite) dialAs(key *ecdsa.PrivateKey) (*Conn, error) {
-	tcpEndpoint, _ := s.Dest.TCPEndpoint()
-	fd, err := net.Dial("tcp", tcpEndpoint.String())
-	if err != nil {
-		return nil, err
+	// Validate basic parameters
+	if s.Dest == nil {
+		return nil, fmt.Errorf("error: target node information is empty")
 	}
+	if s.Dest.IP() == nil {
+		return nil, fmt.Errorf("error: invalid target IP address")
+	}
+	if key == nil {
+		return nil, fmt.Errorf("error: private key not set")
+	}
+
+	// Build target address
+	targetAddr := fmt.Sprintf("%v:%d", s.Dest.IP(), s.Dest.TCP())
+
+	// Attempt TCP connection
+	fd, err := net.Dial("tcp", targetAddr)
+	if err != nil {
+		// Provide detailed error diagnostic information
+		return nil, fmt.Errorf("TCP connection failed (target=%s): %v\nPossible reasons:\n"+
+			"1. Target node is not running\n"+
+			"2. Port is not open\n"+
+			"3. Network connectivity issues\n"+
+			"4. Firewall restrictions", targetAddr, err)
+	}
+
+	// Create RLPx connection with the established TCP connection
 	conn := Conn{Conn: rlpx.NewConn(fd, s.Dest.Pubkey())}
 	conn.ourKey = key
+
+	// Perform encryption handshake
 	_, err = conn.Handshake(conn.ourKey)
 	if err != nil {
 		conn.Close()
-		return nil, err
+		return nil, fmt.Errorf("encryption handshake failed: %v", err)
 	}
+
+	// Set protocol versions and capabilities
 	conn.caps = []p2p.Cap{
-		{Name: "eth", Version: 69},
+		{Name: "eth", Version: 67},
+		{Name: "eth", Version: 68},
 	}
-	conn.ourHighestProtoVersion = 69
+	conn.ourHighestProtoVersion = 68
+
 	return &conn, nil
 }
 
@@ -113,6 +160,8 @@ func (c *Conn) ReadMsg(proto Proto, code uint64, msg any) error {
 	c.SetReadDeadline(time.Now().Add(timeout))
 	for {
 		got, data, err := c.Read()
+		fmt.Println("err: ", err)
+		fmt.Println("data: ", data)
 		if err != nil {
 			return err
 		}
@@ -233,26 +282,39 @@ func (c *Conn) ReadSnap() (any, error) {
 }
 
 // dialAndPeer creates a peer connection and runs the handshake.
-func (s *Suite) dialAndPeer(status *eth.StatusPacket69) (*Conn, error) {
+func (s *Suite) dialAndPeer(status *eth.StatusPacket68) (*Conn, error) {
 	c, err := s.dial()
 	if err != nil {
 		return nil, err
 	}
-	if err = c.peer(s.chain, status); err != nil {
+	if err = c.peer(status); err != nil {
 		c.Close()
 	}
 	return c, err
 }
 
+func (s *Suite) DialAndPeer(status *eth.StatusPacket68) (*Conn, error) {
+	c, err := s.dialAndPeer(status)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
 // peer performs both the protocol handshake and the status message
 // exchange with the node in order to peer with it.
-func (c *Conn) peer(chain *Chain, status *eth.StatusPacket69) error {
+func (c *Conn) peer(status *eth.StatusPacket68) error {
 	if err := c.handshake(); err != nil {
 		return fmt.Errorf("handshake failed: %v", err)
 	}
-	if err := c.statusExchange(chain, status); err != nil {
+	if err := c.statusExchange(status); err != nil {
 		return fmt.Errorf("status exchange failed: %v", err)
 	}
+	return nil
+}
+
+func (c *Conn) Peer(status *eth.StatusPacket68) error {
+	c.peer(status)
 	return nil
 }
 
@@ -319,40 +381,39 @@ func (c *Conn) negotiateEthProtocol(caps []p2p.Cap) {
 }
 
 // statusExchange performs a `Status` message exchange with the given node.
-func (c *Conn) statusExchange(chain *Chain, status *eth.StatusPacket69) error {
+func (c *Conn) statusExchange(status *eth.StatusPacket68) error {
 loop:
 	for {
 		code, data, err := c.Read()
-		var msg any
-		rlp.DecodeBytes(data, &msg)
-		// fmt.Println("msg: ", msg)
-		fmt.Printf("msg: %v\n",msg)
+		// fmt.Println("data:", len(data))
 		if err != nil {
 			return fmt.Errorf("failed to read from connection: %w", err)
 		}
 		switch code {
-		case handshakeMsg: // code = 0
-			// 处理握手消息，跳过等待状态消息
-			continue // 继续循环等待状态消息
 		case eth.StatusMsg + protoOffset(ethProto):
-			msg := new(eth.StatusPacket69)
+			msg := new(eth.StatusPacket68)
+			// msg := new(eth.StatusPacket69)
 			if err := rlp.DecodeBytes(data, &msg); err != nil {
 				return fmt.Errorf("error decoding status packet: %w", err)
 			}
-			if have, want := msg.LatestBlock, chain.blocks[chain.Len()-1].NumberU64(); have != want {
-				return fmt.Errorf("wrong head block in status, want: %d, have %d",
-					want, have)
+			fmt.Println("msg:", msg)
+			status = &eth.StatusPacket68{
+				ProtocolVersion: uint32(68),
+				NetworkID:       msg.NetworkID,
+				TD:              msg.TD,
+				Genesis:         msg.Genesis,
+				ForkID:          msg.ForkID,
+				Head:            msg.Head,
 			}
-			if have, want := msg.LatestBlockHash, chain.blocks[chain.Len()-1].Hash(); have != want {
-				return fmt.Errorf("wrong head block in status, want: %#x (block %d) have %#x",
-					want, chain.blocks[chain.Len()-1].NumberU64(), have)
-			}
-			if have, want := msg.ForkID, chain.ForkID(); !reflect.DeepEqual(have, want) {
-				return fmt.Errorf("wrong fork ID in status: have %v, want %v", have, want)
-			}
-			if have, want := msg.ProtocolVersion, c.ourHighestProtoVersion; have != uint32(want) {
-				return fmt.Errorf("wrong protocol version: have %v, want %v", have, want)
-			}
+			// status = &eth.StatusPacket69{
+			// 	ProtocolVersion: uint32(69),
+			// 	NetworkID:       msg.NetworkID,
+			// 	Genesis:         msg.Genesis,
+			// 	ForkID:          msg.ForkID,
+			// 	EarliestBlock:   msg.EarliestBlock,
+			// 	LatestBlock:     msg.LatestBlock,
+			// 	LatestBlockHash: msg.LatestBlockHash,
+			// }
 			break loop
 		case discMsg:
 			var msg []p2p.DiscReason
@@ -374,15 +435,16 @@ loop:
 	}
 	if status == nil {
 		// default status message
-		status = &eth.StatusPacket69{
-			ProtocolVersion: uint32(c.negotiatedProtoVersion),
-			NetworkID:       chain.config.ChainID.Uint64(),
-			Genesis:         chain.blocks[0].Hash(),
-			ForkID:          chain.ForkID(),
-			EarliestBlock:   0,
-			LatestBlock:     chain.blocks[chain.Len()-1].NumberU64(),
-			LatestBlockHash: chain.blocks[chain.Len()-1].Hash(),
-		}
+		fmt.Println("statusPacket69 is nil!")
+		// status = &eth.StatusPacket69{
+		// 	ProtocolVersion: uint32(c.negotiatedProtoVersion),
+		// 	NetworkID:       chain.config.ChainID.Uint64(),
+		// 	Genesis:         chain.blocks[0].Hash(),
+		// 	ForkID:          chain.ForkID(),
+		// 	EarliestBlock:   0,
+		// 	LatestBlock:     chain.blocks[chain.Len()-1].NumberU64(),
+		// 	LatestBlockHash: chain.blocks[chain.Len()-1].Hash(),
+		// }
 	}
 	if err := c.Write(ethProto, eth.StatusMsg, status); err != nil {
 		return fmt.Errorf("write to connection failed: %v", err)
@@ -390,6 +452,6 @@ loop:
 	return nil
 }
 
-func (c *Conn) StatusExchange(chain *Chain, status *eth.StatusPacket69) error {
-	return c.statusExchange(chain, status)
+func (c *Conn) StatusExchange(status *eth.StatusPacket68) error {
+	return c.statusExchange(status)
 }

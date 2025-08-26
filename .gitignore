@@ -32,3 +32,5 @@ go.work.sum
 # Project output directories
 output/
 logs/
+
+newEnv.txt
