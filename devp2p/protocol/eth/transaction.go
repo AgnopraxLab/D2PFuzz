@@ -106,6 +106,11 @@ func (s *Suite) sendTxs(t *utesting.T, txs []*types.Transaction) error {
 	return errors.New("timed out waiting for txs")
 }
 
+func (s *Suite) SendTxs(txs []*types.Transaction) error {
+	var t *utesting.T
+	return s.sendTxs(t, txs)
+}
+
 func (s *Suite) sendInvalidTxs(t *utesting.T, txs []*types.Transaction) error {
 	// Open sending conn.
 	sendConn, err := s.dial()

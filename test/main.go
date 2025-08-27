@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/ecdsa"
 	"reflect"
+	"time"
 
 	// "crypto/rand"
 	"encoding/hex"
@@ -17,6 +18,8 @@ import (
 	// "time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+
 	// "github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 
@@ -344,163 +347,60 @@ func main() {
 		return
 	}
 
-	headers, err := GetBlockHeaders(suite)
-	if err != nil {
-		fmt.Printf("Failed to get block headers: %v\n", err)
-		return
-	}
-	printHeaders(headers)
-
-	// status := &eth.StatusPacket69{
-	// 	ProtocolVersion: uint32(69),
-	// 	NetworkID:       uint64(3151908),
-	// 	Genesis:         suite.GetChain().GetGenesis().Mixhash,
-	// 	ForkID:          suite.GetChain().ForkID(),
-	// 	EarliestBlock:   1,
-	// 	LatestBlock:     1,
-	// 	LatestBlockHash: common.Hash{0xaa},
-	// }
-	// fmt.Println("localchain: ", suite.GetChain().Len())
-	// fmt.Println("status: ", status)
-	// // 发送状态包
-	// err = conn.StatusExchange(suite.GetChain(), status)
+	// GetBlockHeaders测试
+	// headers, err = GetBlockHeaders(suite)
 	// if err != nil {
-	// 	fmt.Printf("Failed to send status packet: %v\n", err)
-	// 	return
-	// }
-	// fmt.Println("localchain: ", suite.GetChain().Len())
-	// fmt.Println("status: ", status)
-	// // 生成私钥
-	// privateKey, err := crypto.GenerateKey()
-	// if err != nil {
-	// 	fmt.Println("privateKey generate fail!")
-	// 	return
-	// }
-	// // fmt.Println("publickKey: ", privateKey.PublicKey)
-
-	// 3. 根据获取到的端口，向其发送握手协议，建立连接，获取返回的信息并解析输出
-	// conn, err := createRLPxConnection(node, privateKey)
-	// if err != nil {
-	// 	fmt.Printf("Failed to create RLPx connection: %v\n", err)
-	// 	return
-	// }
-	// defer conn.Close()
-
-	// 4. 从conn中读取数据
-	// _, data, _, err := conn.Read()
-	// if err != nil {
-	// 	fmt.Printf("Failed to read message: %v\n", err)
-	// 	return
-	// }
-
-	// 5. 解析数据
-	// // handshake := parseRawData(data)
-	// parser := RLPxDataParser.NewRLPxDataParser()
-	// _, err = parser.ParseRLPStructure(data)
-	// if err != nil {
-	// 	fmt.Printf("Failed to parse RLP structure: %v\n", err)
-	// 	return
-	// }
-	// fmt.Printf("Parsed data:type: %T value: %v\n", parsedData, parsedData)
-
-	// // 6. 根据上一步创建的链接，进行ETH协议的交互，测试GetBlockHeaders的请求并获取返回值
-	// jwtPath, secret, err := MakeJWTSecret()
-	// if err != nil {
-	// 	fmt.Printf("Failed to make JWT secret: %v\n", err)
-	// 	return
-	// }
-	// defer os.Remove(jwtPath)
-	// fmt.Println("node ip: " + node.IP().String() + ":8551")
-	// suite, err := ethtest.NewSuite(node, "./testdata", node.IP().String()+":8551", common.Bytes2Hex(secret[:]))
-	// if err != nil {
-	// 	fmt.Printf("Failed to create suite: %v\n", err)
-	// 	return
-	// }
-	// headers, err := GetBlockHeaders(conn, suite)
-	// if headers == nil {
 	// 	fmt.Printf("Failed to get block headers: %v\n", err)
 	// 	return
 	// }
-	// if err != nil {
-	// 	fmt.Printf("Failed to test GetBlockHeaders: %v\n", err)
-	// 	return
-	// }
-
 	// printHeaders(headers)
-	// fmt.Println("GetBlockHeaders test completed successfully")
-	// // 7. 测试是否可以发送交易数据
-	// if err := sendTransaction(conn, suite); err != nil {
-	// 	fmt.Printf("Failed to send transaction: %v\n", err)
-	// 	return
-	// }
-	// // 建立 eth 连接
-	// ethconn, err := suite.DialAs(privateKey)
-	// println("ethconn: ", ethconn)
-	// if err != nil {
-	// 	fmt.Printf("Failed to dial as: %v\n", err)
-	// 	return
-	// }
-	// // 读取 eth 协议返回的消息
-	// msg, err := ethconn.ReadEth()
-	// if err != nil {
-	// 	fmt.Printf("Failed to read eth message: %v\n", err)
-	// 	return
-	// }
-	// printMsg(msg)
-	// fmt.Println("Transaction sent successfully")
+
+	// 发送交易测试
+	err = sendTransaction(suite)
+	if err != nil {
+		fmt.Printf("Failed to send transaction: %v\n", err)
+		return
+	}
 
 }
 func printMsg(msg any) {
 	fmt.Printf("Msg: %v\n", msg)
 }
 
-func sendTransaction(conn *rlpx.Conn, s *ethtest.Suite) error {
+func sendTransaction(s *ethtest.Suite) error {
 	// backend := s.Chain.Backend()
-
-	_, nonce := s.GetChain().GetSender(0)
+	nonce := uint64(2)
+	var addr common.Address = common.HexToAddress("0x8943545177806ED17B9F23F0a21ee5948eCaa776")
+	fmt.Println("addr:", addr)
 	txdata := &types.DynamicFeeTx{
 		ChainID:   big.NewInt(3151908),
 		Nonce:     nonce,
-		GasTipCap: common.Big1,
-		GasFeeCap: s.GetChain().Head().BaseFee(),
+		GasTipCap: big.NewInt(2000000000),
+		GasFeeCap: big.NewInt(20000000000),
 		Gas:       30000,
 		To:        &common.Address{0xaa},
 		Value:     common.Big1,
 	}
-	// 输出txdata的每个属性的值
-	fmt.Printf("交易数据详情:\n")
-	fmt.Printf("  ChainID: %v\n", txdata.ChainID)
-	fmt.Printf("  Nonce: %d\n", txdata.Nonce)
-	fmt.Printf("  GasTipCap: %v\n", txdata.GasTipCap)
-	fmt.Printf("  GasFeeCap: %v\n", txdata.GasFeeCap)
-	fmt.Printf("  Gas: %d\n", txdata.Gas)
-	fmt.Printf("  To: %v\n", txdata.To)
-	fmt.Printf("  Value: %v\n", txdata.Value)
-	fmt.Println()
-
-	// inner := &types.DynamicFeeTx{
-	// 	ChainID:   s.Chain.Config.ChainID,
-	// 	Nonce:     nonce,
-	// 	GasTipCap: common.Big1,
-	// 	GasFeeCap: s.Chain.Head().BaseFee(),
-	// 	Gas:       30000,
-	// 	To:        &common.Address{0xaa},
-	// 	Value:     common.Big1,
-	// }
-	// tx, err := s.GetChain().SignTx(from, types.NewTx(txdata))
-	// if err != nil {
-	// 	fmt.Printf("failed to sign tx: %v", err)
-	// 	return err
-	// }
+	innertx := types.NewTx(txdata)
+	prik, err := crypto.HexToECDSA("bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31")
+	if err != nil {
+		fmt.Printf("failed to sign tx: %v", err)
+		return err
+	}
+	tx, err := types.SignTx(innertx, types.NewLondonSigner(big.NewInt(3151908)), prik)
+	if err != nil {
+		fmt.Printf("failed to sign tx: %v", err)
+		return err
+	}
 
 	// 记录发送时间
-	// sendStart := time.Now()
-	// if err := s.SendTxs(nil, []*types.Transaction{tx}); err != nil {
-	// 	elapsed := time.Since(sendStart)
-	// 	fmt.Printf("交易发送失败，耗时: %v\n", elapsed)
-	// 	return err
-	// }
-	// s.Chain.IncNonce(from, 1)
+	sendStart := time.Now()
+	if err := s.SendTxs([]*types.Transaction{tx}); err != nil {
+		elapsed := time.Since(sendStart)
+		fmt.Printf("交易发送失败，耗时: %v\n", elapsed)
+		return err
+	}
+	nonce += 1
 	return nil
 }
 
@@ -543,17 +443,16 @@ func GetBlockHeaders(suite *ethtest.Suite) (*eth.BlockHeadersPacket, error) {
 		},
 	}
 	// Read headers response.
-	if err := conn.Write(1, eth.GetBlockHeadersMsg, req); err != nil {
+	if err = conn.Write(1, eth.GetBlockHeadersMsg, req); err != nil {
 		fmt.Printf("could not write to connection: %v", err)
 	}
 	headers := new(eth.BlockHeadersPacket)
-	if err := conn.ReadMsg(1, eth.BlockHeadersMsg, &headers); err != nil {
+	if err = conn.ReadMsg(1, eth.BlockHeadersMsg, &headers); err != nil {
 		fmt.Printf("error reading msg: %v", err)
 	}
 	if got, want := headers.RequestId, req.RequestId; got != want {
 		fmt.Printf("unexpected request id")
 	}
-	fmt.Println("req: ", req.GetBlockHeadersRequest)
 	// Check for correct headers.
 	expected, err := suite.GetChain().GetHeaders(req)
 	if err != nil {

@@ -160,8 +160,8 @@ func (c *Conn) ReadMsg(proto Proto, code uint64, msg any) error {
 	c.SetReadDeadline(time.Now().Add(timeout))
 	for {
 		got, data, err := c.Read()
-		fmt.Println("err: ", err)
-		fmt.Println("data: ", data)
+		// fmt.Println("err: ", err)
+		// fmt.Println("data: ", data)
 		if err != nil {
 			return err
 		}
@@ -398,7 +398,7 @@ loop:
 			}
 			fmt.Println("msg:", msg)
 			status = &eth.StatusPacket68{
-				ProtocolVersion: uint32(68),
+				ProtocolVersion: msg.ProtocolVersion,
 				NetworkID:       msg.NetworkID,
 				TD:              msg.TD,
 				Genesis:         msg.Genesis,
@@ -406,7 +406,7 @@ loop:
 				Head:            msg.Head,
 			}
 			// status = &eth.StatusPacket69{
-			// 	ProtocolVersion: uint32(69),
+			// 	ProtocolVersion: msg.ProtocolVersion,
 			// 	NetworkID:       msg.NetworkID,
 			// 	Genesis:         msg.Genesis,
 			// 	ForkID:          msg.ForkID,
@@ -435,7 +435,7 @@ loop:
 	}
 	if status == nil {
 		// default status message
-		fmt.Println("statusPacket69 is nil!")
+		fmt.Println("statusPacket68 is nil!")
 		// status = &eth.StatusPacket69{
 		// 	ProtocolVersion: uint32(c.negotiatedProtoVersion),
 		// 	NetworkID:       chain.config.ChainID.Uint64(),
@@ -449,7 +449,38 @@ loop:
 	if err := c.Write(ethProto, eth.StatusMsg, status); err != nil {
 		return fmt.Errorf("write to connection failed: %v", err)
 	}
+	printStatus(status)
+
 	return nil
+}
+
+func printStatus(status *eth.StatusPacket68) {
+	if status == nil {
+		fmt.Println("Status: nil")
+		return
+	}
+
+	fmt.Println("=== ETH Status Packet 68 ===")
+	fmt.Printf("Protocol Version: %d\n", status.ProtocolVersion)
+	fmt.Printf("Network ID: %d\n", status.NetworkID)
+
+	if status.TD != nil {
+		fmt.Printf("Total Difficulty: %s\n", status.TD.String())
+	} else {
+		fmt.Println("Total Difficulty: <nil>")
+	}
+
+	fmt.Printf("Genesis Hash: %s\n", status.Genesis.Hex())
+	fmt.Printf("Head Hash: %s\n", status.Head.Hex())
+
+	// Check if ForkID is zero value (empty)
+	if status.ForkID.Hash != [4]byte{} || status.ForkID.Next != 0 {
+		fmt.Printf("Fork ID Hash: %x\n", status.ForkID.Hash)
+		fmt.Printf("Fork ID Next: %d\n", status.ForkID.Next)
+	} else {
+		fmt.Println("Fork ID: <empty>")
+	}
+	fmt.Println("==============================")
 }
 
 func (c *Conn) StatusExchange(status *eth.StatusPacket68) error {
