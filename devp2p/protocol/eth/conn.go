@@ -396,7 +396,7 @@ loop:
 			if err := rlp.DecodeBytes(data, &msg); err != nil {
 				return fmt.Errorf("error decoding status packet: %w", err)
 			}
-			fmt.Println("msg:", msg)
+			// fmt.Println("msg:", msg)
 			status = &eth.StatusPacket68{
 				ProtocolVersion: msg.ProtocolVersion,
 				NetworkID:       msg.NetworkID,
@@ -449,7 +449,7 @@ loop:
 	if err := c.Write(ethProto, eth.StatusMsg, status); err != nil {
 		return fmt.Errorf("write to connection failed: %v", err)
 	}
-	printStatus(status)
+	// printStatus(status)
 
 	return nil
 }

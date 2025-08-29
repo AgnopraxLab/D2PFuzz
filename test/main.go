@@ -348,7 +348,7 @@ func main() {
 	}
 
 	// GetBlockHeaders测试
-	// headers, err = GetBlockHeaders(suite)
+	// headers, err := GetBlockHeaders(suite)
 	// if err != nil {
 	// 	fmt.Printf("Failed to get block headers: %v\n", err)
 	// 	return
@@ -356,29 +356,206 @@ func main() {
 	// printHeaders(headers)
 
 	// 发送交易测试
-	err = sendTransaction(suite)
+	// err = sendTransaction(suite)
+	// if err != nil {
+	// 	fmt.Printf("Failed to send transaction: %v\n", err)
+	// 	return
+	// }
+
+	// 获取收据
+	// receipts, err := GetReceipts(suite)
+	// if err != nil {
+	// 	fmt.Printf("Failed to get receipts: %v\n", err)
+	// 	return
+	// }
+	// printReceipts(receipts)
+
+	// 发送大量交易并获取交易池
+	resp := sendLargeTransactions(suite)
+	printPooledTransactions(resp)
+}
+
+func sendLargeTransactions(s *ethtest.Suite) eth.PooledTransactionsResponse {
+	// 这个测试首先向节点发送约count笔交易，然后请求这些交易使用 GetPooledTransactions 在另一个对等连接上。
+	var (
+		nonce  = uint64(32)
+		from   = "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"
+		count  = 2000
+		txs    []*types.Transaction
+		hashes []common.Hash
+		set    = make(map[common.Hash]struct{})
+	)
+	prik, err := crypto.HexToECDSA(from)
 	if err != nil {
-		fmt.Printf("Failed to send transaction: %v\n", err)
+		fmt.Println("failed to generate private key")
+		return nil
+	}
+	var to common.Address = common.HexToAddress("0xE25583099BA105D9ec0A67f5Ae86D90e50036425")
+	for i := 0; i < count; i++ {
+		inner := &types.DynamicFeeTx{
+			ChainID:   big.NewInt(3151908),
+			Nonce:     nonce + uint64(i),
+			GasTipCap: big.NewInt(2000000000),
+			GasFeeCap: big.NewInt(20000000000),
+			Gas:       30000,
+			To:        &to,
+			Value:     common.Big1,
+		}
+		tx := types.NewTx(inner)
+		tx, err = types.SignTx(tx, types.NewLondonSigner(big.NewInt(3151908)), prik)
+		if err != nil {
+			fmt.Println("failed to sign tx: err")
+		}
+		txs = append(txs, tx)
+		set[tx.Hash()] = struct{}{}
+		hashes = append(hashes, tx.Hash())
+	}
+	// Send txs.
+	if err := s.SendTxs(txs); err != nil {
+		fmt.Printf("failed to send txs: %v", err)
+	}
+
+	// Set up receive connection to ensure node is peered with the receiving
+	// connection before tx request is sent.
+	conn, err := s.Dial()
+	if err != nil {
+		fmt.Printf("dial failed: %v", err)
+	}
+	defer conn.Close()
+	if err = conn.Peer(nil); err != nil {
+		fmt.Printf("peering failed: %v", err)
+	}
+	// Create and send pooled tx request.
+	req := &eth.GetPooledTransactionsPacket{
+		RequestId:                    1234,
+		GetPooledTransactionsRequest: hashes,
+	}
+	if err = conn.Write(1, eth.GetPooledTransactionsMsg, req); err != nil {
+		fmt.Printf("could not write to conn: %v", err)
+	}
+	// Check that all received transactions match those that were sent to node.
+	msg := new(eth.PooledTransactionsPacket)
+	if err := conn.ReadMsg(1, eth.PooledTransactionsMsg, &msg); err != nil {
+		fmt.Printf("error reading from connection: %v", err)
+	}
+	if got, want := msg.RequestId, req.RequestId; got != want {
+		fmt.Printf("unexpected request id in response: got %d, want %d", got, want)
+	}
+	for _, got := range msg.PooledTransactionsResponse {
+		if _, exists := set[got.Hash()]; !exists {
+			fmt.Printf("unexpected tx received: %v", got.Hash())
+		}
+	}
+	return msg.PooledTransactionsResponse
+}
+
+func printPooledTransactions(resp eth.PooledTransactionsResponse) {
+	if len(resp) == 0 {
+		fmt.Println("没有池化交易数据")
 		return
 	}
 
+	fmt.Printf("=== 池化交易响应 ===\n")
+	fmt.Printf("交易总数: %d\n\n", len(resp))
+
+	for i, tx := range resp {
+		fmt.Printf("--- 交易 %d ---\n", i+1)
+
+		// 基本交易信息
+		fmt.Printf("交易哈希: %s\n", tx.Hash().Hex())
+		fmt.Printf("交易类型: %d\n", tx.Type())
+		fmt.Printf("Nonce: %d\n", tx.Nonce())
+
+		// 地址信息
+		if tx.To() != nil {
+			fmt.Printf("接收地址: %s\n", tx.To().Hex())
+		} else {
+			fmt.Printf("接收地址: 合约创建交易\n")
+		}
+
+		// 金额和Gas信息
+		fmt.Printf("转账金额: %s Wei\n", tx.Value().String())
+		fmt.Printf("Gas限制: %d\n", tx.Gas())
+
+		// Gas价格信息（根据交易类型显示不同字段）
+		switch tx.Type() {
+		case types.LegacyTxType:
+			fmt.Printf("Gas价格: %s Wei\n", tx.GasPrice().String())
+		case types.AccessListTxType:
+			fmt.Printf("Gas价格: %s Wei\n", tx.GasPrice().String())
+		case types.DynamicFeeTxType:
+			fmt.Printf("最大费用: %s Wei\n", tx.GasFeeCap().String())
+			fmt.Printf("优先费用: %s Wei\n", tx.GasTipCap().String())
+		case types.BlobTxType:
+			fmt.Printf("最大费用: %s Wei\n", tx.GasFeeCap().String())
+			fmt.Printf("优先费用: %s Wei\n", tx.GasTipCap().String())
+			if tx.BlobGasFeeCap() != nil {
+				fmt.Printf("Blob Gas费用上限: %s Wei\n", tx.BlobGasFeeCap().String())
+			}
+			if tx.BlobHashes() != nil {
+				fmt.Printf("Blob哈希数量: %d\n", len(tx.BlobHashes()))
+				for j, blobHash := range tx.BlobHashes() {
+					fmt.Printf("  Blob哈希 %d: %s\n", j+1, blobHash.Hex())
+				}
+			}
+		default:
+			fmt.Printf("Gas价格: %s Wei\n", tx.GasPrice().String())
+		}
+
+		// 链ID
+		if tx.ChainId() != nil {
+			fmt.Printf("链ID: %d\n", tx.ChainId().Uint64())
+		}
+
+		// 交易数据
+		data := tx.Data()
+		if len(data) > 0 {
+			fmt.Printf("数据长度: %d 字节\n", len(data))
+			if len(data) <= 64 {
+				fmt.Printf("数据内容: %x\n", data)
+			} else {
+				fmt.Printf("数据内容(前32字节): %x...\n", data[:32])
+			}
+		} else {
+			fmt.Printf("数据: 无\n")
+		}
+
+		// 交易大小
+		fmt.Printf("交易大小: %d 字节\n", tx.Size())
+
+		// 签名信息
+		v, r, s := tx.RawSignatureValues()
+		fmt.Printf("签名 V: %d\n", v.Uint64())
+		fmt.Printf("签名 R: %s\n", r.String())
+		fmt.Printf("签名 S: %s\n", s.String())
+
+		// 计算发送者地址（如果可能）
+		if signer := types.LatestSignerForChainID(tx.ChainId()); signer != nil {
+			if sender, err := types.Sender(signer, tx); err == nil {
+				fmt.Printf("发送者地址: %s\n", sender.Hex())
+			} else {
+				fmt.Printf("发送者地址: 无法计算 (%v)\n", err)
+			}
+		}
+
+		fmt.Println()
+	}
 }
+
 func printMsg(msg any) {
 	fmt.Printf("Msg: %v\n", msg)
 }
 
 func sendTransaction(s *ethtest.Suite) error {
-	// backend := s.Chain.Backend()
-	nonce := uint64(2)
-	var addr common.Address = common.HexToAddress("0x8943545177806ED17B9F23F0a21ee5948eCaa776")
-	fmt.Println("addr:", addr)
+	nonce := uint64(0)
+	var to common.Address = common.HexToAddress("0xE25583099BA105D9ec0A67f5Ae86D90e50036425")
 	txdata := &types.DynamicFeeTx{
 		ChainID:   big.NewInt(3151908),
 		Nonce:     nonce,
 		GasTipCap: big.NewInt(2000000000),
 		GasFeeCap: big.NewInt(20000000000),
 		Gas:       30000,
-		To:        &common.Address{0xaa},
+		To:        &to, // 使用之前定义的to变量作为接收地址
 		Value:     common.Big1,
 	}
 	innertx := types.NewTx(txdata)
@@ -402,6 +579,170 @@ func sendTransaction(s *ethtest.Suite) error {
 	}
 	nonce += 1
 	return nil
+}
+
+func printReceipts(receipts []*eth.ReceiptList68) {
+	if len(receipts) == 0 {
+		fmt.Println("没有收据数据")
+		return
+	}
+
+	for i, receiptList := range receipts {
+		fmt.Printf("=== 区块 %d 的收据列表 ===\n", i+1)
+
+		// ReceiptList68 应该是一个包含多个Receipt的列表
+		// 根据go-ethereum的实现，这应该是 []*types.Receipt
+		if receiptList == nil {
+			fmt.Println("收据列表为空")
+			continue
+		}
+
+		// 由于ReceiptList68的具体结构不明确，我们需要通过反射来访问其字段
+		reflectValue := reflect.ValueOf(receiptList).Elem()
+		reflectType := reflectValue.Type()
+
+		fmt.Printf("收据列表类型: %s\n", reflectType.Name())
+		fmt.Printf("字段数量: %d\n", reflectValue.NumField())
+
+		// 遍历所有字段
+		for j := 0; j < reflectValue.NumField(); j++ {
+			field := reflectType.Field(j)
+			fieldValue := reflectValue.Field(j)
+
+			fmt.Printf("  字段 %s (%s): ", field.Name, field.Type)
+
+			// 如果字段可以被访问
+			if fieldValue.CanInterface() {
+				switch fieldValue.Kind() {
+				case reflect.Slice:
+					fmt.Printf("切片长度 %d\n", fieldValue.Len())
+					// 如果是Receipt切片，打印每个Receipt的详细信息
+					if field.Type.String() == "[]*types.Receipt" {
+						for k := 0; k < fieldValue.Len(); k++ {
+							receipt := fieldValue.Index(k).Interface().(*types.Receipt)
+							printSingleReceipt(receipt, k+1)
+						}
+					}
+				case reflect.Ptr:
+					if !fieldValue.IsNil() {
+						fmt.Printf("%v\n", fieldValue.Interface())
+					} else {
+						fmt.Println("nil")
+					}
+				default:
+					fmt.Printf("%v\n", fieldValue.Interface())
+				}
+			} else {
+				fmt.Println("无法访问")
+			}
+		}
+		fmt.Println()
+	}
+}
+
+func printSingleReceipt(receipt *types.Receipt, index int) {
+	fmt.Printf("    --- 收据 %d ---\n", index)
+
+	// 基本信息
+	fmt.Printf("    交易类型: %d\n", receipt.Type)
+	fmt.Printf("    交易哈希: %s\n", receipt.TxHash.Hex())
+	fmt.Printf("    状态: %d\n", receipt.Status)
+
+	// Gas相关信息
+	fmt.Printf("    累计Gas使用量: %d\n", receipt.CumulativeGasUsed)
+	fmt.Printf("    Gas使用量: %d\n", receipt.GasUsed)
+	if receipt.EffectiveGasPrice != nil {
+		fmt.Printf("    有效Gas价格: %s Wei\n", receipt.EffectiveGasPrice.String())
+	}
+
+	// 合约地址（如果是合约创建交易）
+	if receipt.ContractAddress != (common.Address{}) {
+		fmt.Printf("    合约地址: %s\n", receipt.ContractAddress.Hex())
+	} else {
+		fmt.Printf("    合约地址: 无（非合约创建交易）\n")
+	}
+
+	// 区块信息
+	if receipt.BlockHash != (common.Hash{}) {
+		fmt.Printf("    区块哈希: %s\n", receipt.BlockHash.Hex())
+	}
+	if receipt.BlockNumber != nil {
+		fmt.Printf("    区块号: %d\n", receipt.BlockNumber.Uint64())
+	}
+	fmt.Printf("    交易索引: %d\n", receipt.TransactionIndex)
+
+	// Bloom过滤器
+	fmt.Printf("    Bloom过滤器: %x\n", receipt.Bloom)
+
+	// Blob相关信息（如果存在）
+	if receipt.BlobGasUsed > 0 {
+		fmt.Printf("    Blob Gas使用量: %d\n", receipt.BlobGasUsed)
+	}
+	if receipt.BlobGasPrice != nil {
+		fmt.Printf("    Blob Gas价格: %s Wei\n", receipt.BlobGasPrice.String())
+	}
+
+	// 日志信息
+	if len(receipt.Logs) > 0 {
+		fmt.Printf("    日志数量: %d\n", len(receipt.Logs))
+		for j, log := range receipt.Logs {
+			fmt.Printf("      日志 %d:\n", j+1)
+			fmt.Printf("        地址: %s\n", log.Address.Hex())
+			fmt.Printf("        主题数量: %d\n", len(log.Topics))
+			for k, topic := range log.Topics {
+				fmt.Printf("        主题 %d: %s\n", k+1, topic.Hex())
+			}
+			fmt.Printf("        数据长度: %d 字节\n", len(log.Data))
+			if len(log.Data) > 0 && len(log.Data) <= 64 {
+				fmt.Printf("        数据: %x\n", log.Data)
+			}
+		}
+	} else {
+		fmt.Printf("    日志: 无\n")
+	}
+
+	fmt.Println()
+}
+
+func GetReceipts(s *ethtest.Suite) (list []*eth.ReceiptList68, err error) {
+	conn, err := s.DialAndPeer(nil)
+	if err != nil {
+		fmt.Printf("peering failed: %v", err)
+	}
+	defer conn.Close()
+
+	// Find some blocks containing receipts.
+	var hashes = make([]common.Hash, 0, 3)
+	for i := range s.GetChain().Len() {
+		block := s.GetChain().GetBlock(i)
+		if len(block.Transactions()) > 0 {
+			hashes = append(hashes, block.Hash())
+		}
+		if len(hashes) == cap(hashes) {
+			break
+		}
+	}
+
+	// Create block bodies request.
+	req := &eth.GetReceiptsPacket{
+		RequestId:          22,
+		GetReceiptsRequest: (eth.GetReceiptsRequest)(hashes),
+	}
+	if err := conn.Write(1, eth.GetReceiptsMsg, req); err != nil {
+		fmt.Printf("could not write to connection: %v", err)
+	}
+	// Wait for response.
+	resp := new(eth.ReceiptsPacket[*eth.ReceiptList68])
+	if err := conn.ReadMsg(1, eth.ReceiptsMsg, &resp); err != nil {
+		fmt.Printf("error reading block bodies msg: %v", err)
+	}
+	if got, want := resp.RequestId, req.RequestId; got != want {
+		fmt.Printf("unexpected request id in respond", got, want)
+	}
+	if len(resp.List) != len(req.GetReceiptsRequest) {
+		fmt.Printf("wrong bodies in response: expected %d bodies, got %d", len(req.GetReceiptsRequest), len(resp.List))
+	}
+	return resp.List, nil
 }
 
 func printHeaders(headers *eth.BlockHeadersPacket) {

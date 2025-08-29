@@ -15,7 +15,7 @@ type Config struct {
 	Fuzzing    FuzzingConfig    `yaml:"fuzzing"`
 	Monitoring MonitoringConfig `yaml:"monitoring"`
 	Output     OutputConfig     `yaml:"output"`
-	Log     LogConfig     `yaml:"log"`
+	Log        LogConfig        `yaml:"log"`
 }
 
 // ServerConfig holds server-related configuration

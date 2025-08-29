@@ -13,7 +13,7 @@ D2PFuzz/
 ├── logs/               # Log files directory
 ├── monitor/            # Monitoring modules
 ├── mutation/           # Mutation Strategy
-├── outputs/            # Reports storage directory
+├── output/            # Reports storage directory
 ├── p2p/                # P2P network protocol modules
 ├── templates/          # Template config files directory
 ├── test/               # Test cases directory
