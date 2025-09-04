@@ -2,34 +2,19 @@ package main
 
 import (
 	"crypto/ecdsa"
-	"reflect"
-	"time"
-
-	// "crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"math/big"
 	"net"
 	"os"
-
-	// "path"
+	"reflect"
 	"strings"
-
-	// "time"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-
-	// "github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/eth/protocols/eth"
-
-	// "github.com/ethereum/go-ethereum/common/hexutil"
-
-	// "github.com/ethereum/go-ethereum/core/forkid"
-
 	"github.com/ethereum/go-ethereum/core/types"
-
-	// "github.com/ethereum/go-ethereum/eth/protocols/eth"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/rlpx"
@@ -356,11 +341,11 @@ func main() {
 	// printHeaders(headers)
 
 	// 发送交易测试
-	// err = sendTransaction(suite)
-	// if err != nil {
-	// 	fmt.Printf("Failed to send transaction: %v\n", err)
-	// 	return
-	// }
+	err = sendTransaction(suite)
+	if err != nil {
+		fmt.Printf("Failed to send transaction: %v\n", err)
+		return
+	}
 
 	// 获取收据
 	// receipts, err := GetReceipts(suite)
@@ -371,16 +356,21 @@ func main() {
 	// printReceipts(receipts)
 
 	// 发送大量交易并获取交易池
-	resp := sendLargeTransactions(suite)
-	printPooledTransactions(resp)
+	// resp := sendLargeTransactions(suite)
+	// printPooledTransactions(resp)
+
+}
+
+func getPooledTransactionsByHash(){
+
 }
 
 func sendLargeTransactions(s *ethtest.Suite) eth.PooledTransactionsResponse {
 	// 这个测试首先向节点发送约count笔交易，然后请求这些交易使用 GetPooledTransactions 在另一个对等连接上。
 	var (
-		nonce  = uint64(32)
-		from   = "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"
-		count  = 2000
+		nonce  = uint64(200)
+		from   = "a492823c3e193d6c595f37a18e3c06650cf4c74558cc818b16130b293716106f"
+		count  = 1
 		txs    []*types.Transaction
 		hashes []common.Hash
 		set    = make(map[common.Hash]struct{})
@@ -390,14 +380,14 @@ func sendLargeTransactions(s *ethtest.Suite) eth.PooledTransactionsResponse {
 		fmt.Println("failed to generate private key")
 		return nil
 	}
-	var to common.Address = common.HexToAddress("0xE25583099BA105D9ec0A67f5Ae86D90e50036425")
+	var to common.Address = common.HexToAddress("0xfDCe42116f541fc8f7b0776e2B30832bD5621C85")
 	for i := 0; i < count; i++ {
 		inner := &types.DynamicFeeTx{
 			ChainID:   big.NewInt(3151908),
-			Nonce:     nonce + uint64(i),
-			GasTipCap: big.NewInt(2000000000),
-			GasFeeCap: big.NewInt(20000000000),
-			Gas:       30000,
+			Nonce:     nonce - uint64(i),
+			GasTipCap: big.NewInt(300000),
+			GasFeeCap: big.NewInt(300000),
+			Gas:       21000,
 			To:        &to,
 			Value:     common.Big1,
 		}
@@ -547,24 +537,32 @@ func printMsg(msg any) {
 }
 
 func sendTransaction(s *ethtest.Suite) error {
-	nonce := uint64(0)
-	var to common.Address = common.HexToAddress("0xE25583099BA105D9ec0A67f5Ae86D90e50036425")
+	nonce := uint64(400)
+	// minNumber := big.NewInt(0).Sub(big.NewInt(0), new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil))
+	// maxNumber := new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
+	var to common.Address = common.HexToAddress("0xfDCe42116f541fc8f7b0776e2B30832bD5621C85")
 	txdata := &types.DynamicFeeTx{
+		// ChainID: big.NewInt(0).Sub(big.NewInt(0), new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)),
 		ChainID:   big.NewInt(3151908),
 		Nonce:     nonce,
-		GasTipCap: big.NewInt(2000000000),
-		GasFeeCap: big.NewInt(20000000000),
-		Gas:       30000,
+		GasTipCap: big.NewInt(300000),
+		GasFeeCap: big.NewInt(300000),
+		Gas:       21000,
 		To:        &to, // 使用之前定义的to变量作为接收地址
-		Value:     common.Big1,
+		Value:     big.NewInt(1),
+		// Value:     big.NewInt(0).Sub(big.NewInt(0).Mul(big.NewInt(0).Exp(big.NewInt(10000000000000), big.NewInt(2), nil), big.NewInt(10)), big.NewInt(6021000)),
 	}
 	innertx := types.NewTx(txdata)
-	prik, err := crypto.HexToECDSA("bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31")
+	prik, err := crypto.HexToECDSA("a492823c3e193d6c595f37a18e3c06650cf4c74558cc818b16130b293716106f")
 	if err != nil {
 		fmt.Printf("failed to sign tx: %v", err)
 		return err
 	}
 	tx, err := types.SignTx(innertx, types.NewLondonSigner(big.NewInt(3151908)), prik)
+	var hashes []common.Hash
+	var set = make(map[common.Hash]struct{})
+	set[tx.Hash()] = struct{}{}
+	hashes = append(hashes, tx.Hash())
 	if err != nil {
 		fmt.Printf("failed to sign tx: %v", err)
 		return err
@@ -577,7 +575,41 @@ func sendTransaction(s *ethtest.Suite) error {
 		fmt.Printf("交易发送失败，耗时: %v\n", elapsed)
 		return err
 	}
-	nonce += 1
+
+	// 参考sendLargeTransactions的验证方式，建立连接验证交易是否被节点接收
+	conn, err := s.Dial()
+	if err != nil {
+		fmt.Printf("dial failed: %v", err)
+	}
+	defer conn.Close()
+	if err = conn.Peer(nil); err != nil {
+		fmt.Printf("peering failed: %v", err)
+	}
+
+	// 创建并发送池化交易请求来验证交易
+	req := &eth.GetPooledTransactionsPacket{
+		RequestId:                    1234,
+		GetPooledTransactionsRequest: hashes,
+	}
+	if err = conn.Write(1, eth.GetPooledTransactionsMsg, req); err != nil {
+		fmt.Printf("could not write to conn: %v", err)
+	}
+	// 检查是否收到了发送的交易
+	msg := new(eth.PooledTransactionsPacket)
+	if err := conn.ReadMsg(1, eth.PooledTransactionsMsg, &msg); err != nil {
+		fmt.Printf("error reading from connection: %v", err)
+	}
+	if got, want := msg.RequestId, req.RequestId; got != want {
+		fmt.Printf("unexpected request id in response: got %d, want %d", got, want)
+	}
+	for _, got := range msg.PooledTransactionsResponse {
+		if _, exists := set[got.Hash()]; !exists {
+			fmt.Printf("unexpected tx received: %v", got.Hash())
+		}
+	}
+
+	printPooledTransactions(msg.PooledTransactionsResponse)
+
 	return nil
 }
 

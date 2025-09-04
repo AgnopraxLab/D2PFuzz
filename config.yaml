@@ -6,8 +6,12 @@ server:
   port: 8080
   timeout: 30
 
-# mode: fuzz/test/bench
+# mode: fuzz/test/manual
 mode: "fuzz"
+
+tx-fuzz:
+  enabled: true
+  privateKey: "0x0000000000000000000000000000000000000000000000000000000000000000"
 
 # P2P Network Configuration
 p2p:
