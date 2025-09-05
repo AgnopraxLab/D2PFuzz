@@ -10,11 +10,12 @@ import (
 // Config represents the main configuration structure
 type Config struct {
 	Server     ServerConfig     `yaml:"server"`
+	Mode       string           `yaml:"mode"`
 	P2P        P2PConfig        `yaml:"p2p"`
 	Fuzzing    FuzzingConfig    `yaml:"fuzzing"`
 	Monitoring MonitoringConfig `yaml:"monitoring"`
 	Output     OutputConfig     `yaml:"output"`
-	Report     ReportConfig     `yaml:"report"`
+	Log        LogConfig        `yaml:"log"`
 }
 
 // ServerConfig holds server-related configuration
@@ -55,8 +56,8 @@ type OutputConfig struct {
 	Compress  bool   `yaml:"compress"`
 }
 
-// ReportConfig holds report generation configuration
-type ReportConfig struct {
+// LogConfig holds log configuration
+type LogConfig struct {
 	Directory      string `yaml:"directory"`
 	Template       string `yaml:"template"`
 	AutoGenerate   bool   `yaml:"auto_generate"`
@@ -90,9 +91,9 @@ func (c *Config) GetOutputPath() string {
 	return c.Output.Directory
 }
 
-// GetReportPath returns the full report directory path
-func (c *Config) GetReportPath() string {
-	return c.Report.Directory
+// GetLogPath returns the full log directory path
+func (c *Config) GetLogPath() string {
+	return c.Log.Directory
 }
 
 // IsFuzzingEnabled returns whether fuzzing is enabled
@@ -115,7 +116,7 @@ func (c *Config) PrintConfig() {
 	fmt.Printf("Max Iterations: %d\n", c.Fuzzing.MaxIterations)
 	fmt.Printf("Protocols: %v\n", c.Fuzzing.Protocols)
 	fmt.Printf("Output Directory: %s\n", c.GetOutputPath())
-	fmt.Printf("Report Directory: %s\n", c.GetReportPath())
+	fmt.Printf("Log Directory: %s\n", c.GetLogPath())
 	fmt.Printf("Monitoring Enabled: %t\n", c.IsMonitoringEnabled())
 	fmt.Println("==============================")
 }

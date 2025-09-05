@@ -6,6 +6,7 @@ import (
 
 	"D2PFuzz/config"
 	"D2PFuzz/utils"
+	"D2PFuzz/fuzzer"
 )
 
 func main() {
@@ -22,7 +23,7 @@ func main() {
 	}
 
 	// Initialize logger
-	logger, err := utils.NewLogger(cfg.GetReportPath())
+	logger, err := utils.NewLogger(cfg.GetLogPath())
 	if err != nil {
 		fmt.Printf("Failed to initialize logger: %v\n", err)
 		os.Exit(1)
@@ -53,6 +54,13 @@ func main() {
 	logger.Info("Max peers: %d", cfg.P2P.MaxPeers)
 	logger.Info("Bootstrap nodes: %d configured", len(cfg.P2P.BootstrapNodes))
 
+	// Create fuzz client
+	fuzzClient, err := fuzzer.NewFuzzClient(*logger)
+	if err != nil {
+		logger.Fatal("Failed to create fuzz client: %v", err)
+	}
+	fuzzClient.Start()
+
 	// Create output directories if they don't exist
 	logger.Info("Creating output directories...")
 	
@@ -62,13 +70,11 @@ func main() {
 	}
 	logger.Info("Output directory created/verified: %s", outputPath)
 
-	reportPath := cfg.GetReportPath()
+	reportPath := cfg.GetLogPath()
 	if err := os.MkdirAll(reportPath, 0755); err != nil {
 		logger.Fatal("Failed to create report directory '%s': %v", reportPath, err)
 	}
 	logger.Info("Report directory created/verified: %s", reportPath)
 
-	logger.Info("D2PFuzz initialization completed!")
-	logger.Info("Configuration loaded and validated.")
-	logger.Info("Ready to start fuzzing operations...")
+	
 }

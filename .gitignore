@@ -7,6 +7,8 @@
 *.dll
 *.so
 *.dylib
+d2pfuzz
+D2PFuzz
 
 # Mac OS X
 .DS_Store
@@ -17,6 +19,9 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# privatekey file
+*.key
+
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
@@ -26,4 +31,6 @@ go.work.sum
 
 # Project output directories
 output/
-reports/
+logs/
+
+newEnv.txt
