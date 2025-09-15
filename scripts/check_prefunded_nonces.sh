@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 查询预设账户的nonce值
-RPC_URL="http://172.16.0.12:8545"
+RPC_URL="http://172.16.0.11:8545"
 
 # 预设账户地址数组
 ACCOUNTS=(

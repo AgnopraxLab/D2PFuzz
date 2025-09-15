@@ -9,12 +9,13 @@ D2PFuzz/
 ├── analysis/           # Result analysis
 ├── cmd/                # Command-line tools directory
 ├── config/             # Configuration related modules
+├── devp2p/             # P2P network protocol modules
+├── examples/           # Run tx-fuzz alone
 ├── fuzzer/             # Fuzzing core modules
 ├── logs/               # Log files directory
 ├── monitor/            # Monitoring modules
 ├── mutation/           # Mutation Strategy
-├── output/            # Reports storage directory
-├── p2p/                # P2P network protocol modules
+├── output/             # Reports storage directory
 ├── templates/          # Template config files directory
 ├── test/               # Test cases directory
 ├── utils/              # Utility functions modules
@@ -28,6 +29,7 @@ D2PFuzz/
 
 - Go 1.19+
 - Linux/macOS/Windows
+- Ethereum node (for transaction fuzzing)
 
 ### Installation and Running
 
@@ -45,6 +47,26 @@ go run main.go
 # Run test
 go run test/real_connection/main.go
 ```
+
+## TX-Fuzz Integration
+
+D2PFuzz integrates the [tx-fuzz](https://github.com/MariusVanDerWijden/tx-fuzz) library to provide Ethereum transaction fuzzing functionality. It supports random generation of multiple transaction types, configurable gas parameters and transaction frequency, and provides real-time monitoring.
+
+### Usage
+
+**Method 1: Main Program**
+1. Set `tx_fuzzing.enabled: true` in `config.yaml`
+2. Configure RPC endpoint and chain ID
+3. Run `go run main.go`
+
+**Method 2: Standalone Example**
+1. Enter the examples directory
+2. Run `go run tx_fuzz_example.go`
+
+**Method 3: Programmatic Integration**
+- Call transaction fuzzing functionality directly through the fuzzer package API
+
+For detailed configuration instructions, please refer to [TX_FUZZ_INTEGRATION.md](TX_FUZZ_INTEGRATION.md).
 
 ### Configuration
 
