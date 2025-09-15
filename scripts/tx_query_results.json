@@ -1,0 +1,344 @@
+[
+  {
+    "hash": "# 示例交易哈希文件",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32769",
+    "error": null
+  },
+  {
+    "hash": "# 请将下面的示例哈希替换为您要查询的实际交易哈希",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32788",
+    "error": null
+  },
+  {
+    "hash": "# 示例（这些是无效的哈希，仅用于演示格式）:",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32778",
+    "error": null
+  },
+  {
+    "hash": "0xa8fad1fd7ddbe8ae3a70d039c6b231cbb125a77c6813a998bbce603abdfc4db0",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32769",
+    "error": null
+  },
+  {
+    "hash": "# 每行一个交易哈希",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32783",
+    "error": null
+  },
+  {
+    "hash": "0x1a6501cec7e2554821ca303a1b1bd4f923674a322fc59b957d9b590fa60cc698",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32788",
+    "error": null
+  },
+  {
+    "hash": "0x4c2cec5d2668bc4aa8927afa3b6f4735292beee727a6ffb20bd0c3aa44819559",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32778",
+    "error": null
+  },
+  {
+    "hash": "0xf2acce453fbcefe5c51c31f416ecaea1688acdc095b627dca88c3abcb74f11ea",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32769",
+    "error": null
+  },
+  {
+    "hash": "0x677d73d401413cc608b760a9ba85d654600b34eca560e777da7ba0509bf99a8e",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32774",
+    "error": null
+  },
+  {
+    "hash": "0x85906a939214c61228cb34537b450f977e368f6c0ae2cb7ba6d8740d5066bbbe",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x11d",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32774",
+    "error": null
+  },
+  {
+    "hash": "0x1c38672bdd391a508de859036aba91e9e434aa446399021aa46f14373b5927bf",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32788",
+    "error": null
+  },
+  {
+    "hash": "0xbd188432fe4c000658393c54a79a5628ceabad6bc5e165b1f25d9859ba24a69d",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32778",
+    "error": null
+  },
+  {
+    "hash": "0x78efc8811a53c1cbeab1b4f560fa478463d1f7549722a8942af93d9a7fd65449",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x131",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32774",
+    "error": null
+  },
+  {
+    "hash": "0x48b391627ed4e28de6eaeffecb7f1d3134448c867b72ca3210e2f97e8807f028",
+    "exists": true,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32783",
+    "error": null
+  },
+  {
+    "hash": "0x8451deec0fb5141ff53efb7a9adc29823e17088e05c8a27e14490749533d4e8a",
+    "exists": true,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32783",
+    "error": null
+  },
+  {
+    "hash": "0x39d8bd053341f3399ff1b92f7b8e0cff9112046859bc650627bbae3b9c868137",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x131",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32769",
+    "error": null
+  },
+  {
+    "hash": "0x50f5b11b44e0c3ee4003aee0fd7c21d9e4123e79ea3614076e58c7802e8d182f",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x131",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32769",
+    "error": null
+  },
+  {
+    "hash": "0x0ec258f6e9282d7a1e3c9ec987a201ca5c276882c6f6f8f656acc337193e607d",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x131",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32774",
+    "error": null
+  },
+  {
+    "hash": "0xa12c64f569bbed885da027c454d759fa4541ff7cdead6c0c01e5b619d6cf3fbe",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x131",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32778",
+    "error": null
+  },
+  {
+    "hash": "0x86e053a507290013daba59178e4776ceaf5d7fbe488b27c46b9a2c87f29f33d6",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x131",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32788",
+    "error": null
+  },
+  {
+    "hash": "0xbed5eddd7198d3c513f3f914700f96901e0af1207a4167cd1db6f5f1cd4a5ec8",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x131",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32783",
+    "error": null
+  },
+  {
+    "hash": "0xf6a6930b3c8cf366b226f0dbe7e27a62bf13d902a4c52457241415d723bf3a72",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32778",
+    "error": null
+  },
+  {
+    "hash": "0xb25ff19c7ddd18b0f76570d92b0177bc16812d0ba484b5c9cb0931839316bb6b",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32783",
+    "error": null
+  },
+  {
+    "hash": "0xdcc2009d2fce4eb7075577c183a240c244e97c8a013608d542c65e69e77347af",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x131",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32788",
+    "error": null
+  },
+  {
+    "hash": "0xed35ffb522cdf5c4459b267bf7f3708bf54e3e99b0eab60dbcf4578e063bccea",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x136",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32774",
+    "error": null
+  },
+  {
+    "hash": "0x29138efbb660f5b0c210f75eef16e25780f00429b748038a247db9f1dd8205b7",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x136",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32769",
+    "error": null
+  },
+  {
+    "hash": "0x9ad9cad58e184e481a1d8644e94c4bb5c601b087886c43ba84dd81cdc4d06bb4",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x136",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32788",
+    "error": null
+  },
+  {
+    "hash": "0xd1d6a67ea816582e92c719936f3fa48a1de5dc49bdb23b70b4d6ec518978cbd7",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x136",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32778",
+    "error": null
+  },
+  {
+    "hash": "0xb54534291d7bbdaefaf2432047ce63e9fa09d96528f06e03819807b2bfb19a33",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32783",
+    "error": null
+  },
+  {
+    "hash": "0x3065b5d671f9a1ca18dd0c3d68840f5d7a829d2b3315bc02d2ea21c8cb44380d",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x136",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32774",
+    "error": null
+  },
+  {
+    "hash": "0xed99c0160801edf624d8726379519cb1baccd565311c840adb5f00fcb497bad7",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x136",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32783",
+    "error": null
+  },
+  {
+    "hash": "# 使用方法:",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32774",
+    "error": null
+  },
+  {
+    "hash": "0x3d2fbf09e32a06e88a210d6c9e2d3876f9933688fef0fecb760d339435fa9bff",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32778",
+    "error": null
+  },
+  {
+    "hash": "0x75836b01a5af33a4abc711ff6ecce7955bf0be4debb8573098509c78748dcc93",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x136",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32788",
+    "error": null
+  },
+  {
+    "hash": "0xc8de73db3efc7ea4685571c4854875408223c335ee5a2869b817e2f448303131",
+    "exists": true,
+    "confirmed": true,
+    "block_number": "0x136",
+    "status": "0x1",
+    "endpoint": "http://127.0.0.1:32769",
+    "error": null
+  },
+  {
+    "hash": "# 3. 运行: python3 batch_tx_query.py sample_tx_hashes.txt",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32783",
+    "error": null
+  },
+  {
+    "hash": "# 1. 删除上面的示例行",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32769",
+    "error": null
+  },
+  {
+    "hash": "# 2. 添加您要查询的真实交易哈希",
+    "exists": false,
+    "confirmed": false,
+    "block_number": null,
+    "status": null,
+    "endpoint": "http://127.0.0.1:32788",
+    "error": null
+  }
+]

@@ -13,9 +13,16 @@ type Config struct {
 	Mode       string           `yaml:"mode"`
 	P2P        P2PConfig        `yaml:"p2p"`
 	Fuzzing    FuzzingConfig    `yaml:"fuzzing"`
+	TxFuzzing  TxFuzzingConfig  `yaml:"tx_fuzz"`
 	Monitoring MonitoringConfig `yaml:"monitoring"`
 	Output     OutputConfig     `yaml:"output"`
 	Log        LogConfig        `yaml:"log"`
+	Accounts   []Account        `yaml:"accounts"`
+}
+
+type Account struct {
+	Address    string `yaml:"address"`     // 公钥地址
+	PrivateKey string `yaml:"private_key"` // 私钥（不含0x前缀）
 }
 
 // ServerConfig holds server-related configuration
@@ -39,6 +46,19 @@ type FuzzingConfig struct {
 	MutationRate  float64  `yaml:"mutation_rate"`
 	Seed          int64    `yaml:"seed"`
 	Protocols     []string `yaml:"protocols"`
+}
+
+// TxFuzzingConfig holds transaction fuzzing configuration
+type TxFuzzingConfig struct {
+	Enabled         bool   `yaml:"enabled"`
+	RPCEndpoint     string `yaml:"rpc_endpoint"`
+	ChainID         int64  `yaml:"chain_id"`
+	MaxGasPrice     int64  `yaml:"max_gas_price"`     // in wei
+	MaxGasLimit     uint64 `yaml:"max_gas_limit"`
+	TxPerSecond     int    `yaml:"tx_per_second"`
+	FuzzDurationSec int    `yaml:"fuzz_duration_sec"`
+	Seed            int64  `yaml:"seed"`
+	UseAccounts     bool   `yaml:"use_accounts"`       // whether to use predefined accounts
 }
 
 // MonitoringConfig holds monitoring configuration
@@ -96,27 +116,55 @@ func (c *Config) GetLogPath() string {
 	return c.Log.Directory
 }
 
+func (c *Config) GetAccountss() []Account {
+	return c.Accounts
+}
+
 // IsFuzzingEnabled returns whether fuzzing is enabled
 func (c *Config) IsFuzzingEnabled() bool {
 	return c.Fuzzing.Enabled
 }
+
+
 
 // IsMonitoringEnabled returns whether monitoring is enabled
 func (c *Config) IsMonitoringEnabled() bool {
 	return c.Monitoring.Enabled
 }
 
+// IsTxFuzzingEnabled returns true if transaction fuzzing is enabled
+func (c *Config) IsTxFuzzingEnabled() bool {
+	return c.TxFuzzing.Enabled
+}
+
+// GetTxFuzzingConfig returns the transaction fuzzing configuration
+func (c *Config) GetTxFuzzingConfig() TxFuzzingConfig {
+	return c.TxFuzzing
+}
+
 // PrintConfig prints the current configuration (for debugging)
 func (c *Config) PrintConfig() {
-	fmt.Println("=== D2PFuzz Configuration ===")
-	fmt.Printf("Server: %s\n", c.GetServerAddress())
+	fmt.Printf("=== D2PFuzz Configuration ===\n")
+	fmt.Printf("Mode: %s\n", c.Mode)
+	fmt.Printf("Server: %s:%d\n", c.Server.Host, c.Server.Port)
+	fmt.Printf("P2P Max Peers: %d\n", c.P2P.MaxPeers)
 	fmt.Printf("P2P Listen Port: %d\n", c.P2P.ListenPort)
-	fmt.Printf("Max Peers: %d\n", c.P2P.MaxPeers)
-	fmt.Printf("Fuzzing Enabled: %t\n", c.IsFuzzingEnabled())
-	fmt.Printf("Max Iterations: %d\n", c.Fuzzing.MaxIterations)
-	fmt.Printf("Protocols: %v\n", c.Fuzzing.Protocols)
-	fmt.Printf("Output Directory: %s\n", c.GetOutputPath())
-	fmt.Printf("Log Directory: %s\n", c.GetLogPath())
-	fmt.Printf("Monitoring Enabled: %t\n", c.IsMonitoringEnabled())
-	fmt.Println("==============================")
+	fmt.Printf("Fuzzing Enabled: %t\n", c.Fuzzing.Enabled)
+	if c.Fuzzing.Enabled {
+		fmt.Printf("  Max Iterations: %d\n", c.Fuzzing.MaxIterations)
+		fmt.Printf("  Mutation Rate: %.2f\n", c.Fuzzing.MutationRate)
+		fmt.Printf("  Protocols: %v\n", c.Fuzzing.Protocols)
+	}
+	fmt.Printf("Transaction Fuzzing Enabled: %t\n", c.TxFuzzing.Enabled)
+	if c.TxFuzzing.Enabled {
+		fmt.Printf("  RPC Endpoint: %s\n", c.TxFuzzing.RPCEndpoint)
+		fmt.Printf("  Chain ID: %d\n", c.TxFuzzing.ChainID)
+		fmt.Printf("  Max Gas Price: %d wei\n", c.TxFuzzing.MaxGasPrice)
+		fmt.Printf("  Tx Per Second: %d\n", c.TxFuzzing.TxPerSecond)
+		fmt.Printf("  Duration: %d seconds\n", c.TxFuzzing.FuzzDurationSec)
+	}
+	fmt.Printf("Monitoring Enabled: %t\n", c.Monitoring.Enabled)
+	fmt.Printf("Output Directory: %s\n", c.Output.Directory)
+	fmt.Printf("Accounts Count: %d\n", len(c.Accounts))
+	fmt.Printf("==============================\n")
 }

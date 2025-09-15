@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/rlpx"
 
+	"D2PFuzz/config"
 	"D2PFuzz/utils"
 )
 
@@ -24,6 +25,7 @@ type FuzzClient struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 	logger     utils.Logger
+	txFuzzer   *TxFuzzer // Transaction fuzzer integration
 }
 
 // Peer represents a connected peer
@@ -69,4 +71,42 @@ func (f *FuzzClient) Start() {
 	f.logger.Info("Main Fuzz Strategy")
 	// TODO: Implement fuzzing strategy
 	f.logger.Info("Fuzz test is Complished")
+}
+
+// StartTxFuzzing starts transaction fuzzing with the given configuration
+func (f *FuzzClient) StartTxFuzzing(cfg *TxFuzzConfig, accounts []config.Account) error {
+	if f.txFuzzer != nil {
+		return fmt.Errorf("transaction fuzzing is already running")
+	}
+
+	txFuzzer, err := NewTxFuzzer(cfg, accounts, f.logger)
+	if err != nil {
+		return fmt.Errorf("failed to create transaction fuzzer: %v", err)
+	}
+
+	f.txFuzzer = txFuzzer
+
+	// Start transaction fuzzing in a separate goroutine
+	go func() {
+		if err := f.txFuzzer.Start(cfg); err != nil {
+			f.logger.Error("Transaction fuzzing failed: %v", err)
+		}
+	}()
+
+	f.logger.Info("Transaction fuzzing started")
+	return nil
+}
+
+// StopTxFuzzing stops the transaction fuzzing process
+func (f *FuzzClient) StopTxFuzzing() {
+	if f.txFuzzer != nil {
+		f.txFuzzer.Stop()
+		f.txFuzzer = nil
+		f.logger.Info("Transaction fuzzing stopped")
+	}
+}
+
+// IsTxFuzzingActive returns true if transaction fuzzing is currently active
+func (f *FuzzClient) IsTxFuzzingActive() bool {
+	return f.txFuzzer != nil
 }

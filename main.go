@@ -2,7 +2,11 @@ package main
 
 import (
 	"fmt"
+	"math/big"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"D2PFuzz/config"
 	"D2PFuzz/utils"
@@ -48,6 +52,61 @@ func main() {
 		logger.Info("Log level: %s", cfg.Monitoring.LogLevel)
 	}
 
+	// Initialize transaction fuzzing if enabled
+	if cfg.IsTxFuzzingEnabled() {
+		logger.Info("Transaction fuzzing is enabled")
+		accounts := cfg.GetAccountss()
+		if len(accounts) == 0 {
+			logger.Warn("No accounts found for transaction fuzzing")
+		} else {
+			logger.Info("Found %d accounts for transaction fuzzing", len(accounts))
+			
+			// Create fuzzer client
+			fuzzClient, err := fuzzer.NewFuzzClient(*logger)
+			if err != nil {
+				logger.Error("Failed to create fuzz client: %v", err)
+			} else {
+				// Note: FuzzClient doesn't have Close method, cleanup is handled by Stop methods
+				
+				// Create transaction fuzzing configuration
+				txCfg := cfg.GetTxFuzzingConfig()
+				fuzzConfig := &fuzzer.TxFuzzConfig{
+					RPCEndpoint:     txCfg.RPCEndpoint,
+					ChainID:         txCfg.ChainID,
+					MaxGasPrice:     big.NewInt(txCfg.MaxGasPrice),
+					MaxGasLimit:     txCfg.MaxGasLimit,
+					TxPerSecond:     txCfg.TxPerSecond,
+					FuzzDuration:    time.Duration(txCfg.FuzzDurationSec) * time.Second,
+					Seed:            txCfg.Seed,
+				}
+				
+				// Start transaction fuzzing
+				err = fuzzClient.StartTxFuzzing(fuzzConfig, accounts)
+				if err != nil {
+					logger.Error("Failed to start transaction fuzzing: %v", err)
+				} else {
+					logger.Info("Transaction fuzzing started successfully")
+					
+					// Set up signal handling for graceful shutdown
+					sigChan := make(chan os.Signal, 1)
+					signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+					
+					// Wait for signal or timeout
+					select {
+					case <-sigChan:
+						logger.Info("Received interrupt signal, stopping transaction fuzzing")
+					case <-time.After(fuzzConfig.FuzzDuration):
+						logger.Info("Transaction fuzzing duration completed")
+					}
+					
+					// Stop transaction fuzzing
+					fuzzClient.StopTxFuzzing()
+					logger.Info("Transaction fuzzing stopped")
+				}
+			}
+		}
+	}
+
 	// Initialize P2P network
 	logger.Info("Initializing P2P network...")
 	logger.Info("Listen port: %d", cfg.P2P.ListenPort)
@@ -76,5 +135,4 @@ func main() {
 	}
 	logger.Info("Report directory created/verified: %s", reportPath)
 
-	
 }

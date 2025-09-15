@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/big"
 	"net"
 	"os"
@@ -23,6 +24,37 @@ import (
 
 	ethtest "D2PFuzz/devp2p/protocol/eth"
 )
+
+// Account 账户结构体
+type Account struct {
+	Address    string // 公钥地址
+	PrivateKey string // 私钥（不含0x前缀）
+}
+
+// 预定义账户列表
+var PredefinedAccounts = []Account{
+	{Address: "0x8943545177806ED17B9F23F0a21ee5948eCaa776", PrivateKey: "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"},
+	{Address: "0xE25583099BA105D9ec0A67f5Ae86D90e50036425", PrivateKey: "39725efee3fb28614de3bacaffe4cc4bd8c436257e2c8bb887c4b5c4be45e76d"},
+	{Address: "0x614561D2d143621E126e87831AEF287678B442b8", PrivateKey: "53321db7c1e331d93a11a41d16f004d7ff63972ec8ec7c25db329728ceeb1710"},
+	{Address: "0xf93Ee4Cf8c6c40b329b0c0626F28333c132CF241", PrivateKey: "ab63b23eb7941c1251757e24b3d2350d2bc05c3c388d06f8fe6feafefb1e8c70"},
+	{Address: "0x802dCbE1B1A97554B4F50DB5119E37E8e7336417", PrivateKey: "5d2344259f42259f82d2c140aa66102ba89b57b4883ee441a8b312622bd42491"},
+	{Address: "0xAe95d8DA9244C37CaC0a3e16BA966a8e852Bb6D6", PrivateKey: "27515f805127bebad2fb9b183508bdacb8c763da16f54e0678b16e8f28ef3fff"},
+	{Address: "0x2c57d1CFC6d5f8E4182a56b4cf75421472eBAEa4", PrivateKey: "7ff1a4c1d57e5e784d327c4c7651e952350bc271f156afb3d00d20f5ef924856"},
+	{Address: "0x741bFE4802cE1C4b5b00F9Df2F5f179A1C89171A", PrivateKey: "3a91003acaf4c21b3953d94fa4a6db694fa69e5242b2e37be05dd82761058899"},
+	{Address: "0xc3913d4D8bAb4914328651C2EAE817C8b78E1f4c", PrivateKey: "bb1d0f125b4fb2bb173c318cdead45468474ca71474e2247776b2b4c0fa2d3f5"},
+	{Address: "0x65D08a056c17Ae13370565B04cF77D2AfA1cB9FA", PrivateKey: "850643a0224065ecce3882673c21f56bcf6eef86274cc21cadff15930b59fc8c"},
+	{Address: "0x3e95dFbBaF6B348396E6674C7871546dCC568e56", PrivateKey: "94eb3102993b41ec55c241060f47daa0f6372e2e3ad7e91612ae36c364042e44"},
+	{Address: "0x5918b2e647464d4743601a865753e64C8059Dc4F", PrivateKey: "daf15504c22a352648a71ef2926334fe040ac1d5005019e09f6c979808024dc7"},
+	{Address: "0x589A698b7b7dA0Bec545177D3963A2741105C7C9", PrivateKey: "eaba42282ad33c8ef2524f07277c03a776d98ae19f581990ce75becb7cfa1c23"},
+	{Address: "0x4d1CB4eB7969f8806E2CaAc0cbbB71f88C8ec413", PrivateKey: "3fd98b5187bf6526734efaa644ffbb4e3670d66f5d0268ce0323ec09124bff61"},
+	{Address: "0xF5504cE2BcC52614F121aff9b93b2001d92715CA", PrivateKey: "5288e2f440c7f0cb61a9be8afdeb4295f786383f96f5e35eb0c94ef103996b64"},
+	{Address: "0xF61E98E7D47aB884C244E39E031978E33162ff4b", PrivateKey: "f296c7802555da2a5a662be70e078cbd38b44f96f8615ae529da41122ce8db05"},
+	{Address: "0xf1424826861ffbbD25405F5145B5E50d0F1bFc90", PrivateKey: "bf3beef3bd999ba9f2451e06936f0423cd62b815c9233dd3bc90f7e02a1e8673"},
+	{Address: "0xfDCe42116f541fc8f7b0776e2B30832bD5621C85", PrivateKey: "6ecadc396415970e91293726c3f5775225440ea0844ae5616135fd10d66b5954"},
+	{Address: "0xD9211042f35968820A3407ac3d80C725f8F75c14", PrivateKey: "a492823c3e193d6c595f37a18e3c06650cf4c74558cc818b16130b293716106f"},
+	{Address: "0xD8F3183DEF51A987222D845be228e0Bbb932C222", PrivateKey: "c5114526e042343c6d1899cad05e1c00ba588314de9b96929914ee0df18d46b2"},
+	{Address: "0xafF0CA253b97e54440965855cec0A8a2E2399896", PrivateKey: "04b9f63ecf84210c5366c66d68fa1f5da1fa4f634fad6dfc86178e4d79ff9e59"},
+}
 
 // Config 配置结构体
 type Config struct {
@@ -304,73 +336,149 @@ func main() {
 		return
 	}
 
-	// 使用第一个bootstrap node
-	enodeStr := config.P2P.BootstrapNodes[0]
-	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
-	if err != nil {
-		fmt.Printf("Failed to parse enode: %v\n", err)
-		return
+	elName := []string{"geth", "nethermind", "reth", "besu", "erigon"}
+	// 循环测试5个node
+	for i := 0; i < 5; i++ {
+		fmt.Printf("第%v个客户端, %v\n", i+1, elName[i])
+		enodeStr := config.P2P.BootstrapNodes[i]
+		node, err := enode.Parse(enode.ValidSchemes, enodeStr)
+		if err != nil {
+			fmt.Printf("Failed to parse enode: %v\n", err)
+			continue
+		}
+
+		fmt.Printf("Connecting to %s node: %s\n", elName[i], node.String())
+		fmt.Printf("IP: %s, Port: %d\n", node.IP(), node.TCP())
+
+		// 先创建suite，suite通过dial返回conn
+		jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
+		if err != nil {
+			fmt.Printf("Failed to parse JWT secret: %v\n", err)
+			continue
+		}
+		suite, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]))
+		if err != nil {
+			fmt.Printf("Failed to create suite: %v\n", err)
+			continue
+		}
+
+		// GetBlockHeaders测试
+		// headers, err := GetBlockHeaders(suite)
+		// if err != nil {
+		// 	fmt.Printf("Failed to get block headers: %v\n", err)
+		// 	return
+		// }
+		// printHeaders(headers)
+
+		// 发送交易测试
+		err = sendTransaction(suite)
+		if err != nil {
+			fmt.Printf("Failed to send transaction: %v\n", err)
+			continue
+		}
+		fmt.Println()
+		// 获取收据
+		// receipts, err := getReceipts(suite)
+		// if err != nil {
+		// 	fmt.Printf("Failed to get receipts: %v\n", err)
+		// 	return
+		// }
+		// printReceipts(receipts)
+
+		// 发送大量交易并获取交易池
+		// resp, hashes := sendLargeTransactions(suite)
+		// printPooledTransactions(resp)
+		// fmt.Println("hashes: ", hashes)
+
+		// 通过交易哈希获取交易内容
+		// txhash := "0x85906a939214c61228cb34537b450f977e368f6c0ae2cb7ba6d8740d5066bbbe"
+		// tx, err := queryTransactionByHash(suite, common.HexToHash(txhash))
+		// if err != nil {
+		// 	fmt.Printf("Failed to query transaction: %v\n", err)
+		// 	return
+		// }
+		// printTransaction(tx)
+
 	}
-
-	fmt.Printf("Connecting to node: %s\n", node.String())
-	fmt.Printf("IP: %s, Port: %d\n", node.IP(), node.TCP())
-
-	// 先创建suite，suite通过dial返回conn
-	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
-	if err != nil {
-		fmt.Printf("Failed to parse JWT secret: %v\n", err)
-		return
-	}
-	// _, secret, err := MakeJWTSecret()
-	if err != nil {
-		fmt.Printf("Failed to make JWT secret: %v\n", err)
-		return
-	}
-	suite, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]))
-	if err != nil {
-		fmt.Printf("Failed to create suite: %v\n", err)
-		return
-	}
-
-	// GetBlockHeaders测试
-	// headers, err := GetBlockHeaders(suite)
-	// if err != nil {
-	// 	fmt.Printf("Failed to get block headers: %v\n", err)
-	// 	return
-	// }
-	// printHeaders(headers)
-
-	// 发送交易测试
-	err = sendTransaction(suite)
-	if err != nil {
-		fmt.Printf("Failed to send transaction: %v\n", err)
-		return
-	}
-
-	// 获取收据
-	// receipts, err := GetReceipts(suite)
-	// if err != nil {
-	// 	fmt.Printf("Failed to get receipts: %v\n", err)
-	// 	return
-	// }
-	// printReceipts(receipts)
-
-	// 发送大量交易并获取交易池
-	// resp := sendLargeTransactions(suite)
-	// printPooledTransactions(resp)
-
 }
 
-func getPooledTransactionsByHash(){
-
+func printTransaction(tx *types.Transaction) {
+	fmt.Printf("Transaction Details:\n")
+	fmt.Printf("  Hash: %s\n", tx.Hash().Hex())
+	fmt.Printf("  Nonce: %d\n", tx.Nonce())
+	fmt.Printf("  Gas Price: %d\n", tx.GasPrice())
+	fmt.Printf("  Gas: %d\n", tx.Gas())
+	fmt.Printf("  To: %s\n", tx.To().Hex())
+	fmt.Printf("  Value: %s\n", tx.Value())
+	fmt.Printf("  Data: %x\n", tx.Data())
+	// 签名信息
+	v, r, s := tx.RawSignatureValues()
+	fmt.Printf("签名 V: %d\n", v.Uint64())
+	fmt.Printf("签名 R: %s\n", r.String())
+	fmt.Printf("签名 S: %s\n", s.String())
 }
 
-func sendLargeTransactions(s *ethtest.Suite) eth.PooledTransactionsResponse {
+// queryTransactionByHash 通过交易哈希查询交易是否在链上
+func queryTransactionByHash(s *ethtest.Suite, txHash common.Hash) (tx *types.Transaction, err error) {
+	// 建立连接
+	conn, err := s.Dial()
+	if err != nil {
+		return nil, fmt.Errorf("dial failed: %v", err)
+	}
+	defer conn.Close()
+
+	if err = conn.Peer(nil); err != nil {
+		return nil, fmt.Errorf("peering failed: %v", err)
+	}
+
+	// 创建交易查询请求（使用 GetPooledTransactions 作为查询机制）
+	req := &eth.GetPooledTransactionsPacket{
+		RequestId:                    999,
+		GetPooledTransactionsRequest: []common.Hash{txHash},
+	}
+
+	if err = conn.Write(1, eth.GetPooledTransactionsMsg, req); err != nil {
+		return nil, fmt.Errorf("failed to write transaction query: %v", err)
+	}
+	fmt.Println("req: ", req)
+	// 等待响应
+	err = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if err != nil {
+		return nil, fmt.Errorf("failed to set read deadline: %v", err)
+	}
+	resp := new(eth.PooledTransactionsPacket)
+	if err := conn.ReadMsg(1, eth.PooledTransactionsMsg, resp); err != nil {
+		return nil, fmt.Errorf("failed to read transaction response: %v", err)
+	}
+	fmt.Println("resp: ", resp)
+
+	// 验证响应
+	if got, want := resp.RequestId, req.RequestId; got != want {
+		return nil, fmt.Errorf("unexpected request id in response: got %d, want %d", got, want)
+	}
+
+	// 检查是否找到了交易
+	if len(resp.PooledTransactionsResponse) == 0 {
+		return nil, fmt.Errorf("transaction not found: %s", txHash.Hex())
+	}
+
+	// 验证返回的交易哈希是否匹配
+	foundTx := resp.PooledTransactionsResponse[0]
+	if foundTx.Hash() != txHash {
+		return nil, fmt.Errorf("transaction hash mismatch: expected %s, got %s",
+			txHash.Hex(), foundTx.Hash().Hex())
+	}
+
+	fmt.Printf("Successfully found transaction on chain: %s", txHash.Hex())
+	return foundTx, nil
+}
+
+func sendLargeTransactions(s *ethtest.Suite) (eth.PooledTransactionsResponse, []common.Hash) {
 	// 这个测试首先向节点发送约count笔交易，然后请求这些交易使用 GetPooledTransactions 在另一个对等连接上。
 	var (
-		nonce  = uint64(200)
-		from   = "a492823c3e193d6c595f37a18e3c06650cf4c74558cc818b16130b293716106f"
-		count  = 1
+		nonce  = uint64(9)
+		from   = PredefinedAccounts[0].PrivateKey
+		count  = 10
 		txs    []*types.Transaction
 		hashes []common.Hash
 		set    = make(map[common.Hash]struct{})
@@ -378,15 +486,15 @@ func sendLargeTransactions(s *ethtest.Suite) eth.PooledTransactionsResponse {
 	prik, err := crypto.HexToECDSA(from)
 	if err != nil {
 		fmt.Println("failed to generate private key")
-		return nil
+		return nil, nil
 	}
-	var to common.Address = common.HexToAddress("0xfDCe42116f541fc8f7b0776e2B30832bD5621C85")
+	var to common.Address = common.HexToAddress(PredefinedAccounts[1].Address)
 	for i := 0; i < count; i++ {
 		inner := &types.DynamicFeeTx{
 			ChainID:   big.NewInt(3151908),
-			Nonce:     nonce - uint64(i),
-			GasTipCap: big.NewInt(300000),
-			GasFeeCap: big.NewInt(300000),
+			Nonce:     nonce + uint64(i),
+			GasTipCap: big.NewInt(3000000),
+			GasFeeCap: big.NewInt(3000000),
 			Gas:       21000,
 			To:        &to,
 			Value:     common.Big1,
@@ -436,7 +544,7 @@ func sendLargeTransactions(s *ethtest.Suite) eth.PooledTransactionsResponse {
 			fmt.Printf("unexpected tx received: %v", got.Hash())
 		}
 	}
-	return msg.PooledTransactionsResponse
+	return msg.PooledTransactionsResponse, hashes
 }
 
 func printPooledTransactions(resp eth.PooledTransactionsResponse) {
@@ -528,7 +636,7 @@ func printPooledTransactions(resp eth.PooledTransactionsResponse) {
 			}
 		}
 
-		fmt.Println()
+		fmt.Println("=================================")
 	}
 }
 
@@ -537,23 +645,19 @@ func printMsg(msg any) {
 }
 
 func sendTransaction(s *ethtest.Suite) error {
-	nonce := uint64(400)
-	// minNumber := big.NewInt(0).Sub(big.NewInt(0), new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil))
-	// maxNumber := new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
-	var to common.Address = common.HexToAddress("0xfDCe42116f541fc8f7b0776e2B30832bD5621C85")
+	nonce := uint64(math.MaxUint64)
+	var to common.Address = common.HexToAddress(PredefinedAccounts[1].Address)
 	txdata := &types.DynamicFeeTx{
-		// ChainID: big.NewInt(0).Sub(big.NewInt(0), new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)),
 		ChainID:   big.NewInt(3151908),
 		Nonce:     nonce,
-		GasTipCap: big.NewInt(300000),
-		GasFeeCap: big.NewInt(300000),
+		GasTipCap: big.NewInt(3000000),
+		GasFeeCap: big.NewInt(3000000),
 		Gas:       21000,
-		To:        &to, // 使用之前定义的to变量作为接收地址
+		To:        &to,
 		Value:     big.NewInt(1),
-		// Value:     big.NewInt(0).Sub(big.NewInt(0).Mul(big.NewInt(0).Exp(big.NewInt(10000000000000), big.NewInt(2), nil), big.NewInt(10)), big.NewInt(6021000)),
 	}
 	innertx := types.NewTx(txdata)
-	prik, err := crypto.HexToECDSA("a492823c3e193d6c595f37a18e3c06650cf4c74558cc818b16130b293716106f")
+	prik, err := crypto.HexToECDSA(PredefinedAccounts[0].PrivateKey)
 	if err != nil {
 		fmt.Printf("failed to sign tx: %v", err)
 		return err
@@ -736,7 +840,7 @@ func printSingleReceipt(receipt *types.Receipt, index int) {
 	fmt.Println()
 }
 
-func GetReceipts(s *ethtest.Suite) (list []*eth.ReceiptList68, err error) {
+func getReceipts(s *ethtest.Suite) (list []*eth.ReceiptList68, err error) {
 	conn, err := s.DialAndPeer(nil)
 	if err != nil {
 		fmt.Printf("peering failed: %v", err)
@@ -757,12 +861,13 @@ func GetReceipts(s *ethtest.Suite) (list []*eth.ReceiptList68, err error) {
 
 	// Create block bodies request.
 	req := &eth.GetReceiptsPacket{
-		RequestId:          22,
+		RequestId:          66,
 		GetReceiptsRequest: (eth.GetReceiptsRequest)(hashes),
 	}
 	if err := conn.Write(1, eth.GetReceiptsMsg, req); err != nil {
 		fmt.Printf("could not write to connection: %v", err)
 	}
+	fmt.Println("req: ", req)
 	// Wait for response.
 	resp := new(eth.ReceiptsPacket[*eth.ReceiptList68])
 	if err := conn.ReadMsg(1, eth.ReceiptsMsg, &resp); err != nil {
@@ -774,7 +879,7 @@ func GetReceipts(s *ethtest.Suite) (list []*eth.ReceiptList68, err error) {
 	if len(resp.List) != len(req.GetReceiptsRequest) {
 		fmt.Printf("wrong bodies in response: expected %d bodies, got %d", len(req.GetReceiptsRequest), len(resp.List))
 	}
-	return resp.List, nil
+	return resp.List, err
 }
 
 func printHeaders(headers *eth.BlockHeadersPacket) {
