@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -59,6 +60,18 @@ type TxFuzzingConfig struct {
 	FuzzDurationSec int    `yaml:"fuzz_duration_sec"`
 	Seed            int64  `yaml:"seed"`
 	UseAccounts     bool   `yaml:"use_accounts"`       // whether to use predefined accounts
+}
+
+// TxFuzzerConfig holds transaction fuzzer configuration
+type TxFuzzerConfig struct {
+	TxPerSecond      int      `yaml:"tx_per_second"`
+	FuzzDurationSec  int      `yaml:"fuzz_duration_sec"`
+	RPCEndpoints     []string `yaml:"rpc_endpoints"`
+	// Error handling and retry configuration
+	MaxRetries       int           `yaml:"max_retries" json:"maxRetries"`             // Maximum retry attempts
+	RetryDelay       time.Duration `yaml:"retry_delay" json:"retryDelay"`             // Delay between retries
+	CircuitBreaker   bool          `yaml:"circuit_breaker" json:"circuitBreaker"`     // Enable circuit breaker
+	FailureThreshold int           `yaml:"failure_threshold" json:"failureThreshold"` // Circuit breaker failure threshold
 }
 
 // MonitoringConfig holds monitoring configuration

@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# 查询预设账户的nonce值
+# Query nonce values of prefunded accounts
 RPC_URL="http://172.16.0.11:8545"
 
-# 预设账户地址数组
+# Prefunded account addresses array
 ACCOUNTS=(
     "0x8943545177806ED17B9F23F0a21ee5948eCaa776"
     "0xE25583099BA105D9ec0A67f5Ae86D90e50036425"
@@ -28,34 +28,34 @@ ACCOUNTS=(
     "0xafF0CA253b97e54440965855cec0A8a2E2399896"
 )
 
-echo "=== 预设账户 Nonce 值查询 ==="
-echo "账户地址                                      | Nonce (十进制) | Nonce (十六进制) | 余额 (Wei)"
-echo "-------------------------------------------|---------------|-----------------|------------------"
+echo "=== Prefunded Account Nonce Query ==="
+echo "Account Address                            | Nonce (Decimal) | Nonce (Hex)     | Balance (Wei)"
+echo "-------------------------------------------|-----------------|-----------------|------------------"
 
 for account in "${ACCOUNTS[@]}"; do
-    # 查询nonce值
+    # Query nonce value
     nonce_hex=$(curl -s -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","method":"eth_getTransactionCount","params":["'$account'", "latest"],"id":1}' \
         $RPC_URL | jq -r '.result')
     
-    # 查询余额
+    # Query balance
     balance_hex=$(curl -s -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","method":"eth_getBalance","params":["'$account'", "latest"],"id":1}' \
         $RPC_URL | jq -r '.result')
-    
-    # 转换为十进制（使用Python处理大数字以避免bash整数溢出）
+
+    # Convert to decimal (use Python to handle large numbers to avoid bash integer overflow)
     if [ "$nonce_hex" != "null" ] && [ "$nonce_hex" != "" ]; then
         nonce_dec=$((16#${nonce_hex#0x}))
-        # 使用Python正确处理大数字
-        balance_dec=$(python3 -c "print(int('$balance_hex', 16))" 2>/dev/null || echo "计算错误")
-        printf "%-42s | %-13s | %-15s | %s\n" "$account" "$nonce_dec" "$nonce_hex" "$balance_dec"
+        # Use Python to correctly handle large numbers
+        balance_dec=$(python3 -c "print(int('$balance_hex', 16))" 2>/dev/null || echo "Calculation Error")
+        printf "%-42s | %-15s | %-15s | %s\n" "$account" "$nonce_dec" "$nonce_hex" "$balance_dec"
     else
-        printf "%-42s | %-13s | %-15s | %s\n" "$account" "ERROR" "ERROR" "ERROR"
+        printf "%-42s | %-15s | %-15s | %s\n" "$account" "ERROR" "ERROR" "ERROR"
     fi
 done
 
 echo ""
-echo "说明:"
-echo "- Nonce = 0: 账户未发送任何交易"
-echo "- Nonce > 0: 账户已发送相应数量的交易"
-echo "- 余额显示为 Wei 单位 (1 ETH = 10^18 Wei)"
+echo "Notes:"
+echo "- Nonce = 0: Account has not sent any transactions"
+echo "- Nonce > 0: Account has sent corresponding number of transactions"
+echo "- Balance is displayed in Wei units (1 ETH = 10^18 Wei)"

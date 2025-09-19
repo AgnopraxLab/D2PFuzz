@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -88,7 +89,7 @@ func main() {
 	fmt.Println("=== D2PFuzz Transaction Fuzzing Example ===")
 
 	// Load configuration
-	configPath := "../config.yaml"
+	configPath := "./config.yaml"
 	if len(os.Args) > 1 {
 		configPath = os.Args[1]
 	}
@@ -125,8 +126,44 @@ func main() {
 
 	// Create transaction fuzzing configuration with mutation support
 	txCfg := cfg.GetTxFuzzingConfig()
+	
+	// Get RPC endpoints from config.yaml
+	rpcEndpoints := []string{
+		"http://172.16.0.11:8545",
+		"http://172.16.0.12:8545", 
+		"http://172.16.0.13:8545",
+		"http://172.16.0.14:8545",
+		"http://172.16.0.15:8545",
+	}
+	
+	// Create multi-node configuration
+	multiNodeConfig := &fuzzer.MultiNodeConfig{
+		RPCEndpoints:        rpcEndpoints,
+		LoadDistribution:    map[string]float64{
+			"http://172.16.0.11:8545": 0.2,
+			"http://172.16.0.12:8545": 0.2,
+			"http://172.16.0.13:8545": 0.2,
+			"http://172.16.0.14:8545": 0.2,
+			"http://172.16.0.15:8545": 0.2,
+		},
+		FailoverEnabled:     true,
+		HealthCheckInterval: 30 * time.Second,
+		MaxRetries:          3,
+		RetryDelay:          1 * time.Second,
+	}
+	
+	// Create load pattern configuration
+	loadPattern := &fuzzer.LoadPattern{
+		Type:        "ramp",
+		StartTPS:    5,
+		PeakTPS:     txCfg.TxPerSecond,
+		RampTime:    30 * time.Second,
+		SustainTime: 60 * time.Second,
+		StepSize:    2,
+	}
+	
 	fuzzConfig := &fuzzer.TxFuzzConfig{
-		RPCEndpoint:     txCfg.RPCEndpoint,
+		RPCEndpoint:     rpcEndpoints[0], // Primary endpoint
 		ChainID:         txCfg.ChainID,
 		MaxGasPrice:     big.NewInt(txCfg.MaxGasPrice),
 		MaxGasLimit:     txCfg.MaxGasLimit,
@@ -136,10 +173,14 @@ func main() {
 		UseMutation:     true,  // Enable mutation
 		MutationRatio:   0.3,   // 30% of transactions use mutation
 		EnableTracking:  true,  // Enable transaction tracking
-		OutputFile:      "tx_fuzz_results.json",
+		OutputFile:      "output/tx_fuzz_results.json",
 		ConfirmBlocks:   3,     // Wait for 3 confirmation blocks
-		SuccessHashFile: "success_tx_hashes.txt", // 成功交易哈希文件
-		FailedHashFile:  "failed_tx_hashes.txt",  // 失败交易哈希文件
+		SuccessHashFile: "output/success_tx_hashes.txt", // Successful transaction hash file
+		FailedHashFile:  "output/failed_tx_hashes.txt",  // Failed transaction hash file
+		MultiNode:       multiNodeConfig,         // Multi-node configuration
+		LoadPattern:     loadPattern,             // Load pattern configuration
+		EnableMetrics:   true,                    // Enable system metrics
+		MetricsInterval: 10 * time.Second,        // Metrics collection interval
 	}
 
 	fmt.Printf("Configuration:\n")
@@ -154,49 +195,60 @@ func main() {
 	fmt.Printf("  Transaction tracking: %v\n", fuzzConfig.EnableTracking)
 	fmt.Printf("  Confirmation blocks: %d\n", fuzzConfig.ConfirmBlocks)
 
-	// Create transaction fuzzer with mutation support
+	// Create enhanced transaction fuzzer with multi-node support
 	txFuzzer, err := fuzzer.NewTxFuzzer(fuzzConfig, accounts, *logger)
 	if err != nil {
 		log.Fatalf("Failed to create transaction fuzzer: %v", err)
 	}
 	defer txFuzzer.Close()
 
+	// Setup graceful shutdown with context
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	go func() {
+		<-sigChan
+		logger.Info("Received shutdown signal, stopping fuzzer...")
+		cancel()
+	}()
+
 	// Start transaction fuzzing
-	fmt.Println("\nStarting transaction fuzzing...")
-	logger.Info("Starting transaction fuzzing example")
+	fmt.Println("\nStarting enhanced transaction fuzzing with multi-node support...")
+	logger.Info("Starting enhanced transaction fuzzing example")
 
 	// Start statistics display goroutine
 	statsTicker := time.NewTicker(10 * time.Second)
 	defer statsTicker.Stop()
 	go displayStats(txFuzzer, statsTicker.C)
 
-	// Start the fuzzing process
+	// Start the enhanced fuzzing process with context
 	go func() {
-		err := txFuzzer.Start(fuzzConfig)
+		err := txFuzzer.StartWithContext(ctx, fuzzConfig)
 		if err != nil {
 			logger.Error("Transaction fuzzing error: %v", err)
 		}
 	}()
 
-	fmt.Println("Transaction fuzzing started. Press Ctrl+C to stop.")
+	fmt.Println("Enhanced transaction fuzzing started. Press Ctrl+C to stop.")
 
 	// Wait for signal or timeout
 	select {
-	case <-sigChan:
+	case <-ctx.Done():
 		fmt.Println("\nReceived interrupt signal, stopping...")
 		logger.Info("Received interrupt signal, stopping transaction fuzzing")
 	case <-time.After(fuzzConfig.FuzzDuration):
 		fmt.Println("\nFuzzing duration completed")
 		logger.Info("Transaction fuzzing duration completed")
+		cancel()
 	}
 
 	// Stop transaction fuzzing
 	txFuzzer.Stop()
-	fmt.Println("Transaction fuzzing stopped.")
+	fmt.Println("Enhanced transaction fuzzing stopped.")
 
 	// Display final statistics
 	fmt.Println("\n=== Final Statistics ===")

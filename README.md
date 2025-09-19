@@ -54,19 +54,24 @@ D2PFuzz integrates the [tx-fuzz](https://github.com/MariusVanDerWijden/tx-fuzz) 
 
 ### Usage
 
-**Method 1: Main Program**
-1. Set `tx_fuzzing.enabled: true` in `config.yaml`
-2. Configure RPC endpoint and chain ID
-3. Run `go run main.go`
+```
+cd cmd/livefuzzer
+```
 
-**Method 2: Standalone Example**
-1. Enter the examples directory
-2. Run `go run tx_fuzz_example.go`
+Run an execution layer client such as [Geth][1] locally in a standalone bash window.
+Tx-fuzz sends transactions to port `8545` by default.
+```
+geth --http --http.port 8545
+```
 
-**Method 3: Programmatic Integration**
-- Call transaction fuzzing functionality directly through the fuzzer package API
+Or you can create your private testnet by using [ethereum-package][https://github.com/ethpandaops/ethereum-package].
 
-For detailed configuration instructions, please refer to [TX_FUZZ_INTEGRATION.md](TX_FUZZ_INTEGRATION.md).
+if you use ethereum-package to create your private testnet, you can use the following command to start tx-fuzz:
+
+```
+./livefuzzer spam --seed 1234 --sk 04b9f63ecf84210c5366c66d68fa1f5da1fa4f634fad6dfc86178e4d79ff9e59 -rpc http://172.16.0.11:8545
+```
+Which means tx-fuzz will send transactions to the private testnet node `http://172.16.0.11:8545` with the private key `04b9f63ecf84210c5366c66d68fa1f5da1fa4f634fad6dfc86178e4d79ff9e59`.
 
 ### Configuration
 
@@ -75,6 +80,19 @@ Edit the `config.yaml` file to configure test parameters:
 ```yaml
 # Configure your test parameters in config.yaml
 ```
+
+## 📚 Documentation Navigation
+
+### Core Documentation
+- **[Usage Guide](USAGE_GUIDE.md)** - Detailed configuration and usage instructions
+- **[Stress Test Suite](stress_test/README.md)** - Professional stress testing tools and configurations
+
+### Professional Tools Documentation
+- **[Scripts Usage Guide](scripts/SCRIPTS_USAGE_GUIDE.md)** - Network deployment, transaction query and other script tools
+- **[P2P Test Data Generation](devp2p/getchain/README_testdata_generation.md)** - Ethereum P2P protocol test data generation guide
+
+### Tuning Guides
+- **[Stress Test Tuning](stress_test/STRESS_TEST_TUNING_GUIDE.md)** - Detailed parameter tuning and performance optimization guide
 
 ## License
 

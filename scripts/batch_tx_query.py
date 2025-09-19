@@ -140,11 +140,11 @@ def batch_query_transactions(tx_hashes: List[str], max_workers: int = 5) -> List
                 
                 # 打印进度
                 status = "✓" if result["exists"] else "✗"
-                confirmed = "已确认" if result["confirmed"] else "未确认" if result["exists"] else "不存在"
+                confirmed = "Confirmed" if result["confirmed"] else "Unconfirmed" if result["exists"] else "Not Found"
                 print(f"{status} {tx_hash[:10]}... - {confirmed}")
                 
             except Exception as e:
-                print(f"✗ {tx_hash[:10]}... - 查询失败: {e}")
+                print(f"✗ {tx_hash[:10]}... - Query failed: {e}")
                 results.append({
                     "hash": tx_hash,
                     "exists": False,
@@ -219,13 +219,13 @@ def print_summary(results: List[Dict]):
     print(f"成功率: {((total - errors) / total * 100):.1f}%" if total > 0 else "0%")
 
 def save_results(results: List[Dict], filename: str = "tx_query_results.json"):
-    """保存查询结果到文件"""
+    """Save query results to file"""
     try:
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
-        print(f"\n结果已保存到: {filename}")
+        print(f"\nResults saved to: {filename}")
     except Exception as e:
-        print(f"保存结果失败: {e}")
+        print(f"Failed to save results: {e}")
 
 def main():
     """主函数"""

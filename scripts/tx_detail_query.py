@@ -85,14 +85,14 @@ class EthereumRPCClient:
         return None
 
 def wei_to_ether(wei_hex: str) -> float:
-    """将Wei转换为Ether"""
+    """Convert Wei to Ether"""
     if not wei_hex or wei_hex == "0x0":
         return 0.0
     wei = int(wei_hex, 16)
     return wei / 10**18
 
 def format_gas_price(gas_price_hex: str) -> str:
-    """格式化Gas价格"""
+    """Format Gas price"""
     if not gas_price_hex:
         return "0"
     gas_price_wei = int(gas_price_hex, 16)

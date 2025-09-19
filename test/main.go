@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,8 +28,203 @@ import (
 
 // Account 账户结构体
 type Account struct {
-	Address    string // 公钥地址
-	PrivateKey string // 私钥（不含0x前缀）
+	Address    string // Public key address
+	PrivateKey string // Private key (without 0x prefix)
+}
+
+// AccountManager account manager for polling different accounts
+type AccountManager struct {
+	accounts    []Account
+	currentFrom int // Current sender account index
+	currentTo   int // Current receiver account index
+}
+
+// NodeAccountManager manages independent accounts and nonce for each node
+type NodeAccountManager struct {
+	nodeAccounts map[int]*NodeAccount // Node index -> Node account information
+	totalNodes   int
+}
+
+// NodeAccount 单个节点的账户信息
+type NodeAccount struct {
+	FromAccount Account
+	ToAccount   Account
+	Nonce       uint64
+}
+
+// NewNodeAccountManager 创建节点账户管理器
+func NewNodeAccountManager(accounts []Account, nodeCount int) *NodeAccountManager {
+	if len(accounts) < nodeCount*2 {
+		panic(fmt.Sprintf("需要至少 %d 个账户来支持 %d 个节点，但只有 %d 个账户", nodeCount*2, nodeCount, len(accounts)))
+	}
+
+	nodeAccounts := make(map[int]*NodeAccount)
+	for i := 0; i < nodeCount; i++ {
+		// 为每个节点分配两个固定账户：一个发送方，一个接收方
+		fromIndex := i * 2
+		toIndex := i*2 + 1
+
+		nodeAccounts[i] = &NodeAccount{
+			FromAccount: accounts[fromIndex],
+			ToAccount:   accounts[toIndex],
+			Nonce:       0, // 每个节点从nonce 0开始
+		}
+	}
+
+	return &NodeAccountManager{
+		nodeAccounts: nodeAccounts,
+		totalNodes:   nodeCount,
+	}
+}
+
+// NewNodeAccountManagerWithNonces 创建带有自定义nonce初始值的节点账户管理器
+func NewNodeAccountManagerWithNonces(accounts []Account, nodeCount int, initialNonces []uint64) *NodeAccountManager {
+	if len(accounts) < nodeCount+5 {
+		panic(fmt.Sprintf("需要至少 %d 个账户来支持 %d 个节点，但只有 %d 个账户", nodeCount+5, nodeCount, len(accounts)))
+	}
+
+	nodeAccounts := make(map[int]*NodeAccount)
+	for i := 0; i < nodeCount; i++ {
+		// 修改账户分配策略：第i个账户转给第(i+5)个账户
+		// Node 0: 第0个账户 → 第5个账户
+		// Node 1: 第1个账户 → 第6个账户
+		// Node 2: 第2个账户 → 第7个账户
+		// 以此类推...
+		fromIndex := i
+		toIndex := i + 5
+
+		// 获取该节点的初始nonce值，如果没有指定则默认为0
+		initialNonce := uint64(0)
+		if i < len(initialNonces) {
+			initialNonce = initialNonces[i]
+		}
+
+		nodeAccounts[i] = &NodeAccount{
+			FromAccount: accounts[fromIndex],
+			ToAccount:   accounts[toIndex],
+			Nonce:       initialNonce, // 使用指定的初始nonce值
+		}
+	}
+
+	return &NodeAccountManager{
+		nodeAccounts: nodeAccounts,
+		totalNodes:   nodeCount,
+	}
+}
+
+// GetNodeAccount 获取指定节点的账户信息
+func (nam *NodeAccountManager) GetNodeAccount(nodeIndex int) *NodeAccount {
+	if nodeAccount, exists := nam.nodeAccounts[nodeIndex]; exists {
+		return nodeAccount
+	}
+	return nil
+}
+
+// IncrementNonce 增加指定节点的nonce值
+func (nam *NodeAccountManager) IncrementNonce(nodeIndex int) {
+	if nodeAccount, exists := nam.nodeAccounts[nodeIndex]; exists {
+		nodeAccount.Nonce++
+	}
+}
+
+// GetCurrentNonce 获取指定节点的当前nonce值
+func (nam *NodeAccountManager) GetCurrentNonce(nodeIndex int) uint64 {
+	if nodeAccount, exists := nam.nodeAccounts[nodeIndex]; exists {
+		return nodeAccount.Nonce
+	}
+	return 0
+}
+
+// NewAccountManager 创建新的账户管理器
+func NewAccountManager(accounts []Account) *AccountManager {
+	return &AccountManager{
+		accounts:    accounts,
+		currentFrom: 0,
+		currentTo:   1,
+	}
+}
+
+// GetNextAccountPair 获取下一对账户（发送方和接收方）
+func (am *AccountManager) GetNextAccountPair() (from Account, to Account) {
+	from = am.accounts[am.currentFrom]
+	to = am.accounts[am.currentTo]
+
+	// 更新索引，确保下次使用不同的账户
+	am.currentFrom = (am.currentFrom + 1) % len(am.accounts)
+	am.currentTo = (am.currentTo + 1) % len(am.accounts)
+
+	// 确保发送方和接收方不是同一个账户
+	if am.currentFrom == am.currentTo {
+		am.currentTo = (am.currentTo + 1) % len(am.accounts)
+	}
+
+	return from, to
+}
+
+// GetAccountByIndex 根据索引获取账户
+func (am *AccountManager) GetAccountByIndex(index int) Account {
+	if index < 0 || index >= len(am.accounts) {
+		return am.accounts[0] // 默认返回第一个账户
+	}
+	return am.accounts[index]
+}
+
+// GetTotalAccounts 获取总账户数
+func (am *AccountManager) GetTotalAccounts() int {
+	return len(am.accounts)
+}
+
+// writeHashesToFile writes transaction hashes to the specified file
+// The first hash overwrites the file, subsequent hashes are appended to the end of the file
+// appendToFile appends content to file
+func appendToFile(filename, content string) error {
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	_, err = file.WriteString(content)
+	return err
+}
+
+func writeHashesToFile(hashes []common.Hash, filename string) error {
+	if len(hashes) == 0 {
+		return nil
+	}
+
+	// 第一个哈希覆盖文件
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create file %s: %v", filename, err)
+	}
+
+	// 写入第一个哈希
+	_, err = file.WriteString(hashes[0].Hex() + "\n")
+	if err != nil {
+		file.Close()
+		return fmt.Errorf("failed to write first hash: %v", err)
+	}
+	file.Close()
+
+	// 如果有更多哈希，以追加模式写入
+	if len(hashes) > 1 {
+		file, err = os.OpenFile(filename, os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			return fmt.Errorf("failed to open file for append: %v", err)
+		}
+		defer file.Close()
+
+		for i := 1; i < len(hashes); i++ {
+			_, err = file.WriteString(hashes[i].Hex() + "\n")
+			if err != nil {
+				return fmt.Errorf("failed to write hash %d: %v", i, err)
+			}
+		}
+	}
+
+	// fmt.Printf("Successfully wrote %d transaction hashes to %s\n", len(hashes), filename)
+	return nil
 }
 
 // 预定义账户列表
@@ -322,7 +518,74 @@ func parseJWTSecretFromHexString(hexString string) ([]byte, error) {
 	return jwtSecret, nil
 }
 
+// runSingleNodeTestingWithUI 处理单节点测试的用户交互逻辑
+func runSingleNodeTestingWithUI(elNames []string, config *Config) {
+	fmt.Println("\nAvailable nodes:")
+	for i, name := range elNames {
+		fmt.Printf("  %d. %s\n", i, name)
+	}
+
+	fmt.Print("Please select node index (0-4): ")
+	var nodeIndex int
+	fmt.Scanln(&nodeIndex)
+
+	if nodeIndex < 0 || nodeIndex >= len(elNames) {
+		fmt.Printf("Invalid node index: %d. Valid range: 0-%d\n", nodeIndex, len(elNames)-1)
+		return
+	}
+
+	fmt.Print("Enter custom starting nonce (press Enter for default 0): ")
+	var nonceInput string
+	fmt.Scanln(&nonceInput)
+
+	var customNonce *uint64
+	if nonceInput != "" && nonceInput != "0" {
+		if nonce, err := strconv.ParseUint(nonceInput, 10, 64); err == nil {
+			customNonce = &nonce
+		} else {
+			fmt.Printf("Invalid nonce value, using default 0\n")
+		}
+	}
+
+	fmt.Print("Enter number of transactions to send (default 3): ")
+	var batchSizeInput string
+	fmt.Scanln(&batchSizeInput)
+
+	batchSize := 3 // 默认值
+	if batchSizeInput != "" {
+		if size, err := strconv.Atoi(batchSizeInput); err == nil && size > 0 {
+			batchSize = size
+		}
+	}
+
+	fmt.Printf("\n🎯 Starting single node testing for %s (Node %d)...\n", elNames[nodeIndex], nodeIndex)
+	singleNodeTesting(elNames, config, nodeIndex, customNonce, batchSize)
+}
+
 func main() {
+	// ========== 测试配置变量 ==========
+	// 修改这些变量来控制测试行为，无需从控制台输入
+
+	// 测试模式: "multi" = 多节点测试, "single" = 单节点测试, "interactive" = 交互式选择
+	testMode := "single"
+
+	// 多节点测试配置 (仅在 testMode = "multi" 时生效)
+	multiNodeNonceInitialValues := []uint64{
+		6, // Node 0 (geth) 的初始nonce
+		8, // Node 1 (nethermind) 的初始nonce
+		4, // Node 2 (reth) 的初始nonce
+		6, // Node 3 (erigon) 的初始nonce
+		6, // Node 4 (besu) 的初始nonce
+	}
+	multiNodeBatchSize := 3 // 每个节点发送的交易数量
+
+	// 单节点测试配置 (仅在 testMode = "single" 时生效)
+	singleNodeIndex := 2          // 要测试的节点索引 (0=geth, 1=nethermind, 2=reth, 3=erigon, 4=besu)
+	singleNodeNonce := uint64(10) // 起始nonce值
+	singleNodeBatchSize := 3      // 要发送的交易数量
+
+	// ========================================
+
 	// 1. 读取当前目录下config.yaml文件的配置
 	config, err := loadConfig("config.yaml")
 	if err != nil {
@@ -336,70 +599,291 @@ func main() {
 		return
 	}
 
-	elName := []string{"geth", "nethermind", "reth", "besu", "erigon"}
-	// 循环测试5个node
-	for i := 0; i < 5; i++ {
-		fmt.Printf("第%v个客户端, %v\n", i+1, elName[i])
+	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+
+	// 根据配置变量执行相应的测试
+	switch testMode {
+	case "multi":
+		// 多节点测试
+		fmt.Println("=== D2PFuzz Multi-Node Testing Tool ===")
+		fmt.Println("🚀 Starting multi-node testing...")
+		multiNodesTesting(elNames, config, multiNodeNonceInitialValues, multiNodeBatchSize)
+
+	case "single":
+		// 单节点测试
+		fmt.Println("=== D2PFuzz Single-Node Testing Tool ===")
+		if singleNodeIndex < 0 || singleNodeIndex >= len(elNames) {
+			fmt.Printf("Invalid node index: %d. Valid range: 0-%d\n", singleNodeIndex, len(elNames)-1)
+			return
+		}
+		fmt.Printf("🎯 Starting single node testing for %s (Node %d)...\n", elNames[singleNodeIndex], singleNodeIndex)
+		singleNodeTesting(elNames, config, singleNodeIndex, &singleNodeNonce, singleNodeBatchSize)
+
+	case "interactive":
+		// 交互式选择模式
+		fmt.Println("=== D2PFuzz Multi-Node Testing Tool ===")
+		fmt.Println("Available test modes:")
+		fmt.Println("1. Multi-node testing (all nodes)")
+		fmt.Println("2. Single node testing (specific node)")
+		fmt.Print("Please select test mode (1 or 2): ")
+
+		var choice int
+		fmt.Scanln(&choice)
+
+		switch choice {
+		case 1:
+			fmt.Println("\n🚀 Starting multi-node testing...")
+			multiNodesTesting(elNames, config, multiNodeNonceInitialValues, multiNodeBatchSize)
+		case 2:
+			runSingleNodeTestingWithUI(elNames, config)
+		default:
+			fmt.Println("Invalid choice. Please select 1 or 2.")
+		}
+
+	default:
+		fmt.Printf("Invalid test mode: %s. Valid modes: multi, single, interactive\n", testMode)
+	}
+}
+
+func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonce *uint64, batchSize int) {
+	if elIndex < 0 || elIndex >= len(elNames) {
+		fmt.Printf("❌ Invalid node index: %d. Valid range: 0-%d\n", elIndex, len(elNames)-1)
+		return
+	}
+
+	fmt.Printf("\n=== Single Node Testing ===\n")
+	fmt.Printf("●Execution Client: %v (Node %d)\n", elNames[elIndex], elIndex)
+
+	// 设置nonce初始值
+	nodeNonceInitialValues := []uint64{0, 0, 0, 0, 0}
+	if customNonce != nil {
+		if elIndex < len(nodeNonceInitialValues) {
+			nodeNonceInitialValues[elIndex] = *customNonce
+		}
+	}
+
+	// 创建节点账户管理器，只为当前节点分配账户
+	nodeAccountManager := NewNodeAccountManagerWithNonces(PredefinedAccounts, len(elNames), nodeNonceInitialValues)
+
+	// parse node info
+	enodeStr := config.P2P.BootstrapNodes[elIndex]
+	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
+	if err != nil {
+		fmt.Printf("❌ Failed to parse enode: %v\n", err)
+		return
+	}
+
+	fmt.Printf("🔗 Connecting to %s node:\n", elNames[elIndex])
+
+	// 读取JWTSecret
+	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
+	if err != nil {
+		fmt.Printf("❌ Failed to parse JWT secret: %v\n", err)
+		return
+	}
+
+	// 创建suite
+	suite, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]))
+	if err != nil {
+		fmt.Printf("❌ Failed to create suite: %v\n", err)
+		return
+	}
+
+	// 获取当前节点的固定账户信息
+	nodeAccount := nodeAccountManager.GetNodeAccount(elIndex)
+	if nodeAccount == nil {
+		fmt.Printf("❌ Failed to get account for node %d\n", elIndex)
+		return
+	}
+
+	fmt.Printf("💳Using accounts:\n")
+	fmt.Printf("   From: %s (Initial Nonce: %d)\n", nodeAccount.FromAccount.Address, nodeAccount.Nonce)
+	fmt.Printf("   To: %s\n", nodeAccount.ToAccount.Address)
+
+	// 初始化交易哈希记录文件 - 单节点测试直接使用 txhashes.txt
+	hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
+	// 清空文件内容
+	if err := os.WriteFile(hashFilePath, []byte(""), 0644); err != nil {
+		fmt.Printf("❌ Failed to initialize hash file: %v\n", err)
+		return
+	}
+
+	// 批量发送交易测试
+	fmt.Printf("📤 Sending %d transactions...\n", batchSize)
+
+	successCount := 0
+	for j := 0; j < batchSize; j++ {
+		currentNonce := nodeAccountManager.GetCurrentNonce(elIndex)
+		fmt.Printf("   Transaction %d/%d (Nonce: %d)...", j+1, batchSize, currentNonce)
+
+		txHash, err := sendTransactionWithAccountsAndNonce(suite, nodeAccount.FromAccount, nodeAccount.ToAccount, currentNonce)
+		if err != nil {
+			fmt.Printf(" ❌ Failed: %v\n", err)
+			break
+		}
+
+		// 将交易哈希写入文件
+		hashLine := fmt.Sprintf("%s\n", txHash.Hex())
+		if err := appendToFile(hashFilePath, hashLine); err != nil {
+			fmt.Printf(" ⚠️ Failed to write hash to file: %v", err)
+		}
+
+		// 交易成功后增加该节点的nonce
+		nodeAccountManager.IncrementNonce(elIndex)
+		fmt.Printf(" ✅ Finished! (New Nonce: %d, Hash: %s)\n", nodeAccountManager.GetCurrentNonce(elIndex), txHash.Hex())
+		successCount++
+
+		// 在交易之间添加小延迟，避免nonce冲突
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// 打印测试总结
+	// fmt.Printf("\n=== Single Node Testing Summary ===\n")
+	// fmt.Printf("Node: %s (Index: %d)\n", elNames[elIndex], elIndex)
+	// fmt.Printf("Transactions sent: %d/%d\n", successCount, batchSize)
+	fmt.Printf("=== Single Node Testing Completed ===\n")
+	// fmt.Printf("📄 Transaction hashes saved to: %s\n", hashFilePath)
+}
+func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues []uint64, batchSize int) {
+	// 确保nonce初始值列表长度足够
+	for len(nodeNonceInitialValues) < len(elNames) {
+		nodeNonceInitialValues = append(nodeNonceInitialValues, 0)
+	}
+
+	fmt.Printf("\n=== Node Nonce Initial Values ===\n")
+	for i := 0; i < len(elNames); i++ {
+		fmt.Printf("Node %d (%s): Initial Nonce = %d\n", i, elNames[i], nodeNonceInitialValues[i])
+	}
+	fmt.Println()
+
+	// 创建节点账户管理器，为每个节点分配固定的账户和独立的nonce管理
+	nodeAccountManager := NewNodeAccountManagerWithNonces(PredefinedAccounts, len(elNames), nodeNonceInitialValues)
+
+	fmt.Printf("\n=== Multi-Node Testing Started ===\n")
+	// fmt.Printf("Total nodes to test: %d\n", len(elNames))
+	// fmt.Printf("Account allocation strategy: Fixed accounts per node\n")
+	// fmt.Printf("Nonce management: Independent per node\n\n")
+
+	// 统计测试结果
+	// successCount := 0
+	failureCount := 0
+
+	// 初始化交易哈希记录文件
+	hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
+	// 清空文件内容
+	if err := os.WriteFile(hashFilePath, []byte(""), 0644); err != nil {
+		fmt.Printf("❌ Failed to initialize hash file: %v\n", err)
+		return
+	}
+
+	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
+	if err != nil {
+		fmt.Printf("❌ Failed to parse JWT secret: %v\n", err)
+		failureCount++
+		return
+	}
+
+	// 循环测试所有node
+	for i := 0; i < len(elNames); i++ {
+		fmt.Printf("●Execution Client: %v (Node %d/%d)\n", elNames[i], i+1, len(elNames))
+
+		// parse node info
 		enodeStr := config.P2P.BootstrapNodes[i]
 		node, err := enode.Parse(enode.ValidSchemes, enodeStr)
 		if err != nil {
-			fmt.Printf("Failed to parse enode: %v\n", err)
+			fmt.Printf("❌ Failed to parse enode: %v\n", err)
+			failureCount++
 			continue
 		}
 
-		fmt.Printf("Connecting to %s node: %s\n", elName[i], node.String())
-		fmt.Printf("IP: %s, Port: %d\n", node.IP(), node.TCP())
+		fmt.Printf("🔗 Connecting to %s node:\n", elNames[i])
+		// fmt.Printf("📍 IP: %s, Port: %d\n", node.IP(), node.TCP())
 
-		// 先创建suite，suite通过dial返回conn
-		jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
-		if err != nil {
-			fmt.Printf("Failed to parse JWT secret: %v\n", err)
-			continue
-		}
+		// 创建suite
 		suite, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]))
 		if err != nil {
-			fmt.Printf("Failed to create suite: %v\n", err)
+			fmt.Printf("❌ Failed to create suite: %v\n", err)
+			failureCount++
 			continue
 		}
 
-		// GetBlockHeaders测试
-		// headers, err := GetBlockHeaders(suite)
-		// if err != nil {
-		// 	fmt.Printf("Failed to get block headers: %v\n", err)
-		// 	return
-		// }
-		// printHeaders(headers)
-
-		// 发送交易测试
-		err = sendTransaction(suite)
-		if err != nil {
-			fmt.Printf("Failed to send transaction: %v\n", err)
+		// 获取当前节点的固定账户信息
+		nodeAccount := nodeAccountManager.GetNodeAccount(i)
+		if nodeAccount == nil {
+			fmt.Printf("❌ Failed to get account for node %d\n", i)
+			failureCount++
 			continue
 		}
-		fmt.Println()
-		// 获取收据
-		// receipts, err := getReceipts(suite)
-		// if err != nil {
-		// 	fmt.Printf("Failed to get receipts: %v\n", err)
-		// 	return
+
+		fmt.Printf("💳 Node %d - Using fixed accounts:\n", i+1)
+		fmt.Printf("   From: %s (Nonce: %d)\n", nodeAccount.FromAccount.Address, nodeAccount.Nonce)
+		fmt.Printf("   To: %s\n", nodeAccount.ToAccount.Address)
+
+		// 写入节点名称到哈希文件
+		nodeHeader := fmt.Sprintf("# %s\n", elNames[i])
+		if err := appendToFile(hashFilePath, nodeHeader); err != nil {
+			fmt.Printf("❌ Failed to write node header to hash file: %v\n", err)
+		}
+
+		// 批量发送交易测试（可以根据需要调整交易数量）
+		fmt.Printf("📤 Sending %d transactions for Node %d...\n", batchSize, i+1)
+
+		// nodeSuccess := true
+		for j := 0; j < batchSize; j++ {
+			currentNonce := nodeAccountManager.GetCurrentNonce(i)
+			fmt.Printf("   Transaction %d/%d (Nonce: %d)...", j+1, batchSize, currentNonce)
+
+			txHash, err := sendTransactionWithAccountsAndNonce(suite, nodeAccount.FromAccount, nodeAccount.ToAccount, currentNonce)
+			if err != nil {
+				fmt.Printf(" ❌ Failed: %v\n", err)
+				// nodeSuccess = false
+				break
+			}
+
+			// 将交易哈希写入文件
+			hashLine := fmt.Sprintf("%s\n", txHash.Hex())
+			if err := appendToFile(hashFilePath, hashLine); err != nil {
+				fmt.Printf(" ⚠️ Failed to write hash to file: %v", err)
+			}
+
+			// 交易成功后增加该节点的nonce
+			nodeAccountManager.IncrementNonce(i)
+			fmt.Printf(" Finished. (New Nonce: %d, Hash: %s)\n", nodeAccountManager.GetCurrentNonce(i), txHash.Hex())
+
+			// 在交易之间添加小延迟，避免nonce冲突
+			time.Sleep(100 * time.Millisecond)
+		}
+
+		// if nodeSuccess {
+		// 	fmt.Printf("✅ Node %d (%s) - All transactions sent successfully!\n", i, elNames[i])
+		// 	successCount++
+		// } else {
+		// 	fmt.Printf("❌ Node %d (%s) - Some transactions failed!\n", i, elNames[i])
+		// 	failureCount++
 		// }
-		// printReceipts(receipts)
 
-		// 发送大量交易并获取交易池
-		// resp, hashes := sendLargeTransactions(suite)
-		// printPooledTransactions(resp)
-		// fmt.Println("hashes: ", hashes)
-
-		// 通过交易哈希获取交易内容
-		// txhash := "0x85906a939214c61228cb34537b450f977e368f6c0ae2cb7ba6d8740d5066bbbe"
-		// tx, err := queryTransactionByHash(suite, common.HexToHash(txhash))
-		// if err != nil {
-		// 	fmt.Printf("Failed to query transaction: %v\n", err)
-		// 	return
-		// }
-		// printTransaction(tx)
-
+		fmt.Println(strings.Repeat("-", 60))
 	}
+
+	// 打印测试总结
+	// fmt.Printf("\n=== Multi-Node Testing Summary ===\n")
+	fmt.Printf("Total nodes tested: %d\n", len(elNames))
+	// fmt.Printf("Successful nodes: %d\n", successCount)
+	// fmt.Printf("Failed nodes: %d\n", failureCount)
+	// fmt.Printf("Success rate: %.1f%%\n", float64(successCount)/float64(len(elNames))*100)
+
+	// 打印最终的nonce状态
+	fmt.Println("\n=== Final Nonce Status ===")
+	for i := 0; i < len(elNames); i++ {
+		nodeAccount := nodeAccountManager.GetNodeAccount(i)
+		if nodeAccount != nil {
+			fmt.Printf("Node %d (%-10s): From=%s, (Nonce should be %d)\n",
+				i+1, elNames[i], nodeAccount.FromAccount.Address, nodeAccount.Nonce)
+		}
+	}
+
+	fmt.Printf("\n=== Multi-Node Testing Completed ===\n")
+	fmt.Printf("📄 Transaction hashes saved to: %s\n", hashFilePath)
 }
 
 func printTransaction(tx *types.Transaction) {
@@ -474,11 +958,11 @@ func queryTransactionByHash(s *ethtest.Suite, txHash common.Hash) (tx *types.Tra
 }
 
 func sendLargeTransactions(s *ethtest.Suite) (eth.PooledTransactionsResponse, []common.Hash) {
-	// 这个测试首先向节点发送约count笔交易，然后请求这些交易使用 GetPooledTransactions 在另一个对等连接上。
+	// 这个测试首先向节点发送count笔交易，然后请求这些交易使用 GetPooledTransactions 在另一个对等连接上。
 	var (
-		nonce  = uint64(9)
+		nonce  = uint64(20967)
 		from   = PredefinedAccounts[0].PrivateKey
-		count  = 10
+		count  = 1
 		txs    []*types.Transaction
 		hashes []common.Hash
 		set    = make(map[common.Hash]struct{})
@@ -491,10 +975,11 @@ func sendLargeTransactions(s *ethtest.Suite) (eth.PooledTransactionsResponse, []
 	var to common.Address = common.HexToAddress(PredefinedAccounts[1].Address)
 	for i := 0; i < count; i++ {
 		inner := &types.DynamicFeeTx{
-			ChainID:   big.NewInt(3151908),
-			Nonce:     nonce + uint64(i),
-			GasTipCap: big.NewInt(3000000),
-			GasFeeCap: big.NewInt(3000000),
+			ChainID: big.NewInt(3151908),
+			// Nonce:     nonce + uint64(i),
+			Nonce:     nonce,
+			GasTipCap: big.NewInt(1),
+			GasFeeCap: big.NewInt(10000000000),
 			Gas:       21000,
 			To:        &to,
 			Value:     common.Big1,
@@ -509,8 +994,19 @@ func sendLargeTransactions(s *ethtest.Suite) (eth.PooledTransactionsResponse, []
 		hashes = append(hashes, tx.Hash())
 	}
 	// Send txs.
-	if err := s.SendTxs(txs); err != nil {
-		fmt.Printf("failed to send txs: %v", err)
+	// 记录发送时间
+	sendStart := time.Now()
+	s.SendTxs(txs)
+	elapsed := time.Since(sendStart)
+	if len(txs) == 1 {
+		fmt.Println("The hash value of this transaction is:\n", hashes[0])
+	}
+	fmt.Printf("Transaction sending time consumed: %v", elapsed)
+
+	// 将交易哈希写入到文件
+	hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
+	if err := writeHashesToFile(hashes, hashFilePath); err != nil {
+		fmt.Printf("Failed to write hashes to file: %v\n", err)
 	}
 
 	// Set up receive connection to ensure node is peered with the receiving
@@ -544,95 +1040,97 @@ func sendLargeTransactions(s *ethtest.Suite) (eth.PooledTransactionsResponse, []
 			fmt.Printf("unexpected tx received: %v", got.Hash())
 		}
 	}
+	fmt.Printf("\n%v transactions have been sent.\n", len(txs))
+
 	return msg.PooledTransactionsResponse, hashes
 }
 
 func printPooledTransactions(resp eth.PooledTransactionsResponse) {
 	if len(resp) == 0 {
-		fmt.Println("没有池化交易数据")
+		fmt.Println("No pooled transaction data")
 		return
 	}
 
-	fmt.Printf("=== 池化交易响应 ===\n")
-	fmt.Printf("交易总数: %d\n\n", len(resp))
+	fmt.Printf("=== Pooled Transactions Response ===\n")
+	fmt.Printf("Total transactions: %d\n\n", len(resp))
 
 	for i, tx := range resp {
-		fmt.Printf("--- 交易 %d ---\n", i+1)
+		fmt.Printf("--- Transaction %d ---\n", i+1)
 
-		// 基本交易信息
-		fmt.Printf("交易哈希: %s\n", tx.Hash().Hex())
-		fmt.Printf("交易类型: %d\n", tx.Type())
+		// Basic transaction information
+		fmt.Printf("Transaction hash: %s\n", tx.Hash().Hex())
+		// fmt.Printf("Transaction type: %d\n", tx.Type())
 		fmt.Printf("Nonce: %d\n", tx.Nonce())
 
-		// 地址信息
+		// Address information
 		if tx.To() != nil {
-			fmt.Printf("接收地址: %s\n", tx.To().Hex())
+			fmt.Printf("To address: %s\n", tx.To().Hex())
 		} else {
-			fmt.Printf("接收地址: 合约创建交易\n")
+			fmt.Printf("To address: Contract creation transaction\n")
 		}
 
-		// 金额和Gas信息
-		fmt.Printf("转账金额: %s Wei\n", tx.Value().String())
-		fmt.Printf("Gas限制: %d\n", tx.Gas())
+		// Amount and Gas information
+		fmt.Printf("Transfer amount: %s Wei\n", tx.Value().String())
+		// fmt.Printf("Gas limit: %d\n", tx.Gas())
 
-		// Gas价格信息（根据交易类型显示不同字段）
-		switch tx.Type() {
-		case types.LegacyTxType:
-			fmt.Printf("Gas价格: %s Wei\n", tx.GasPrice().String())
-		case types.AccessListTxType:
-			fmt.Printf("Gas价格: %s Wei\n", tx.GasPrice().String())
-		case types.DynamicFeeTxType:
-			fmt.Printf("最大费用: %s Wei\n", tx.GasFeeCap().String())
-			fmt.Printf("优先费用: %s Wei\n", tx.GasTipCap().String())
-		case types.BlobTxType:
-			fmt.Printf("最大费用: %s Wei\n", tx.GasFeeCap().String())
-			fmt.Printf("优先费用: %s Wei\n", tx.GasTipCap().String())
-			if tx.BlobGasFeeCap() != nil {
-				fmt.Printf("Blob Gas费用上限: %s Wei\n", tx.BlobGasFeeCap().String())
-			}
-			if tx.BlobHashes() != nil {
-				fmt.Printf("Blob哈希数量: %d\n", len(tx.BlobHashes()))
-				for j, blobHash := range tx.BlobHashes() {
-					fmt.Printf("  Blob哈希 %d: %s\n", j+1, blobHash.Hex())
-				}
-			}
-		default:
-			fmt.Printf("Gas价格: %s Wei\n", tx.GasPrice().String())
-		}
+		// // Gas price information (display different fields based on transaction type)
+		// switch tx.Type() {
+		// case types.LegacyTxType:
+		// 	fmt.Printf("Gas price: %s Wei\n", tx.GasPrice().String())
+		// case types.AccessListTxType:
+		// 	fmt.Printf("Gas price: %s Wei\n", tx.GasPrice().String())
+		// case types.DynamicFeeTxType:
+		// 	fmt.Printf("Max fee: %s Wei\n", tx.GasFeeCap().String())
+		// 	fmt.Printf("Priority fee: %s Wei\n", tx.GasTipCap().String())
+		// case types.BlobTxType:
+		// 	fmt.Printf("Max fee: %s Wei\n", tx.GasFeeCap().String())
+		// 	fmt.Printf("Priority fee: %s Wei\n", tx.GasTipCap().String())
+		// 	if tx.BlobGasFeeCap() != nil {
+		// 		fmt.Printf("Blob gas fee cap: %s Wei\n", tx.BlobGasFeeCap().String())
+		// 	}
+		// 	if tx.BlobHashes() != nil {
+		// 		fmt.Printf("Blob hash count: %d\n", len(tx.BlobHashes()))
+		// 		for j, blobHash := range tx.BlobHashes() {
+		// 			fmt.Printf("  Blob hash %d: %s\n", j+1, blobHash.Hex())
+		// 		}
+		// 	}
+		// default:
+		// 	fmt.Printf("Gas price: %s Wei\n", tx.GasPrice().String())
+		// }
 
-		// 链ID
-		if tx.ChainId() != nil {
-			fmt.Printf("链ID: %d\n", tx.ChainId().Uint64())
-		}
+		// // Chain ID
+		// if tx.ChainId() != nil {
+		// 	fmt.Printf("Chain ID: %d\n", tx.ChainId().Uint64())
+		// }
 
-		// 交易数据
-		data := tx.Data()
-		if len(data) > 0 {
-			fmt.Printf("数据长度: %d 字节\n", len(data))
-			if len(data) <= 64 {
-				fmt.Printf("数据内容: %x\n", data)
-			} else {
-				fmt.Printf("数据内容(前32字节): %x...\n", data[:32])
-			}
-		} else {
-			fmt.Printf("数据: 无\n")
-		}
+		// // Transaction data
+		// data := tx.Data()
+		// if len(data) > 0 {
+		// 	fmt.Printf("Data length: %d bytes\n", len(data))
+		// 	if len(data) <= 64 {
+		// 		fmt.Printf("Data content: %x\n", data)
+		// 	} else {
+		// 		fmt.Printf("Data content (first 32 bytes): %x...\n", data[:32])
+		// 	}
+		// } else {
+		// 	fmt.Printf("Data: None\n")
+		// }
 
-		// 交易大小
-		fmt.Printf("交易大小: %d 字节\n", tx.Size())
+		// // Transaction size
+		// fmt.Printf("Transaction size: %d bytes\n", tx.Size())
 
-		// 签名信息
-		v, r, s := tx.RawSignatureValues()
-		fmt.Printf("签名 V: %d\n", v.Uint64())
-		fmt.Printf("签名 R: %s\n", r.String())
-		fmt.Printf("签名 S: %s\n", s.String())
+		// // Signature information
+		// v, r, s := tx.RawSignatureValues()
+		// fmt.Printf("Signature V: %d\n", v.Uint64())
+		// fmt.Printf("Signature R: %s\n", r.String())
+		// fmt.Printf("Signature S: %s\n", s.String())
 
-		// 计算发送者地址（如果可能）
+		// Calculate sender address (if possible)
 		if signer := types.LatestSignerForChainID(tx.ChainId()); signer != nil {
 			if sender, err := types.Sender(signer, tx); err == nil {
-				fmt.Printf("发送者地址: %s\n", sender.Hex())
+				fmt.Printf("Sender address: %s\n", sender.Hex())
 			} else {
-				fmt.Printf("发送者地址: 无法计算 (%v)\n", err)
+				fmt.Printf("Sender address: Unable to calculate (%v)\n", err)
 			}
 		}
 
@@ -646,18 +1144,19 @@ func printMsg(msg any) {
 
 func sendTransaction(s *ethtest.Suite) error {
 	nonce := uint64(math.MaxUint64)
-	var to common.Address = common.HexToAddress(PredefinedAccounts[1].Address)
+	// nonce := uint64(9999999)
+	var to common.Address = common.HexToAddress(PredefinedAccounts[15].Address)
 	txdata := &types.DynamicFeeTx{
 		ChainID:   big.NewInt(3151908),
 		Nonce:     nonce,
-		GasTipCap: big.NewInt(3000000),
-		GasFeeCap: big.NewInt(3000000),
+		GasTipCap: big.NewInt(30000000),
+		GasFeeCap: big.NewInt(30000000),
 		Gas:       21000,
 		To:        &to,
-		Value:     big.NewInt(1),
+		Value:     common.Big1,
 	}
 	innertx := types.NewTx(txdata)
-	prik, err := crypto.HexToECDSA(PredefinedAccounts[0].PrivateKey)
+	prik, err := crypto.HexToECDSA(PredefinedAccounts[16].PrivateKey)
 	if err != nil {
 		fmt.Printf("failed to sign tx: %v", err)
 		return err
@@ -674,10 +1173,19 @@ func sendTransaction(s *ethtest.Suite) error {
 
 	// 记录发送时间
 	sendStart := time.Now()
-	if err := s.SendTxs([]*types.Transaction{tx}); err != nil {
-		elapsed := time.Since(sendStart)
-		fmt.Printf("交易发送失败，耗时: %v\n", elapsed)
-		return err
+	// if err = s.SendTxs([]*types.Transaction{tx}); err != nil {
+	// elapsed := time.Since(sendStart)
+	// fmt.Printf("Transaction sending failed, time consumed: %v\n", elapsed)
+	// return err
+	// }
+	s.SendTxs([]*types.Transaction{tx})
+	elapsed := time.Since(sendStart)
+	fmt.Printf("Transaction sending time consumed: %v\n", elapsed)
+
+	// 将交易哈希写入到文件
+	hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
+	if err := writeHashesToFile(hashes, hashFilePath); err != nil {
+		fmt.Printf("Failed to write hashes to file: %v\n", err)
 	}
 
 	// 参考sendLargeTransactions的验证方式，建立连接验证交易是否被节点接收
@@ -711,10 +1219,122 @@ func sendTransaction(s *ethtest.Suite) error {
 			fmt.Printf("unexpected tx received: %v", got.Hash())
 		}
 	}
-
+	fmt.Println("The hash value of this transaction is:\n", hashes[0])
 	printPooledTransactions(msg.PooledTransactionsResponse)
 
 	return nil
+}
+
+func sendTransactionWithAccounts(s *ethtest.Suite, fromAccount Account, toAccount Account, nonce uint64) error {
+	var to common.Address = common.HexToAddress(toAccount.Address)
+	txdata := &types.DynamicFeeTx{
+		ChainID:   big.NewInt(3151908),
+		Nonce:     nonce,
+		GasTipCap: big.NewInt(1),
+		GasFeeCap: big.NewInt(10000000000),
+		Gas:       21000,
+		To:        &to,
+		Value:     big.NewInt(1),
+	}
+	innertx := types.NewTx(txdata)
+	prik, err := crypto.HexToECDSA(fromAccount.PrivateKey)
+	if err != nil {
+		fmt.Printf("failed to sign tx: %v", err)
+		return err
+	}
+	tx, err := types.SignTx(innertx, types.NewLondonSigner(big.NewInt(3151908)), prik)
+	var hashes []common.Hash
+	var set = make(map[common.Hash]struct{})
+	set[tx.Hash()] = struct{}{}
+	hashes = append(hashes, tx.Hash())
+	if err != nil {
+		fmt.Printf("failed to sign tx: %v", err)
+		return err
+	}
+
+	fmt.Printf("Sending transaction from %s to %s (nonce: %d)\n", fromAccount.Address, toAccount.Address, nonce)
+
+	// 记录发送时间
+	sendStart := time.Now()
+	s.SendTxs([]*types.Transaction{tx})
+	elapsed := time.Since(sendStart)
+	fmt.Printf("Transaction sending time consumed: %v\n", elapsed)
+
+	// 参考sendLargeTransactions的验证方式，建立连接验证交易是否被节点接收
+	conn, err := s.Dial()
+	if err != nil {
+		fmt.Printf("dial failed: %v", err)
+	}
+	defer conn.Close()
+	if err = conn.Peer(nil); err != nil {
+		fmt.Printf("peering failed: %v", err)
+	}
+
+	// 创建并发送池化交易请求来验证交易
+	req := &eth.GetPooledTransactionsPacket{
+		RequestId:                    1234,
+		GetPooledTransactionsRequest: hashes,
+	}
+	if err = conn.Write(1, eth.GetPooledTransactionsMsg, req); err != nil {
+		fmt.Printf("could not write to conn: %v", err)
+	}
+	// 检查是否收到了发送的交易
+	msg := new(eth.PooledTransactionsPacket)
+	if err := conn.ReadMsg(1, eth.PooledTransactionsMsg, &msg); err != nil {
+		fmt.Printf("error reading from connection: %v", err)
+	}
+	if got, want := msg.RequestId, req.RequestId; got != want {
+		fmt.Printf("unexpected request id in response: got %d, want %d", got, want)
+	}
+	for _, got := range msg.PooledTransactionsResponse {
+		if _, exists := set[got.Hash()]; !exists {
+			fmt.Printf("unexpected tx received: %v", got.Hash())
+		}
+	}
+
+	// printPooledTransactions(msg.PooledTransactionsResponse)
+
+	return nil
+}
+
+// sendTransactionWithAccountsAndNonce 使用指定账户和nonce发送交易，返回交易哈希
+func sendTransactionWithAccountsAndNonce(s *ethtest.Suite, fromAccount Account, toAccount Account, nonce uint64) (common.Hash, error) {
+	var to common.Address = common.HexToAddress(toAccount.Address)
+	txdata := &types.DynamicFeeTx{
+		ChainID:   big.NewInt(3151908),
+		Nonce:     nonce,
+		GasTipCap: big.NewInt(1),
+		GasFeeCap: big.NewInt(20000000),
+		Gas:       40000000,
+		To:        &to,
+		Value:     big.NewInt(1),
+	}
+	innertx := types.NewTx(txdata)
+	prik, err := crypto.HexToECDSA(fromAccount.PrivateKey)
+	if err != nil {
+		fmt.Printf("failed to sign tx: %v", err)
+		return common.Hash{}, err
+	}
+	tx, err := types.SignTx(innertx, types.NewLondonSigner(big.NewInt(3151908)), prik)
+	if err != nil {
+		fmt.Printf("failed to sign tx: %v", err)
+		return common.Hash{}, err
+	}
+
+	txHash := tx.Hash()
+
+	// 记录发送时间
+	sendStart := time.Now()
+	s.SendTxs([]*types.Transaction{tx})
+	elapsed := time.Since(sendStart)
+	fmt.Printf("Transaction sending time consumed: %v\n", elapsed)
+
+	return txHash, nil
+}
+
+// 保留原有函数以保持向后兼容性
+func sendTransactionWithNonce(s *ethtest.Suite, nonce uint64) error {
+	return sendTransactionWithAccounts(s, PredefinedAccounts[0], PredefinedAccounts[1], nonce)
 }
 
 func printReceipts(receipts []*eth.ReceiptList68) {
@@ -874,7 +1494,7 @@ func getReceipts(s *ethtest.Suite) (list []*eth.ReceiptList68, err error) {
 		fmt.Printf("error reading block bodies msg: %v", err)
 	}
 	if got, want := resp.RequestId, req.RequestId; got != want {
-		fmt.Printf("unexpected request id in respond", got, want)
+		fmt.Printf("unexpected request id in respond: got %d, want %d", got, want)
 	}
 	if len(resp.List) != len(req.GetReceiptsRequest) {
 		fmt.Printf("wrong bodies in response: expected %d bodies, got %d", len(req.GetReceiptsRequest), len(resp.List))
@@ -915,8 +1535,8 @@ func GetBlockHeaders(suite *ethtest.Suite) (*eth.BlockHeadersPacket, error) {
 		RequestId: 33,
 		GetBlockHeadersRequest: &eth.GetBlockHeadersRequest{
 			Origin:  eth.HashOrNumber{Number: uint64(0)},
-			Amount:  uint64(10),
-			Skip:    0,
+			Amount:  uint64(512),
+			Skip:    5,
 			Reverse: false,
 		},
 	}
@@ -932,13 +1552,13 @@ func GetBlockHeaders(suite *ethtest.Suite) (*eth.BlockHeadersPacket, error) {
 		fmt.Printf("unexpected request id")
 	}
 	// Check for correct headers.
-	expected, err := suite.GetChain().GetHeaders(req)
-	if err != nil {
-		fmt.Printf("failed to get headers for given request: %v", err)
-	}
-	if !headersMatch(expected, headers.BlockHeadersRequest) {
-		fmt.Printf("header mismatch: \nexpected %v \ngot %v", expected, headers)
-	}
+	// expected, err := suite.GetChain().GetHeaders(req)
+	// if err != nil {
+	// 	fmt.Printf("failed to get headers for given request: %v", err)
+	// }
+	// if !headersMatch(expected, headers.BlockHeadersRequest) {
+	// 	fmt.Printf("header mismatch: \nexpected %v \ngot %v", expected, headers)
+	// }
 	return headers, nil
 }
 

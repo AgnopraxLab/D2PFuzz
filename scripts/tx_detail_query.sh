@@ -161,55 +161,55 @@ query_transaction_details() {
     local gas_price=$(echo "$tx_response" | grep -o '"gasPrice":"[^"]*"' | cut -d'"' -f4)
     local input_data=$(echo "$tx_response" | grep -o '"input":"[^"]*"' | cut -d'"' -f4)
     
-    # 基本交易信息
-    echo -e "\n${GREEN}📋 基本交易信息:${NC}"
+    # Basic transaction information
+    echo -e "\n${GREEN}📋 Basic Transaction Information:${NC}"
     echo "-" | tr ' ' '-' | head -c 50; echo
-    echo "交易哈希: $tx_hash"
-    echo "区块哈希: ${block_hash:-N/A}"
+    echo "Transaction Hash: $tx_hash"
+    echo "Block Hash: ${block_hash:-N/A}"
     if [[ -n "$block_number" && "$block_number" != "null" ]]; then
-        echo "区块号: $(format_number $(hex_to_dec "$block_number"))"
+        echo "Block Number: $(format_number $(hex_to_dec "$block_number"))"
     else
-        echo "区块号: 待确认"
+        echo "Block Number: Pending confirmation"
     fi
-    echo "交易索引: ${tx_index:+$(hex_to_dec "$tx_index")}"
-    echo "发送方: ${from_addr:-N/A}"
-    echo "接收方: ${to_addr:-合约创建}"
-    echo "转账金额: $(wei_to_ether "$value") ETH"
-    echo "Nonce: ${nonce:+$(hex_to_dec "$nonce")}"
+    echo "Transaction Index: ${tx_index:+$(hex_to_dec "$tx_index")}"
+    echo "From: ${from_addr:-N/A}"
+    echo "To: ${to_addr:-Contract Creation}"
+    echo "Transfer Amount: $(wei_to_ether "$value") ETH"
+
     
-    # Gas信息
-    echo -e "\n${YELLOW}⛽ Gas信息:${NC}"
+    # Gas information
+    echo -e "\n${YELLOW}⛽ Gas Information:${NC}"
     echo "-" | tr ' ' '-' | head -c 50; echo
     if [[ -n "$gas_limit" ]]; then
-        echo "Gas限制: $(format_number $(hex_to_dec "$gas_limit")) Gas"
+        echo "Gas Limit: $(format_number $(hex_to_dec "$gas_limit")) Gas"
     fi
     if [[ -n "$gas_price" ]]; then
-        echo "Gas价格: $(format_gas_price "$gas_price")"
+        echo "Gas Price: $(format_gas_price "$gas_price")"
     fi
     
-    # 输入数据
-    echo -e "\n${PURPLE}📝 输入数据:${NC}"
+    # Input data
+    echo -e "\n${PURPLE}📝 Input Data:${NC}"
     echo "-" | tr ' ' '-' | head -c 50; echo
     if [[ -z "$input_data" || "$input_data" == "0x" ]]; then
-        echo "无输入数据 (简单转账)"
+        echo "No input data (simple transfer)"
     else
         local data_length=${#input_data}
         local byte_length=$(( (data_length - 2) / 2 ))
-        echo "数据长度: $data_length 字符 ($byte_length 字节)"
+        echo "Data Length: $data_length characters ($byte_length bytes)"
         if [[ $data_length -gt 100 ]]; then
-            echo "数据预览: ${input_data:0:100}..."
+            echo "Data Preview: ${input_data:0:100}..."
         else
-            echo "完整数据: $input_data"
+            echo "Complete Data: $input_data"
         fi
         
-        # 函数选择器
+        # Function selector
         if [[ $data_length -ge 10 ]]; then
-            echo "函数选择器: ${input_data:0:10}"
+            echo "Function Selector: ${input_data:0:10}"
         fi
     fi
     
-    # 获取交易收据
-    echo -e "\n${CYAN}🧾 正在查询交易收据...${NC}"
+    # Get transaction receipt
+    echo -e "\n${CYAN}🧾 Querying transaction receipt...${NC}"
     local receipt_response=$(curl -s -X POST -H "Content-Type: application/json" \
         --data "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getTransactionReceipt\",\"params\":[\"$tx_hash\"],\"id\":1}" \
         --connect-timeout 10 --max-time 15 "$endpoint" 2>/dev/null)
