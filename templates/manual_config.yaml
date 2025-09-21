@@ -1,0 +1,38 @@
+# D2PFuzz Manual Testing Configuration Example
+# Suitable for: Manual debugging, development testing, P2P network testing
+
+mode: "manual"
+
+testMode: true
+
+p2p:
+  enabled: true
+  max_peers: 25
+  listen_port: 30303
+  bootstrap_nodes:
+    - "enode://8e7b1b24dc1b1d0685081523ea8d84d6d8c8493f42fc64a5e210d17f9bfe3594b389e893476de995905a1fcc48ccd268768e5fc4e6490863e4e1131f285efbbf@172.16.0.11:30303"
+    - "enode://7b3b1b24dc1b1d0685081523ea8d84d6d8c8493f42fc64a5e210d17f9bfe3594b389e893476de995905a1fcc48ccd268768e5fc4e6490863e4e1131f285efbbf@172.16.0.12:30303"
+    - "enode://9c4b1b24dc1b1d0685081523ea8d84d6d8c8493f42fc64a5e210d17f9bfe3594b389e893476de995905a1fcc48ccd268768e5fc4e6490863e4e1131f285efbbf@172.16.0.13:30303"
+    - "enode://ad5b1b24dc1b1d0685081523ea8d84d6d8c8493f42fc64a5e210d17f9bfe3594b389e893476de995905a1fcc48ccd268768e5fc4e6490863e4e1131f285efbbf@172.16.0.14:30303"
+    - "enode://be6b1b24dc1b1d0685081523ea8d84d6d8c8493f42fc64a5e210d17f9bfe3594b389e893476de995905a1fcc48ccd268768e5fc4e6490863e4e1131f285efbbf@172.16.0.15:30303"
+  jwt_secret: "f79ae8046bc11c9927afe911db7143c51a806c4a537cc08e0d37140b0192f430"
+
+server:
+  host: "localhost"
+  port: 8080
+  timeout: 30
+
+monitoring:
+  enabled: true
+  log_level: "debug"
+  report_interval: 30
+
+log:
+  directory: "./manual_logs"
+  template: "manual"
+  auto_generate: true
+  include_details: true
+
+accounts:
+  - address: "0x8943545177806ED17B9F23F0a21ee5948eCaa776"
+    private_key: "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"

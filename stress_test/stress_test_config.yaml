@@ -1,0 +1,97 @@
+# D2PFuzz 高TPS压力测试配置示例
+# 适用于：性能压力测试、极限负载测试
+
+# Server Configuration
+server:
+  host: "localhost"
+  port: 8080
+  timeout: 60  # 增加超时时间
+
+mode: "fuzz"
+
+# Transaction Fuzzing Configuration - 高TPS设置
+tx_fuzz:
+  enabled: true
+  chain_id: 3151908
+  max_gas_price: 50000000000  # 50 Gwei - 较高的Gas价格确保交易优先级
+  max_gas_limit: 10000000     # 10M gas - 更高的Gas限制
+  tx_per_second: 100          # 高TPS - 每秒100笔交易
+  fuzz_duration_sec: 300      # 5分钟压力测试
+  seed: 0
+  use_accounts: true
+  load_pattern_type: "ramp"   # 渐增模式，从低TPS逐渐增加
+  rpc_endpoints:
+    - "http://172.16.0.11:8545"
+    - "http://172.16.0.12:8545"
+    - "http://172.16.0.13:8545"
+    - "http://172.16.0.14:8545"
+    - "http://172.16.0.15:8545"
+  # 激进的重试设置
+  max_retries: 5
+  retry_delay: 500ms  # 更短的重试间隔
+  circuit_breaker: true
+  failure_threshold: 10  # 更高的失败阈值
+
+# P2P Network Configuration
+p2p:
+  max_peers: 100  # 更多的对等节点
+  listen_port: 30303
+  bootstrap_nodes:
+    - "enode://4dc05589714a2025cb9accf8a548a6ab801fc7d5e8607c54d4f4f759b73cd2b0a2034a751f511e1bd8851955eff53b93c08e7ee3ab0d379824dcf5f4c49e3eac@172.16.0.11:30303"  # el-1-geth-lighthouse (geth)
+    - "enode://4584eebaae4351b5048e86d1f339292d39e4552d90d9b13893681faaa6c89983ab494a0b1d4307389cc8eb286737b6c8f3bf5c771c1d6b1317236097d8e18d55@172.16.0.12:30303"  # el-2-nethermind-lighthouse (nethermind)
+    - "enode://b83a046a364b9336763df96bbb4cae692c36558592faa58a2e20ea36b9c4f9601c7d8bf4423d9a600c8b49adad6722100f1e5e27d1823315637c9010b63c13b5@172.16.0.13:30303"  # el-3-reth-lighthouse (reth)
+    - "enode://c6706b2ff16debd4aa3b3d912d33230360a5347c84167b84065dd3a09c91b783ecab339cee3f7cc0a9e3bba62fa29facae6402efc578d3458a43b6cec0416521@172.16.0.14:30303"  # el-4-erigon-lighthouse (erigon)
+    - "enode://5d20e858157ef2088b6c5150d2b8994f8559639f7b67de968dad580c3d5b5f955b9ec01fb38c5976c4cd9a39b3237bff3c6fd369485f6dbf9d2cc7c8c17dd046@172.16.0.15:30303"  # el-5-besu-lighthouse (besu)
+
+# Fuzzing Configuration
+fuzzing:
+  enabled: true
+  max_iterations: 5000  # 更多的迭代次数
+  mutation_rate: 0.3    # 较高的变异率
+  seed: 12345
+  protocols:
+    - "eth"
+    - "snap"
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  log_level: "debug"  # 详细日志用于性能分析
+  metrics_port: 9090
+  report_interval: 10  # 更频繁的监控报告
+
+# Output Configuration
+output:
+  directory: "./output/high_tps"
+  format: "json"
+  compress: true
+
+# Log Configuration
+log:
+  directory: "./logs/high_tps"
+  template: "default"
+  auto_generate: true
+  include_details: true
+
+# 使用所有可用账户进行高并发测试
+accounts:
+  - address: "0x8943545177806ED17B9F23F0a21ee5948eCaa776"
+    private_key: "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"
+  - address: "0xE25583099BA105D9ec0A67f5Ae86D90e50036425"
+    private_key: "39725efee3fb28614de3bacaffe4cc4bd8c436257e2c8bb887c4b5c4be45e76d"
+  - address: "0x614561D2d143621E126e87831AEF287678B442b8"
+    private_key: "53321db7c1e331d93a11a41d16f004d7ff63972ec8ec7c25db329728ceeb1710"
+  - address: "0xf93Ee4Cf8c6c40b329b0c0626F28333c132CF241"
+    private_key: "ab63b23eb7941c1251757e24b3d2350d2bc05c3c388d06f8fe6feafefb1e8c70"
+  - address: "0x802dCbE1B1A97554B4F50DB5119E37E8e7336417"
+    private_key: "5d2344259f42259f82d2c140aa66102ba89b57b4883ee441a8b312622bd42491"
+  - address: "0xAe95d8DA9244C37CaC0a3e16BA966a8e852Bb6D6"
+    private_key: "27515f805127bebad2fb9b183508bdacb8c763da16f54e0678b16e8f28ef3fff"
+  - address: "0x2c57d1CFC6d5f8E4182a56b4cf75421472eBAEa4"
+    private_key: "7ff1a4c1d57e5e784d327c4c7651e952350bc271f156afb3d00d20f5ef924856"
+  - address: "0x741bFE4802cE1C4b5b00F9Df2F5f179A1C89171A"
+    private_key: "3a91003acaf4c21b3953d94fa4a6db694fa69e5242b2e37be05dd82761058899"
+  - address: "0xc3913d4D8bAb4914328651C2EAE817C8b78E1f4c"
+    private_key: "bb1d0f125b4fb2bb173c318cdead45468474ca71474e2247776b2b4c0fa2d3f5"
+  - address: "0x65D08a056c17Ae13370565B04cF77D2AfA1cB9FA"
+    private_key: "850643a0224065ecce3882673c21f56bcf6eef86274cc21cadff15930b59fc8c"

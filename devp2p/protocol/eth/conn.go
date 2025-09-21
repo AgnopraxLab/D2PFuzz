@@ -45,8 +45,10 @@ var (
 // dial attempts to dial the given node and perform a handshake, returning the
 // created Conn if successful.
 func (s *Suite) dial() (*Conn, error) {
-	// 先不给suite包括privateKey属性
-	key, _ := crypto.GenerateKey()
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		return nil, fmt.Errorf("generate key failed: %v", err)
+	}
 	return s.dialAs(key)
 }
 

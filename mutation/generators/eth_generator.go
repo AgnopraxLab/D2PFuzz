@@ -428,18 +428,16 @@ func (g *ETHGenerator) generateRandomBody() *types.Body {
 
 func (g *ETHGenerator) generateRandomBlock() *types.Block {
 	header := g.generateRandomHeader()
-	body := g.generateRandomBody()
 	
-	// Ensure body is not nil and has valid structure
-	if body == nil {
-		body = &types.Body{
-			Transactions: []*types.Transaction{},
-			Uncles:       []*types.Header{},
-		}
+	// Create empty body to avoid nil pointer issues
+	body := &types.Body{
+		Transactions: []*types.Transaction{},
+		Uncles:       []*types.Header{},
 	}
 	
-	// Create block with proper parameters
-	return types.NewBlock(header, body, nil, nil)
+	// Create block with proper parameters - use empty receipts and withdrawals
+	receipts := types.Receipts{}
+	return types.NewBlock(header, body, receipts, nil)
 }
 
 func (g *ETHGenerator) generateRandomReceipt() *types.Receipt {

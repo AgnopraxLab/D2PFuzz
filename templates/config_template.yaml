@@ -1,0 +1,195 @@
+# D2PFuzz Unified Configuration Template
+# This template integrates common configuration items from all configuration files in the project
+# Please adjust parameter values according to specific requirements when using
+
+# =============================================================================
+# Server Configuration
+# =============================================================================
+server:
+  host: "localhost"                    # Server host address (0.0.0.0 for all interfaces)
+  port: 8080                          # Server port
+  timeout: 30                         # Timeout (seconds) - Recommended to set to 60 during stress testing
+
+# =============================================================================
+# Operation Mode
+# =============================================================================
+mode: "fuzz"                          # Operation mode: "fuzz", "test", "manual", "tx_fuzzer"
+
+# =============================================================================
+# Transaction Fuzzing Configuration
+# =============================================================================
+tx_fuzz:
+  enabled: true                       # Whether to enable transaction fuzzing
+  chain_id: 3151908                   # Chain ID (local development chain)
+  max_gas_price: 20000000000          # Maximum gas price (wei) - Can be set to 50000000000 during stress testing
+  max_gas_limit: 8000000              # Maximum gas limit - Can be set to 10000000 during stress testing
+  tx_per_second: 10                   # Transactions per second - Stress testing: 100-1000
+  fuzz_duration_sec: 60               # Fuzzing duration (seconds) - Stress testing: 300-900
+  seed: 0                             # Random seed (0 means random)
+  use_accounts: true                  # Whether to use predefined accounts
+  load_pattern_type: "ramp"           # Load pattern: "constant", "ramp", "spike", "wave"
+  
+  # Ramp mode configuration (only used when load_pattern_type is "ramp")
+  ramp_start_tps: 10                  # Ramp start TPS
+  ramp_end_tps: 100                   # Ramp end TPS
+  
+  # Concurrency and retry configuration
+  max_concurrent_tx: 500              # Maximum concurrent transactions - Extreme testing: 1000-5000
+  retry_failed_tx: true               # Whether to retry failed transactions
+  max_retries: 3                      # Maximum retry attempts - Stress testing: 5
+  retry_delay: 1s                     # Retry delay - Stress testing: 500ms-150ms
+  retry_delay_ms: 100                 # Retry delay (milliseconds) - Used for some configurations
+  circuit_breaker: true               # Whether to enable circuit breaker
+  failure_threshold: 5                # Failure threshold - Stress testing: 10
+  
+  # Gas and value configuration
+  gas_limit: 21000                    # Gas limit (for simple transfers)
+  gas_price: 20000000000              # Gas price (wei)
+  value_range:                        # Transaction amount range
+    min: 1000000000000000             # Minimum value (wei)
+    max: 10000000000000000            # Maximum value (wei)
+  
+  # RPC endpoint configuration
+  rpc_endpoints:
+    - "http://172.16.0.11:8545"       # Geth node
+    - "http://172.16.0.12:8545"       # Nethermind node
+    - "http://172.16.0.13:8545"       # Reth node
+    - "http://172.16.0.14:8545"       # Erigon node
+    - "http://172.16.0.15:8545"       # Besu node
+
+# =============================================================================
+# Transaction Fuzzer Configuration (Alternative Configuration)
+# =============================================================================
+tx_fuzzer:
+  tx_per_second: 100                  # Transactions per second
+  fuzz_duration_sec: 300              # Duration
+  load_pattern_type: "constant"       # Load pattern
+  max_concurrent_tx: 500              # Maximum concurrent transactions
+  retry_failed_tx: true               # Retry failed transactions
+  max_retries: 3                      # Maximum retry attempts
+  retry_delay_ms: 150                 # Retry delay (milliseconds)
+  gas_limit: 21000                    # Gas limit
+  gas_price: 20000000000              # Gas price
+  value_range:
+    min: 1000000000000000
+    max: 10000000000000000
+  
+  # Embedded fuzzing configuration
+  fuzzing:
+    enabled: true                     # Enable fuzzing
+    mutation_rate: 0.25               # Mutation rate
+    max_mutations_per_tx: 4           # Maximum mutations per transaction
+
+# =============================================================================
+# P2P Network Configuration
+# =============================================================================
+p2p:
+  enabled: true                       # Whether to enable P2P (can be set to false during stress testing)
+  max_peers: 50                       # Maximum number of peer nodes - Stress testing: 100
+  listen_port: 30303                  # Listen port
+  jwt_secret: "0xdc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"  # JWT secret
+  
+  # Bootstrap node configuration
+  bootstrap_nodes:
+    - "enode://8e7b1b24dc1b1d0685081523ea8d84d6d8c8493f42fc64a5e210d17f9bfe3594b389e893476de995905a1fcc48ccd268768e5fc4e6490863e4e1131f285efbbf@172.16.0.11:30303"  # Geth
+    - "enode://d388f8f5da4213fdd2593cc4867499965e7feba6baa033ef3f0de0d80d5bebe36d037268a8402ecb1a8d5fb8363f6f0338ada4e8bc6bb34e73e4fd8be016a2e3@172.16.0.12:30303"  # Nethermind
+    - "enode://ce37496eb696b4e9b729dab91a8e7d3663da34ec59a9f6bb86b258e953e85d4c786e7aeba728ae13c63823f0d2f76fc52a825f2274385bf741f0b21aefb41f6f@172.16.0.13:30303"  # Reth
+    - "enode://1d816be939be7d7190e44b6f6c814c93badff710718507dd64da0fa3dc0ffe0660529442f8bdcd70e4215f3e899ca160e57b150bc771b825fc6942532c25dd36@172.16.0.14:30303"  # Erigon
+    - "enode://187641bf9000cc7e39b55f52620b52bedb14749853ec459f8271d17e5467be93098a57cee762001c3bbb1cd598dd4ee2e76f073d880765ba057896848e892f3d@172.16.0.15:30303"  # Besu
+
+# =============================================================================
+# Fuzzing Configuration
+# =============================================================================
+fuzzing:
+  enabled: true                       # Whether to enable fuzzing
+  max_iterations: 1000                # Maximum iterations - Stress testing: 5000
+  mutation_rate: 0.1                  # Mutation rate - Stress testing: 0.3
+  max_mutations_per_tx: 3             # Maximum mutations per transaction - Stress testing: 5
+  seed: 12345                         # Random seed
+  protocols:                          # Supported protocols
+    - "eth"
+    - "snap"
+
+# =============================================================================
+# Monitoring Configuration
+# =============================================================================
+monitoring:
+  enabled: true                       # Whether to enable monitoring
+  log_level: "info"                   # Log level: "debug", "info", "warn", "error"
+  metrics_port: 9090                  # Metrics port
+  report_interval: 60                 # Report interval (seconds) - Stress testing: 10
+  stats_interval_sec: 15              # Statistics interval (seconds)
+  export_interval_sec: 120            # Export interval (seconds)
+
+# =============================================================================
+# Output Configuration
+# =============================================================================
+output:
+  directory: "./output"               # Output directory
+  format: "json"                      # Output format
+  compress: true                      # Whether to compress
+  export_results: true                # Whether to export results
+  results_file: "test_results.json"   # Results file name
+
+# =============================================================================
+# Log Configuration
+# =============================================================================
+log:
+  directory: "./logs"                 # Log directory
+  template: "default"                 # Log template
+  auto_generate: true                 # Auto generate
+  include_details: true               # Include detailed information
+  log_level: "info"                   # Log level
+
+# =============================================================================
+# Test Mode Configuration
+# =============================================================================
+testMode:                             # Test mode (used in manual configuration)
+
+# =============================================================================
+# Accounts Configuration
+# =============================================================================
+# Predefined test accounts - Contains addresses and private keys
+accounts:
+  # Primary test accounts
+  - address: "0x8943545177806ED17B9F23F0a21ee5948eCaa776"
+    private_key: "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"
+  - address: "0xE25583099BA105D9ec0A67f5Ae86D90e50036425"
+    private_key: "39725efee3fb28614de3bacaffe4cc4bd8c436257e2c8bb887c4b5c4be45e76d"
+  - address: "0x614561D2d143621E126e87831AEF287678B442b8"
+    private_key: "53321db7c1e331d93a11a41d16f004d7ff63972ec8ec7c25db329728ceeb1710"
+  - address: "0xf93Ee4Cf8c6c40b329b0c0626F28333c132CF241"
+    private_key: "ab63b23eb7941c1251757e24b3d2350d2bc05c3c388d06f8fe6feafefb1e8c70"
+  - address: "0x802dCbE1B1A97554B4F50DB5119E37E8e7336417"
+    private_key: "5d2344259f42259f82d2c140aa66102ba89b57b4883ee441a8b312622bd42491"
+  
+  # Additional test accounts
+  - address: "0xAe95d8DA9244C37CaC0a3e16BA966a8e852Bb6D6"
+    private_key: "27515f805127bebad2fb9b183508bdacb8c763da16f54e0678b16e8f28ef3fff"
+  - address: "0x2c57d1CFC6d5f8E4182a56b4cf75421472eBAEa4"
+    private_key: "7ff1a4c1d57e5e784d327c4c7651e952350bc271f156afb3d00d20f5ef924856"
+  - address: "0x741bFE4802cE1C4b5b00F9Df2F5f179A1C89171A"
+    private_key: "3a91003acaf4c21b3953d94fa4a6db694fa69e5242b2e37be05dd82761058899"
+  - address: "0xc3913d4D8bAb4914328651C2EAE817C8b78E1f4c"
+    private_key: "bb1d0f125b4fb2bb173c318cdead45468474ca71474e2247776b2b4c0fa2d3f5"
+  - address: "0x65D08a056c17Ae13370565B04cF77D2AfA1cB9FA"
+    private_key: "850643a0224065ecce3882673c21f56bcf6eef86274cc21cadff15930b59fc8c"
+  
+  # Common test accounts (used for some stress testing configurations)
+  - address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    private_key: "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+
+# =============================================================================
+# Configuration Usage Instructions
+# =============================================================================
+# 1. Basic testing: Use default values
+# 2. Stress testing: Adjust tx_per_second, fuzz_duration_sec, max_concurrent_tx and other parameters
+# 3. Extreme testing: Set tx_per_second=1000+, max_concurrent_tx=5000+
+# 4. P2P testing: Enable p2p configuration, set bootstrap_nodes
+# 5. Manual testing: Set mode="manual", configure testMode
+# 
+# Important notes:
+# - Recommended to disable P2P during stress testing (p2p.enabled: false)
+# - Need to adjust timeout and retry parameters for high TPS testing
+# - Different load_pattern_type are suitable for different testing scenarios
+# - Account configuration contains all accounts from existing configuration files

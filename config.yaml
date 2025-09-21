@@ -12,25 +12,36 @@ mode: "fuzz"
 # Transaction Fuzzing Configuration
 tx_fuzz:
   enabled: true
-  rpc_endpoint: "http://172.16.0.15:8545"
   chain_id: 3151908  # Local development chain ID
   max_gas_price: 20000000000  # 20 Gwei in wei
   max_gas_limit: 8000000
   tx_per_second: 10
-  fuzz_duration_sec: 300  # 5 minutes
+  fuzz_duration_sec: 60
   seed: 0  # 0 means random seed
   use_accounts: true
+  load_pattern_type: "ramp"  # Options: "constant", "ramp", "spike", "wave"
+  rpc_endpoints:
+    - "http://172.16.0.11:8545"
+    - "http://172.16.0.12:8545"
+    - "http://172.16.0.13:8545"
+    - "http://172.16.0.14:8545"
+    - "http://172.16.0.15:8545"
+  # Error handling and retry configuration
+  max_retries: 3
+  retry_delay: 1s
+  circuit_breaker: true
+  failure_threshold: 5
 
 # P2P Network Configuration
 p2p:
   max_peers: 50
   listen_port: 30303
   bootstrap_nodes:
-    - "enode://0dd8e643c55cb9528333701f2d27694dc5512fb0e79aa0fa73e2f266a5b8f87f409dc88499484da9b89747a2b3a0e1a7f41d384cfa9983e4e73afc6da1866cc4@172.16.0.14:30303"
-    - "enode://7dd3bb843e7d5231507dd22c003194bdccb6f2f5c3e1513390d1d6bf5e7ad23bc0f2f2a50b1a15c6b955b4754ad9b4ecdedcab0bad957a1a83908285c5c8bd03@198.18.0.13:30303"
-    - "enode://97b4a6d89b828add1a1a9761b0cf82ba4929b44ccf4dbfe00a3e600d7097cfaa4818a706e761382f390da174691912fbcb3e622de9a41f97a520ff957c811260@172.16.0.15:30303"
-    - "enode://a55ce8cc37b660f81073fc2d59bd2cbb61925863f5923e25d7a09de1ddbd2b848468455a2699f6b790f2c750df530a023e63ef7321e2bacde96230e113191334@172.16.0.13:30303"
-    - "enode://e30f823ca9f9fe2e6469217b80cf39b58d7a6c67662b35e1f8039c48a4aea23cb6d11ee4519c7a7dceb3e4df321e6e8613c062cfdf8f16ebc4fc350ae95d6734@172.16.0.11:30303"
+    - "enode://8e7b1b24dc1b1d0685081523ea8d84d6d8c8493f42fc64a5e210d17f9bfe3594b389e893476de995905a1fcc48ccd268768e5fc4e6490863e4e1131f285efbbf@172.16.0.11:30303"  # el-1-geth-lighthouse (geth)
+    - "enode://d388f8f5da4213fdd2593cc4867499965e7feba6baa033ef3f0de0d80d5bebe36d037268a8402ecb1a8d5fb8363f6f0338ada4e8bc6bb34e73e4fd8be016a2e3@172.16.0.12:30303"  # el-2-nethermind-lighthouse (nethermind)
+    - "enode://ce37496eb696b4e9b729dab91a8e7d3663da34ec59a9f6bb86b258e953e85d4c786e7aeba728ae13c63823f0d2f76fc52a825f2274385bf741f0b21aefb41f6f@172.16.0.13:30303"  # el-3-reth-lighthouse (reth)
+    - "enode://1d816be939be7d7190e44b6f6c814c93badff710718507dd64da0fa3dc0ffe0660529442f8bdcd70e4215f3e899ca160e57b150bc771b825fc6942532c25dd36@172.16.0.14:30303"  # el-4-erigon-lighthouse (erigon)
+    - "enode://187641bf9000cc7e39b55f52620b52bedb14749853ec459f8271d17e5467be93098a57cee762001c3bbb1cd598dd4ee2e76f073d880765ba057896848e892f3d@172.16.0.15:30303"  # el-5-besu-lighthouse (besu)
 
 
 # Fuzzing Configuration

@@ -1,0 +1,41 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+mode: "tx_fuzzer"
+
+tx_fuzzer:
+  tx_per_second: 200
+  fuzz_duration_sec: 600
+  load_pattern_type: "constant"
+  max_concurrent_tx: 1000
+  retry_failed_tx: true
+  max_retries: 5
+  retry_delay_ms: 100
+  gas_limit: 21000
+  gas_price: 20000000000
+  value_range:
+    min: 1000000000000000
+    max: 10000000000000000
+
+p2p:
+  enabled: false
+
+fuzzing:
+  enabled: true
+  mutation_rate: 0.3
+  max_mutations_per_tx: 5
+
+monitoring:
+  enabled: true
+  stats_interval_sec: 10
+  export_interval_sec: 60
+
+output:
+  export_results: true
+  results_file: "extreme_stress_results.json"
+  log_level: "info"
+
+accounts:
+  - private_key: "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"

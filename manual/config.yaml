@@ -1,0 +1,16 @@
+p2p:
+  max_peers: 50
+  listen_port: 30303
+  bootstrap_nodes:
+    - "enode://e0928e46f536218315885e8a47f77d0d2afc11da06779d267f5317f85684c2f3a4b76a7320aa02af8b5745bd23784a0dc68d36714384c21ae0fb4c864817302a@172.16.0.11:30303"  # el-1-geth-lighthouse (geth)
+    - "enode://8f32a884c3fe7e24cd7cb4137f38c7d36f9028e5e3634f72433b3c4e667197fb9a937fd9053b80556c6e5b55e9a7fb95244be8c17a0701e65399ac3cd48b4165@172.16.0.13:30303"  # el-2-nethermind-lighthouse (nethermind)
+    - "enode://2beac2a466e86e5806a612facac98e5971c44db5d931c01bb115a5406cb3f79e1c00c76d3417545af85c42f14723a84524ef0394af66bbf0dabd358c474abae1@172.16.0.14:30303"  # el-3-reth-lighthouse (reth)
+    - "enode://b5f158065f28c932a1eb985f9a658c2710ce55071d8c9078549dd396ce76af30066c3f4bb756eccce56e12848863aca66a2cf64e926a75025cb4c9eac3c6697f@172.16.0.15:30303"  # el-4-erigon-lighthouse (erigon)
+    - "enode://f4f1ec3479c7ef13bafe7194af3d1018491f28b3afa5409e1337411f349554c7bf18c427ce60f65eebc12310bb6eb4ab408db2b8bcc2f0ad27be278e62717b7d@172.16.0.12:30303"  # el-5-besu-lighthouse (besu)
+  jwt_secret: "0xdc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
+
+# Test mode: "multi" = multi-node testing, "single" = single node testing,
+# "interactive" = interactive selection,
+# "oneTransaction" = single transaction testing,
+# "largeTransactions" = large batch transaction testing
+testMode: manual

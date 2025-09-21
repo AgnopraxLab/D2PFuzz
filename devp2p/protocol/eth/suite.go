@@ -21,6 +21,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"reflect"
 	"sync"
 	"time"
@@ -41,19 +42,25 @@ import (
 // Suite represents a structure used to test a node's conformance
 // to the eth protocol.
 type Suite struct {
-	Dest   *enode.Node
-	chain  *Chain
-	engine *EngineClient
+	Dest       *enode.Node
+	chain      *Chain
+	engine     *EngineClient
+	PrivateKey string
+	elName     string
 }
 
 func (s *Suite) GetChain() *Chain {
 	return s.chain
 }
 
+func (s *Suite) GetElName() string {
+	return s.elName
+}
+
 // NewSuite creates and returns a new eth-test suite that can
 // be used to test the given node against the given blockchain
 // data.
-func NewSuite(dest *enode.Node, engineURL, jwt string) (*Suite, error) {
+func NewSuite(dest *enode.Node, engineURL, jwt string, elName string) (*Suite, error) {
 	chain, err := NewChain("./testdata")
 	engine, err := NewEngineClient(engineURL, jwt)
 	if err != nil {
@@ -64,6 +71,7 @@ func NewSuite(dest *enode.Node, engineURL, jwt string) (*Suite, error) {
 		Dest:   dest,
 		chain:  chain,
 		engine: engine,
+		elName: elName,
 	}, nil
 }
 
@@ -73,10 +81,10 @@ func (s *Suite) InitializeAndConnect() error {
 	if err != nil {
 		return fmt.Errorf("dial failed: %v", err)
 	}
-	//defer func() {
-	//	conn.Close()
-	//}()
-	//defer conn.Close()
+	defer func() {
+		conn.Close()
+	}()
+	defer conn.Close()
 	if err := conn.Peer(nil); err != nil {
 		return fmt.Errorf("peer failed: %v", err)
 	}
@@ -134,6 +142,89 @@ func (s *Suite) TestStatus(t *utesting.T) {
 // headersMatch returns whether the received headers match the given request
 func headersMatch(expected []*types.Header, headers []*types.Header) bool {
 	return reflect.DeepEqual(expected, headers)
+}
+
+func (suite *Suite) GetAllBlockHeaders() ([]*types.Header, error) {
+	// chain, err := ethtest.NewChain("./testdata")
+	// if err != nil {
+	// 	return nil, err
+	// }
+	conn, err := suite.DialAndPeer(nil)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+
+	req := &eth.GetBlockHeadersPacket{
+		RequestId: 33,
+		GetBlockHeadersRequest: &eth.GetBlockHeadersRequest{
+			Origin:  eth.HashOrNumber{Number: uint64(0)},
+			Amount:  uint64(512),
+			Skip:    0,
+			Reverse: false,
+		},
+	}
+	// Read headers response.
+	if err = conn.Write(1, eth.GetBlockHeadersMsg, req); err != nil {
+		fmt.Printf("could not write to connection: %v", err)
+	}
+	headers := new(eth.BlockHeadersPacket)
+	if err = conn.ReadMsg(1, eth.BlockHeadersMsg, &headers); err != nil {
+		fmt.Printf("error reading msg: %v", err)
+	}
+	if got, want := headers.RequestId, req.RequestId; got != want {
+		fmt.Printf("unexpected request id")
+	}
+
+	return headers.BlockHeadersRequest, nil
+}
+
+// GetBlockHeadersByRequest 根据请求参数生成模拟的区块头数据
+func (suite *Suite) GetBlockHeadersByRequest(req *eth.GetBlockHeadersRequest) ([]*types.Header, error) {
+	// 由于是测试环境，生成模拟的区块头数据
+	headers := make([]*types.Header, 0, req.Amount)
+
+	// 获取起始区块号
+	var startBlockNum uint64
+	if req.Origin.Hash != (common.Hash{}) {
+		// 如果是通过哈希指定，我们模拟一个区块号
+		startBlockNum = 1000000 // 模拟区块号
+	} else {
+		startBlockNum = req.Origin.Number
+	}
+
+	// 生成请求数量的区块头
+	for i := uint64(0); i < req.Amount; i++ {
+		var blockNum uint64
+		if req.Reverse {
+			// 反向：从起始区块向前
+			if startBlockNum < i*(1+req.Skip) {
+				break // 避免负数
+			}
+			blockNum = startBlockNum - i*(1+req.Skip)
+		} else {
+			// 正向：从起始区块向后
+			blockNum = startBlockNum + i*(1+req.Skip)
+		}
+
+		// 创建模拟的区块头
+		header := &types.Header{
+			Number:     new(big.Int).SetUint64(blockNum),
+			Time:       uint64(1640000000 + blockNum*12), // 模拟时间戳
+			GasLimit:   30000000,
+			GasUsed:    15000000,
+			Difficulty: big.NewInt(1000000),
+		}
+
+		// 设置父区块哈希（简单模拟）
+		if blockNum > 0 {
+			header.ParentHash = common.BytesToHash([]byte(fmt.Sprintf("parent_%d", blockNum-1)))
+		}
+
+		headers = append(headers, header)
+	}
+
+	return headers, nil
 }
 
 func (s *Suite) TestGetBlockHeaders(t *utesting.T) {

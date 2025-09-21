@@ -1,0 +1,43 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+mode: "tx_fuzzer"
+
+tx_fuzzer:
+  tx_per_second: 100
+  fuzz_duration_sec: 900
+  load_pattern_type: "ramp"
+  ramp_start_tps: 10
+  ramp_end_tps: 100
+  max_concurrent_tx: 500
+  retry_failed_tx: true
+  max_retries: 3
+  retry_delay_ms: 150
+  gas_limit: 21000
+  gas_price: 20000000000
+  value_range:
+    min: 1000000000000000
+    max: 10000000000000000
+  # --- FIX: Moved fuzzing config inside tx_fuzzer ---
+  fuzzing:
+    enabled: true
+    mutation_rate: 0.25
+    max_mutations_per_tx: 4
+
+p2p:
+  enabled: false
+
+monitoring:
+  enabled: true
+  stats_interval_sec: 15
+  export_interval_sec: 120
+
+output:
+  export_results: true
+  results_file: "ramp_stress_results.json"
+  log_level: "info"
+
+accounts:
+  - private_key: "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
