@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# D2PFuzz 压力测试专用脚本
-# 专门用于高负载压力测试场景
+# D2PFuzz Stress Testing Dedicated Script
+# Specifically designed for high-load stress testing scenarios
 
 set -e
 
-# 颜色定义
+# Color definitions
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -14,161 +14,161 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# 项目根目录
+# Project root directory
 PROJECT_ROOT="/home/kkk/workspaces/D2PFuzz"
 cd "$PROJECT_ROOT"
 
-# 确保可执行文件存在
+# Ensure executable file exists
 if [ ! -f "./tx_fuzz_example" ]; then
-    echo -e "${YELLOW}编译 tx_fuzz_example...${NC}"
+    echo -e "${YELLOW}Compiling tx_fuzz_example...${NC}"
     go build -o tx_fuzz_example ./stress_test/tx_fuzz_example.go
-    echo -e "${GREEN}编译完成${NC}"
+    echo -e "${GREEN}Compilation completed${NC}"
 fi
 
-# 显示压力测试菜单
+# Display stress test menu
 show_stress_menu() {
-    echo -e "${RED}=== D2PFuzz 压力测试套件 ===${NC}"
-    echo -e "${YELLOW}警告: 以下测试将产生高负载，请确保测试环境能够承受${NC}"
+    echo -e "${RED}=== D2PFuzz Stress Testing Suite ===${NC}"
+    echo -e "${YELLOW}Warning: The following tests will generate high load, please ensure the test environment can handle it${NC}"
     echo
-    echo "1. 标准压力测试 (100 TPS, 5分钟)"
-    echo "2. 极限压力测试 (200 TPS, 10分钟)"
-    echo "3. 持续压力测试 (50 TPS, 30分钟)"
-    echo "4. 渐进压力测试 (10->100 TPS, 15分钟)"
-    echo "5. 自定义压力测试"
-    echo "6. 查看压力测试调优指南"
-    echo "7. 系统资源检查"
-    echo "8. 退出"
+    echo "1. Standard Stress Test (100 TPS, 5 minutes)"
+    echo "2. Extreme Stress Test (200 TPS, 10 minutes)"
+    echo "3. Endurance Stress Test (50 TPS, 30 minutes)"
+    echo "4. Ramp Stress Test (10->100 TPS, 15 minutes)"
+    echo "5. Custom Stress Test"
+    echo "6. View Stress Test Tuning Guide"
+    echo "7. System Resource Check"
+    echo "8. Exit"
     echo
 }
 
-# 系统资源检查
+# System resource check
 check_system_resources() {
-    echo -e "${BLUE}=== 系统资源检查 ===${NC}"
-    echo -e "${CYAN}CPU 信息:${NC}"
+    echo -e "${BLUE}=== System Resource Check ===${NC}"
+    echo -e "${CYAN}CPU Information:${NC}"
     lscpu | grep -E "Model name|CPU\(s\):|Thread|Core"
     echo
-    echo -e "${CYAN}内存信息:${NC}"
+    echo -e "${CYAN}Memory Information:${NC}"
     free -h
     echo
-    echo -e "${CYAN}磁盘空间:${NC}"
+    echo -e "${CYAN}Disk Space:${NC}"
     df -h | grep -E "Filesystem|/$"
     echo
-    echo -e "${CYAN}网络连接:${NC}"
+    echo -e "${CYAN}Network Connections:${NC}"
     ss -tuln | head -10
     echo
 }
 
-# 标准压力测试
+# Standard stress test
 run_standard_stress() {
-    echo -e "${RED}=== 标准压力测试 ===${NC}"
-    echo "配置: 100 TPS, 5分钟"
-    echo "预计发送交易: ~30,000笔"
+    echo -e "${RED}=== Standard Stress Test ===${NC}"
+    echo "Configuration: 100 TPS, 5 minutes"
+    echo "Expected transactions: ~30,000"
     echo
     confirm_and_run "stress_test/stress_test_config.yaml"
 }
 
-# 极限压力测试
+# Extreme stress test
 run_extreme_stress() {
-    echo -e "${RED}=== 极限压力测试 ===${NC}"
-    echo "配置: 200 TPS, 10分钟"
-    echo "预计发送交易: ~120,000笔"
-    echo -e "${YELLOW}注意: 这是极限测试，可能导致系统资源耗尽${NC}"
+    echo -e "${RED}=== Extreme Stress Test ===${NC}"
+    echo "Configuration: 200 TPS, 10 minutes"
+    echo "Expected transactions: ~120,000"
+    echo -e "${YELLOW}Note: This is an extreme test that may cause system resource exhaustion${NC}"
     echo
     
-    # 创建极限测试配置
+    # Create extreme test configuration
     create_extreme_config
     confirm_and_run "stress_test/extreme_stress_config.yaml"
 }
 
-# 持续压力测试
+# Endurance stress test
 run_endurance_stress() {
-    echo -e "${RED}=== 持续压力测试 ===${NC}"
-    echo "配置: 50 TPS, 30分钟"
-    echo "预计发送交易: ~90,000笔"
-    echo "适用于: 长期稳定性测试"
+    echo -e "${RED}=== Endurance Stress Test ===${NC}"
+    echo "Configuration: 50 TPS, 30 minutes"
+    echo "Expected transactions: ~90,000"
+    echo "Suitable for: Long-term stability testing"
     echo
     
-    # 创建持续测试配置
+    # Create endurance test configuration
     create_endurance_config
     confirm_and_run "stress_test/endurance_stress_config.yaml"
 }
 
-# 渐进压力测试
+# Ramp stress test
 run_ramp_stress() {
-    echo -e "${RED}=== 渐进压力测试 ===${NC}"
-    echo "配置: 10->100 TPS, 15分钟"
-    echo "负载模式: 渐进式增长"
-    echo "适用于: 性能瓶颈分析"
+    echo -e "${RED}=== Ramp Stress Test ===${NC}"
+    echo "Configuration: 10->100 TPS, 15 minutes"
+    echo "Load pattern: Progressive growth"
+    echo "Suitable for: Performance bottleneck analysis"
     echo
     
-    # 创建渐进测试配置
+    # Create ramp test configuration
     create_ramp_config
     confirm_and_run "stress_test/ramp_stress_config.yaml"
 }
 
-# 自定义压力测试
+# Custom stress test
 run_custom_stress() {
-    echo -e "${BLUE}=== 自定义压力测试 ===${NC}"
-    echo "请输入测试参数:"
+    echo -e "${BLUE}=== Custom Stress Test ===${NC}"
+    echo "Please enter test parameters:"
     
-    read -p "TPS (每秒交易数): " tps
-    read -p "测试时长 (秒): " duration
-    read -p "负载模式 (constant/ramp/burst): " load_pattern
+    read -p "TPS (transactions per second): " tps
+    read -p "Test duration (seconds): " duration
+    read -p "Load pattern (constant/ramp/burst): " load_pattern
     
-    # 验证输入
+    # Validate input
     if ! [[ "$tps" =~ ^[0-9]+$ ]] || ! [[ "$duration" =~ ^[0-9]+$ ]]; then
-        echo -e "${RED}错误: TPS和时长必须是数字${NC}"
+        echo -e "${RED}Error: TPS and duration must be numbers${NC}"
         return 1
     fi
     
     if [[ ! "$load_pattern" =~ ^(constant|ramp|burst)$ ]]; then
-        echo -e "${RED}错误: 负载模式必须是 constant, ramp 或 burst${NC}"
+        echo -e "${RED}Error: Load pattern must be constant, ramp or burst${NC}"
         return 1
     fi
     
     echo
-    echo -e "${YELLOW}自定义测试配置:${NC}"
+    echo -e "${YELLOW}Custom test configuration:${NC}"
     echo "TPS: $tps"
-    echo "时长: $duration 秒"
-    echo "负载模式: $load_pattern"
-    echo "预计发送交易: ~$((tps * duration))笔"
+    echo "Duration: $duration seconds"
+    echo "Load pattern: $load_pattern"
+    echo "Expected transactions: ~$((tps * duration))"
     echo
     
-    # 创建自定义配置
+    # Create custom configuration
     create_custom_config "$tps" "$duration" "$load_pattern"
     confirm_and_run "stress_test/custom_stress_config.yaml"
 }
 
-# 确认并运行测试
+# Confirm and run test
 confirm_and_run() {
     local config_file="$1"
     
-    echo -e "${RED}警告: 即将开始高负载压力测试${NC}"
-    echo -e "${YELLOW}请确保:${NC}"
-    echo "1. 测试环境有足够的资源"
-    echo "2. 网络连接稳定"
-    echo "3. 已备份重要数据"
+    echo -e "${RED}Warning: About to start high-load stress test${NC}"
+    echo -e "${YELLOW}Please ensure:${NC}"
+    echo "1. Test environment has sufficient resources"
+    echo "2. Network connection is stable"
+    echo "3. Important data has been backed up"
     echo
     
-    read -p "确认开始测试? (输入 'YES' 确认): " confirm
+    read -p "Confirm to start test? (Enter 'YES' to confirm): " confirm
     if [[ "$confirm" == "YES" ]]; then
-        echo -e "${GREEN}开始压力测试...${NC}"
-        echo "配置文件: $config_file"
-        echo "开始时间: $(date)"
+        echo -e "${GREEN}Starting stress test...${NC}"
+        echo "Configuration file: $config_file"
+        echo "Start time: $(date)"
         echo
         
-        # 运行测试
+        # Run test
         ./tx_fuzz_example "$config_file"
         
         echo
-        echo "结束时间: $(date)"
-        echo -e "${GREEN}压力测试完成${NC}"
+        echo "End time: $(date)"
+        echo -e "${GREEN}Stress test completed${NC}"
     else
-        echo -e "${YELLOW}测试已取消${NC}"
+        echo -e "${YELLOW}Test cancelled${NC}"
     fi
 }
 
-# 创建极限测试配置
+# Create extreme test configuration
 create_extreme_config() {
     cat > stress_test/extreme_stress_config.yaml << 'EOF'
 server:
@@ -215,7 +215,7 @@ accounts:
 EOF
 }
 
-# 创建持续测试配置
+# Create endurance test configuration
 create_endurance_config() {
     cat > stress_test/endurance_stress_config.yaml << 'EOF'
 server:
@@ -262,7 +262,7 @@ accounts:
 EOF
 }
 
-# 创建渐进测试配置
+# Create ramp test configuration
 create_ramp_config() {
     cat > stress_test/ramp_stress_config.yaml << 'EOF'
 server:
@@ -311,13 +311,13 @@ accounts:
 EOF
 }
 
-# 创建自定义配置
+# Create custom configuration
 create_custom_config() {
     local tps="$1"
     local duration="$2"
     local load_pattern="$3"
     
-    # 注意这里的 EOF 前后不能有空格
+    # Note: EOF cannot have spaces before or after
     cat > stress_test/custom_stress_config.yaml <<EOF
 server:
   host: "0.0.0.0"
@@ -369,23 +369,23 @@ log:
 EOF
 }
 
-# 显示调优指南
+# Display tuning guide
 show_tuning_guide() {
     if [ -f "stress_test/STRESS_TEST_TUNING_GUIDE.md" ]; then
-        echo -e "${BLUE}=== 压力测试调优指南 ===${NC}"
+        echo -e "${BLUE}=== Stress Test Tuning Guide ===${NC}"
         head -50 stress_test/STRESS_TEST_TUNING_GUIDE.md
         echo
-        echo -e "${YELLOW}完整指南请查看: stress_test/STRESS_TEST_TUNING_GUIDE.md${NC}"
+        echo -e "${YELLOW}For complete guide, please check: stress_test/STRESS_TEST_TUNING_GUIDE.md${NC}"
     else
-        echo -e "${RED}调优指南文件不存在${NC}"
+        echo -e "${RED}Tuning guide file does not exist${NC}"
     fi
 }
 
-# 主循环
+# Main loop
 main() {
     while true; do
         show_stress_menu
-        read -p "请选择 (1-8): " choice
+        read -p "Please select (1-8): " choice
         
         case $choice in
             1)
@@ -410,30 +410,30 @@ main() {
                 check_system_resources
                 ;;
             8)
-                echo -e "${GREEN}退出压力测试套件${NC}"
+                echo -e "${GREEN}Exit stress testing suite${NC}"
                 exit 0
                 ;;
             *)
-                echo -e "${RED}无效选择，请输入 1-8${NC}"
+                echo -e "${RED}Invalid selection, please enter 1-8${NC}"
                 ;;
         esac
         
         echo
-        read -p "按回车键继续..."
+        read -p "Press Enter to continue..."
         clear
     done
 }
 
-# 检查参数
+# Check parameters
 if [ $# -eq 0 ]; then
-    # 交互模式
+    # Interactive mode
     clear
-    echo -e "${PURPLE}D2PFuzz 压力测试套件${NC}"
-    echo -e "${CYAN}专业的以太坊交易压力测试工具${NC}"
+    echo -e "${PURPLE}D2PFuzz Stress Testing Suite${NC}"
+    echo -e "${CYAN}Professional Ethereum Transaction Stress Testing Tool${NC}"
     echo
     main
 else
-    # 命令行模式
+    # Command line mode
     case $1 in
         "standard"|"1")
             run_standard_stress
@@ -454,19 +454,19 @@ else
             check_system_resources
             ;;
         "help"|"-h"|"--help")
-            echo "D2PFuzz 压力测试套件"
-            echo "用法: $0 [standard|extreme|endurance|ramp|custom|check|help]"
-            echo "  standard  - 标准压力测试 (100 TPS, 5分钟)"
-            echo "  extreme   - 极限压力测试 (200 TPS, 10分钟)"
-            echo "  endurance - 持续压力测试 (50 TPS, 30分钟)"
-            echo "  ramp      - 渐进压力测试 (10->100 TPS, 15分钟)"
-            echo "  custom    - 自定义压力测试"
-            echo "  check     - 系统资源检查"
-            echo "  help      - 显示帮助"
+            echo "D2PFuzz Stress Testing Suite"
+            echo "Usage: $0 [standard|extreme|endurance|ramp|custom|check|help]"
+            echo "  standard  - Standard stress test (100 TPS, 5 minutes)"
+            echo "  extreme   - Extreme stress test (200 TPS, 10 minutes)"
+            echo "  endurance - Endurance stress test (50 TPS, 30 minutes)"
+            echo "  ramp      - Ramp stress test (10->100 TPS, 15 minutes)"
+            echo "  custom    - Custom stress test"
+            echo "  check     - System resource check"
+            echo "  help      - Show help"
             ;;
         *)
-            echo -e "${RED}未知参数: $1${NC}"
-            echo "使用 '$0 help' 查看帮助"
+            echo -e "${RED}Unknown parameter: $1${NC}"
+            echo "Use '$0 help' to view help"
             exit 1
             ;;
     esac

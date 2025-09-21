@@ -10,6 +10,7 @@ stress_test/
 ├── run_stress_test.sh            # Dedicated stress test execution script
 ├── stress_test_config.yaml       # Standard stress test configuration
 ├── STRESS_TEST_TUNING_GUIDE.md   # Stress test tuning guide
+├── tx_fuzz_example.go            # Stress test example program
 └── [Dynamically generated config files]  # Test configurations generated at runtime
 ```
 
@@ -109,7 +110,7 @@ stress_test/
 ## Related Documents
 
 - [Stress Test Tuning Guide](./STRESS_TEST_TUNING_GUIDE.md)
-- [Main Usage Guide](../USAGE_GUIDE.md)
+- [Main Usage Guide](../README.md)
 - [Basic Test Configuration](../test/basic_test_config.yaml)
 
 ## Technical Support
