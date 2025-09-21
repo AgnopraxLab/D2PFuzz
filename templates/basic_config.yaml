@@ -1,0 +1,64 @@
+# D2PFuzz Basic Configuration Example
+# Suitable for: Daily development testing, functional verification
+
+server:
+  host: "localhost"
+  port: 8080
+  timeout: 30
+
+mode: "test"
+
+tx_fuzz:
+  enabled: true
+  chain_id: 3151908
+  max_gas_price: 20000000000
+  max_gas_limit: 8000000
+  tx_per_second: 10
+  fuzz_duration_sec: 60
+  seed: 0
+  use_accounts: true
+  load_pattern_type: "constant"
+  max_retries: 3
+  retry_delay: 1s
+  circuit_breaker: true
+  failure_threshold: 5
+  rpc_endpoints:
+    - "http://172.16.0.11:8545"
+
+p2p:
+  enabled: true
+  max_peers: 50
+  listen_port: 30303
+  bootstrap_nodes:
+    - "enode://8e7b1b24dc1b1d0685081523ea8d84d6d8c8493f42fc64a5e210d17f9bfe3594b389e893476de995905a1fcc48ccd268768e5fc4e6490863e4e1131f285efbbf@172.16.0.11:30303"
+
+fuzzing:
+  enabled: true
+  max_iterations: 100
+  mutation_rate: 0.1
+  seed: 12345
+  protocols:
+    - "eth"
+
+monitoring:
+  enabled: true
+  log_level: "info"
+  metrics_port: 9090
+  report_interval: 60
+
+output:
+  directory: "./output"
+  format: "json"
+  compress: true
+
+log:
+  directory: "./logs"
+  template: "default"
+  auto_generate: true
+  include_details: false
+
+accounts:
+  - address: "0x8943545177806ED17B9F23F0a21ee5948eCaa776"
+    private_key: "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"
+  - address: "0xE25583099BA105D9ec0A67f5Ae86D90e50036425"
+    private_key: "39725efee3fb28614de3bacaffe4cc4bd8c436257e2c8bb887c4b5c4be45e76d"

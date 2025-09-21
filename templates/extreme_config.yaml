@@ -1,0 +1,55 @@
+# D2PFuzz Extreme Testing Configuration Example
+# Suitable for: Extreme performance testing, system boundary testing
+
+server:
+  host: "localhost"
+  port: 8080
+  timeout: 120
+
+mode: "tx_fuzzer"
+
+tx_fuzzer:
+  enabled: true
+  chain_id: 3151908
+  tx_per_second: 1000
+  fuzz_duration_sec: 600
+  load_pattern_type: "constant"
+  max_concurrent_tx: 5000
+  max_retries: 10
+  retry_delay_ms: 100
+  gas_limit: 8000000
+  gas_price: 20000000000
+  value_range:
+    min: 1000000000000000
+    max: 10000000000000000
+
+p2p:
+  enabled: false  # Disable P2P during extreme testing
+
+fuzzing:
+  enabled: true
+  max_iterations: 10000
+  mutation_rate: 0.3
+  max_mutations: 10
+
+monitoring:
+  enabled: true
+  log_level: "error"  # Minimal log output
+  stats_interval_sec: 5
+  report_interval: 15
+
+output:
+  enabled: true
+  results_file: "./extreme_results.json"
+  export_format: "json"
+  compress: true
+
+accounts:
+  - address: "0x8943545177806ED17B9F23F0a21ee5948eCaa776"
+    private_key: "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"
+  - address: "0xE25583099BA105D9ec0A67f5Ae86D90e50036425"
+    private_key: "39725efee3fb28614de3bacaffe4cc4bd8c8436257e2c8bb887c4b5c4be45e76d"
+  - address: "0x6951b5Bd815043E3F842c1b026b0Fa888Cc2DD85"
+    private_key: "53321db7c1e331d93a11a41d16f004d7ff63972ec8ec7c25db329728ceeb1710"
+  - address: "0xd9145CCE52D386f254917e481eB44e9943F39138"
+    private_key: "ab63b23eb7941c1251757e24b3d2350d2bc05c3c388d06f8fe6feafefb1e8c70"

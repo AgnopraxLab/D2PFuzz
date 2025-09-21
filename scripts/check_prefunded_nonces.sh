@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Query nonce values of prefunded accounts
-RPC_URL="http://172.16.0.11:8545"
+RPC_URL="http://172.16.0.12:8545"
 
 # Prefunded account addresses array
 ACCOUNTS=(

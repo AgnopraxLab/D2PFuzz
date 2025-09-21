@@ -21,11 +21,11 @@ func displayStats(txFuzzer *fuzzer.TxFuzzer, ticker <-chan time.Time) {
 	for range ticker {
 		stats := txFuzzer.GetStats()
 		fmt.Printf("\n--- Stats (Runtime: %v) ---\n", time.Since(stats.StartTime).Round(time.Second))
-		fmt.Printf("Total Sent: %d | Mined: %d | Failed: %d | Pending: %d\n", 
+		fmt.Printf("Total Sent: %d | Mined: %d | Failed: %d | Pending: %d\n",
 			stats.TotalSent, stats.TotalMined, stats.TotalFailed, stats.TotalPending)
-		fmt.Printf("Mutation Used: %d | Random Used: %d\n", 
+		fmt.Printf("Mutation Used: %d | Random Used: %d\n",
 			stats.MutationUsed, stats.RandomUsed)
-		
+
 		if stats.TotalSent > 0 {
 			successRate := float64(stats.TotalMined) / float64(stats.TotalSent) * 100
 			mutationRate := float64(stats.MutationUsed) / float64(stats.TotalSent) * 100
@@ -38,7 +38,7 @@ func displayStats(txFuzzer *fuzzer.TxFuzzer, ticker <-chan time.Time) {
 func displayFinalStats(txFuzzer *fuzzer.TxFuzzer) {
 	stats := txFuzzer.GetStats()
 	totalRuntime := time.Since(stats.StartTime)
-	
+
 	fmt.Printf("Total Runtime: %v\n", totalRuntime.Round(time.Second))
 	fmt.Printf("Total Transactions Sent: %d\n", stats.TotalSent)
 	fmt.Printf("Successfully Mined: %d\n", stats.TotalMined)
@@ -46,12 +46,12 @@ func displayFinalStats(txFuzzer *fuzzer.TxFuzzer) {
 	fmt.Printf("Still Pending: %d\n", stats.TotalPending)
 	fmt.Printf("Mutation Used: %d\n", stats.MutationUsed)
 	fmt.Printf("Random Generation Used: %d\n", stats.RandomUsed)
-	
+
 	if stats.TotalSent > 0 {
 		successRate := float64(stats.TotalMined) / float64(stats.TotalSent) * 100
 		mutationRate := float64(stats.MutationUsed) / float64(stats.TotalSent) * 100
 		txPerSecond := float64(stats.TotalSent) / totalRuntime.Seconds()
-		
+
 		fmt.Printf("Success Rate: %.2f%%\n", successRate)
 		fmt.Printf("Mutation Rate: %.2f%%\n", mutationRate)
 		fmt.Printf("Average TPS: %.2f\n", txPerSecond)
@@ -61,26 +61,26 @@ func displayFinalStats(txFuzzer *fuzzer.TxFuzzer) {
 // exportTransactionRecords exports detailed transaction records
 func exportTransactionRecords(txFuzzer *fuzzer.TxFuzzer, filename string, logger *utils.Logger) error {
 	records := txFuzzer.GetTransactionRecords()
-	
+
 	// Create summary data
 	summary := map[string]interface{}{
-		"timestamp": time.Now().Format(time.RFC3339),
+		"timestamp":     time.Now().Format(time.RFC3339),
 		"total_records": len(records),
-		"statistics": txFuzzer.GetStats(),
-		"transactions": records,
+		"statistics":    txFuzzer.GetStats(),
+		"transactions":  records,
 	}
-	
+
 	// Export as JSON
 	jsonData, err := json.MarshalIndent(summary, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %v", err)
 	}
-	
+
 	err = os.WriteFile(filename, jsonData, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write file: %v", err)
 	}
-	
+
 	logger.Info("Exported %d transaction records to %s", len(records), filename)
 	return nil
 }
@@ -101,6 +101,7 @@ func main() {
 
 	// Initialize logger
 	logger, err := utils.NewLogger(cfg.GetLogPath())
+	fmt.Println("cfg.GetLogPath(): ", cfg.GetLogPath())
 	if err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
 	}
@@ -108,8 +109,7 @@ func main() {
 
 	// Check if transaction fuzzing is enabled
 	if !cfg.IsTxFuzzingEnabled() {
-		logger.Info("Transaction fuzzing is disabled in configuration")
-		fmt.Println("Transaction fuzzing is disabled. Please enable it in config.yaml")
+		logger.Info("Transaction fuzzing is disabled in configuration. Please enable it in config.yaml")
 		return
 	}
 
@@ -126,20 +126,20 @@ func main() {
 
 	// Create transaction fuzzing configuration with mutation support
 	txCfg := cfg.GetTxFuzzingConfig()
-	
+
 	// Get RPC endpoints from config.yaml
 	rpcEndpoints := []string{
 		"http://172.16.0.11:8545",
-		"http://172.16.0.12:8545", 
+		"http://172.16.0.12:8545",
 		"http://172.16.0.13:8545",
 		"http://172.16.0.14:8545",
 		"http://172.16.0.15:8545",
 	}
-	
+
 	// Create multi-node configuration
 	multiNodeConfig := &fuzzer.MultiNodeConfig{
-		RPCEndpoints:        rpcEndpoints,
-		LoadDistribution:    map[string]float64{
+		RPCEndpoints: rpcEndpoints,
+		LoadDistribution: map[string]float64{
 			"http://172.16.0.11:8545": 0.2,
 			"http://172.16.0.12:8545": 0.2,
 			"http://172.16.0.13:8545": 0.2,
@@ -151,7 +151,7 @@ func main() {
 		MaxRetries:          3,
 		RetryDelay:          1 * time.Second,
 	}
-	
+
 	// Create load pattern configuration
 	loadPattern := &fuzzer.LoadPattern{
 		Type:        "ramp",
@@ -161,7 +161,7 @@ func main() {
 		SustainTime: 60 * time.Second,
 		StepSize:    2,
 	}
-	
+
 	fuzzConfig := &fuzzer.TxFuzzConfig{
 		RPCEndpoint:     rpcEndpoints[0], // Primary endpoint
 		ChainID:         txCfg.ChainID,
@@ -170,17 +170,17 @@ func main() {
 		TxPerSecond:     txCfg.TxPerSecond,
 		FuzzDuration:    time.Duration(txCfg.FuzzDurationSec) * time.Second,
 		Seed:            txCfg.Seed,
-		UseMutation:     true,  // Enable mutation
-		MutationRatio:   0.3,   // 30% of transactions use mutation
-		EnableTracking:  true,  // Enable transaction tracking
+		UseMutation:     true, // Enable mutation
+		MutationRatio:   0.3,  // 30% of transactions use mutation
+		EnableTracking:  true, // Enable transaction tracking
 		OutputFile:      "output/tx_fuzz_results.json",
-		ConfirmBlocks:   3,     // Wait for 3 confirmation blocks
+		ConfirmBlocks:   3,                              // Wait for 3 confirmation blocks
 		SuccessHashFile: "output/success_tx_hashes.txt", // Successful transaction hash file
 		FailedHashFile:  "output/failed_tx_hashes.txt",  // Failed transaction hash file
-		MultiNode:       multiNodeConfig,         // Multi-node configuration
-		LoadPattern:     loadPattern,             // Load pattern configuration
-		EnableMetrics:   true,                    // Enable system metrics
-		MetricsInterval: 10 * time.Second,        // Metrics collection interval
+		MultiNode:       multiNodeConfig,                // Multi-node configuration
+		LoadPattern:     loadPattern,                    // Load pattern configuration
+		EnableMetrics:   true,                           // Enable system metrics
+		MetricsInterval: 10 * time.Second,               // Metrics collection interval
 	}
 
 	fmt.Printf("Configuration:\n")

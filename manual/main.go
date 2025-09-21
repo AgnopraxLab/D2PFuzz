@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
-	"math"
 	"math/big"
 	"net"
 	"os"
@@ -26,7 +25,7 @@ import (
 	ethtest "D2PFuzz/devp2p/protocol/eth"
 )
 
-// Account 账户结构体
+// Account account structure
 type Account struct {
 	Address    string // Public key address
 	PrivateKey string // Private key (without 0x prefix)
@@ -45,29 +44,29 @@ type NodeAccountManager struct {
 	totalNodes   int
 }
 
-// NodeAccount 单个节点的账户信息
+// NodeAccount single node account information
 type NodeAccount struct {
 	FromAccount Account
 	ToAccount   Account
 	Nonce       uint64
 }
 
-// NewNodeAccountManager 创建节点账户管理器
+// NewNodeAccountManager create node account manager
 func NewNodeAccountManager(accounts []Account, nodeCount int) *NodeAccountManager {
 	if len(accounts) < nodeCount*2 {
-		panic(fmt.Sprintf("需要至少 %d 个账户来支持 %d 个节点，但只有 %d 个账户", nodeCount*2, nodeCount, len(accounts)))
+		panic(fmt.Sprintf("Need at least %d accounts to support %d nodes, but only have %d accounts", nodeCount*2, nodeCount, len(accounts)))
 	}
 
 	nodeAccounts := make(map[int]*NodeAccount)
 	for i := 0; i < nodeCount; i++ {
-		// 为每个节点分配两个固定账户：一个发送方，一个接收方
+		// Assign two fixed accounts for each node: one sender, one receiver
 		fromIndex := i * 2
 		toIndex := i*2 + 1
 
 		nodeAccounts[i] = &NodeAccount{
 			FromAccount: accounts[fromIndex],
 			ToAccount:   accounts[toIndex],
-			Nonce:       0, // 每个节点从nonce 0开始
+			Nonce:       0, // Each node starts from nonce 0
 		}
 	}
 
@@ -77,23 +76,23 @@ func NewNodeAccountManager(accounts []Account, nodeCount int) *NodeAccountManage
 	}
 }
 
-// NewNodeAccountManagerWithNonces 创建带有自定义nonce初始值的节点账户管理器
+// NewNodeAccountManagerWithNonces create node account manager with custom initial nonce values
 func NewNodeAccountManagerWithNonces(accounts []Account, nodeCount int, initialNonces []uint64) *NodeAccountManager {
 	if len(accounts) < nodeCount+5 {
-		panic(fmt.Sprintf("需要至少 %d 个账户来支持 %d 个节点，但只有 %d 个账户", nodeCount+5, nodeCount, len(accounts)))
+		panic(fmt.Sprintf("Need at least %d accounts to support %d nodes, but only have %d accounts", nodeCount+5, nodeCount, len(accounts)))
 	}
 
 	nodeAccounts := make(map[int]*NodeAccount)
 	for i := 0; i < nodeCount; i++ {
-		// 修改账户分配策略：第i个账户转给第(i+5)个账户
-		// Node 0: 第0个账户 → 第5个账户
-		// Node 1: 第1个账户 → 第6个账户
-		// Node 2: 第2个账户 → 第7个账户
-		// 以此类推...
+		// Modified account allocation strategy: account i transfers to account (i+5)
+		// Node 0: account 0 → account 5
+		// Node 1: account 1 → account 6
+		// Node 2: account 2 → account 7
+		// And so on...
 		fromIndex := i
 		toIndex := i + 5
 
-		// 获取该节点的初始nonce值，如果没有指定则默认为0
+		// Get the initial nonce value for this node, default to 0 if not specified
 		initialNonce := uint64(0)
 		if i < len(initialNonces) {
 			initialNonce = initialNonces[i]
@@ -102,7 +101,7 @@ func NewNodeAccountManagerWithNonces(accounts []Account, nodeCount int, initialN
 		nodeAccounts[i] = &NodeAccount{
 			FromAccount: accounts[fromIndex],
 			ToAccount:   accounts[toIndex],
-			Nonce:       initialNonce, // 使用指定的初始nonce值
+			Nonce:       initialNonce, // Use specified initial nonce value
 		}
 	}
 
@@ -112,7 +111,7 @@ func NewNodeAccountManagerWithNonces(accounts []Account, nodeCount int, initialN
 	}
 }
 
-// GetNodeAccount 获取指定节点的账户信息
+// GetNodeAccount get account information for specified node
 func (nam *NodeAccountManager) GetNodeAccount(nodeIndex int) *NodeAccount {
 	if nodeAccount, exists := nam.nodeAccounts[nodeIndex]; exists {
 		return nodeAccount
@@ -120,14 +119,14 @@ func (nam *NodeAccountManager) GetNodeAccount(nodeIndex int) *NodeAccount {
 	return nil
 }
 
-// IncrementNonce 增加指定节点的nonce值
+// IncrementNonce increment nonce value for specified node
 func (nam *NodeAccountManager) IncrementNonce(nodeIndex int) {
 	if nodeAccount, exists := nam.nodeAccounts[nodeIndex]; exists {
 		nodeAccount.Nonce++
 	}
 }
 
-// GetCurrentNonce 获取指定节点的当前nonce值
+// GetCurrentNonce get current nonce value for specified node
 func (nam *NodeAccountManager) GetCurrentNonce(nodeIndex int) uint64 {
 	if nodeAccount, exists := nam.nodeAccounts[nodeIndex]; exists {
 		return nodeAccount.Nonce
@@ -135,7 +134,7 @@ func (nam *NodeAccountManager) GetCurrentNonce(nodeIndex int) uint64 {
 	return 0
 }
 
-// NewAccountManager 创建新的账户管理器
+// NewAccountManager create new account manager
 func NewAccountManager(accounts []Account) *AccountManager {
 	return &AccountManager{
 		accounts:    accounts,
@@ -144,16 +143,16 @@ func NewAccountManager(accounts []Account) *AccountManager {
 	}
 }
 
-// GetNextAccountPair 获取下一对账户（发送方和接收方）
+// GetNextAccountPair get next account pair (sender and receiver)
 func (am *AccountManager) GetNextAccountPair() (from Account, to Account) {
 	from = am.accounts[am.currentFrom]
 	to = am.accounts[am.currentTo]
 
-	// 更新索引，确保下次使用不同的账户
+	// Update indices to ensure different accounts are used next time
 	am.currentFrom = (am.currentFrom + 1) % len(am.accounts)
 	am.currentTo = (am.currentTo + 1) % len(am.accounts)
 
-	// 确保发送方和接收方不是同一个账户
+	// Ensure sender and receiver are not the same account
 	if am.currentFrom == am.currentTo {
 		am.currentTo = (am.currentTo + 1) % len(am.accounts)
 	}
@@ -161,15 +160,15 @@ func (am *AccountManager) GetNextAccountPair() (from Account, to Account) {
 	return from, to
 }
 
-// GetAccountByIndex 根据索引获取账户
+// GetAccountByIndex get account by index
 func (am *AccountManager) GetAccountByIndex(index int) Account {
 	if index < 0 || index >= len(am.accounts) {
-		return am.accounts[0] // 默认返回第一个账户
+		return am.accounts[0] // Default to return first account
 	}
 	return am.accounts[index]
 }
 
-// GetTotalAccounts 获取总账户数
+// GetTotalAccounts get total number of accounts
 func (am *AccountManager) GetTotalAccounts() int {
 	return len(am.accounts)
 }
@@ -193,13 +192,13 @@ func writeHashesToFile(hashes []common.Hash, filename string) error {
 		return nil
 	}
 
-	// 第一个哈希覆盖文件
+	// First hash overwrites the file
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %v", filename, err)
 	}
 
-	// 写入第一个哈希
+	// Write the first hash
 	_, err = file.WriteString(hashes[0].Hex() + "\n")
 	if err != nil {
 		file.Close()
@@ -207,7 +206,7 @@ func writeHashesToFile(hashes []common.Hash, filename string) error {
 	}
 	file.Close()
 
-	// 如果有更多哈希，以追加模式写入
+	// If there are more hashes, write them in append mode
 	if len(hashes) > 1 {
 		file, err = os.OpenFile(filename, os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
@@ -227,7 +226,7 @@ func writeHashesToFile(hashes []common.Hash, filename string) error {
 	return nil
 }
 
-// 预定义账户列表
+// If you use ethereum-package to create a local test environment, there will be the following predefined accounts
 var PredefinedAccounts = []Account{
 	{Address: "0x8943545177806ED17B9F23F0a21ee5948eCaa776", PrivateKey: "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"},
 	{Address: "0xE25583099BA105D9ec0A67f5Ae86D90e50036425", PrivateKey: "39725efee3fb28614de3bacaffe4cc4bd8c436257e2c8bb887c4b5c4be45e76d"},
@@ -252,7 +251,7 @@ var PredefinedAccounts = []Account{
 	{Address: "0xafF0CA253b97e54440965855cec0A8a2E2399896", PrivateKey: "04b9f63ecf84210c5366c66d68fa1f5da1fa4f634fad6dfc86178e4d79ff9e59"},
 }
 
-// Config 配置结构体
+// Config configuration structure
 type Config struct {
 	P2P struct {
 		MaxPeers       int      `yaml:"max_peers"`
@@ -260,6 +259,9 @@ type Config struct {
 		BootstrapNodes []string `yaml:"bootstrap_nodes"`
 		JWTSecret      string   `yaml:"jwt_secret"`
 	} `yaml:"p2p"`
+	testMode struct {
+		TestMode string `yaml:"testMode"`
+	}
 }
 
 type protocolHandshake struct {
@@ -273,7 +275,7 @@ type protocolHandshake struct {
 	Rest []rlp.RawValue `rlp:"tail"`
 }
 
-// loadConfig 读取配置文件
+// loadConfig reads configuration file
 func loadConfig(filename string) (*Config, error) {
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -289,17 +291,17 @@ func loadConfig(filename string) (*Config, error) {
 	return &config, nil
 }
 
-// createRLPxConnection 创建RLPx连接
+// createRLPxConnection creates RLPx connection
 func createRLPxConnection(node *enode.Node, privateKey *ecdsa.PrivateKey) (*rlpx.Conn, error) {
 
-	// 连接到节点
+	// Connect to node
 	addr := fmt.Sprintf("%s:%d", node.IP(), node.TCP())
 	tcpConn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial TCP: %w", err)
 	}
 
-	// 执行RLPx握手
+	// Perform RLPx handshake
 	conn := rlpx.NewConn(tcpConn, node.Pubkey())
 	fmt.Printf("conn: %v\n", conn)
 
@@ -314,9 +316,9 @@ func createRLPxConnection(node *enode.Node, privateKey *ecdsa.PrivateKey) (*rlpx
 	return conn, nil
 }
 
-// // testGetBlockHeaders 测试GetBlockHeaders请求
+// // testGetBlockHeaders test GetBlockHeaders request
 // func testGetBlockHeaders(conn *rlpx.Conn) error {
-// 	// 首先进行ETH协议握手
+// 	// First perform ETH protocol handshake
 // 	err := performETHHandshake(conn)
 // 	if err != nil {
 // 		return fmt.Errorf("failed to perform ETH handshake: %w", err)
@@ -327,14 +329,14 @@ func createRLPxConnection(node *enode.Node, privateKey *ecdsa.PrivateKey) (*rlpx
 // 		GetBlockHeadersRequest: &eth.GetBlockHeadersRequest{
 // 			Origin: eth.HashOrNumber{
 // 				Number: 1,
-// 			}, // 请求从区块1开始
-// 			Amount:  10, // 请求10个区块头
+// 			}, // Request starting from block 1
+// 			Amount:  10, // Request 10 block headers
 // 			Skip:    0,
 // 			Reverse: false,
 // 		},
 // 	}
 
-// 	// 使用RLP编码发送消息
+// 	// Use RLP encoding to send message
 // 	data, err := rlp.EncodeToBytes(request)
 // 	if err != nil {
 // 		return fmt.Errorf("failed to encode GetBlockHeaders request: %w", err)
@@ -346,7 +348,7 @@ func createRLPxConnection(node *enode.Node, privateKey *ecdsa.PrivateKey) (*rlpx
 // 	}
 // 	fmt.Println("GetBlockHeaders request sent successfully")
 
-// 	// 接收响应
+// 	// Receive response
 // 	code, responseData, _, err := conn.Read()
 // 	if err != nil {
 // 		return fmt.Errorf("failed to read response: %w", err)
@@ -375,34 +377,34 @@ func createRLPxConnection(node *enode.Node, privateKey *ecdsa.PrivateKey) (*rlpx
 // 	return nil
 // }
 
-// // performETHHandshake 执行ETH协议握手
+// // performETHHandshake perform ETH protocol handshake
 // func performETHHandshake(conn *rlpx.Conn) error {
-// 	// 使用默认的主网配置创建状态包
+// 	// Use default mainnet configuration to create status packet
 // 	genesisHash := common.HexToHash("0x307b844cd0697aeebd02d2ee2443f0fa7e990258ec48e980d97c81669d00affd")
 // 	latestHash := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
 // 	td := big.NewInt(0)
 
-// 	// 创建一个虚拟的创世区块用于forkid计算
+// 	// Create a virtual genesis block for forkid calculation
 // 	genesisHeader := &types.Header{
 // 		Number:     big.NewInt(0),
 // 		Time:       0,
 // 		Difficulty: big.NewInt(1),
 // 	}
 
-// 	// 创建一个虚拟区块用于forkid计算
+// 	// Create a virtual block for forkid calculation
 // 	body := &types.Body{}
 // 	genesisBlock := types.NewBlock(genesisHeader, body, nil, nil)
 // 	fmt.Println("genesisBlock: ", genesisBlock)
 // 	status := &eth.StatusPacket68{
 // 		ProtocolVersion: 68, // ETH68
-// 		NetworkID:       1,  // 主网
+// 		NetworkID:       1,  // Mainnet
 // 		TD:              td,
 // 		Head:            latestHash,
 // 		Genesis:         genesisHash,
 // 		ForkID:          forkid.NewID(params.MainnetChainConfig, genesisBlock, 0, 0),
 // 	}
 
-// 	// 发送状态包
+// 	// Send status packet
 // 	statusData, err := rlp.EncodeToBytes(status)
 // 	if err != nil {
 // 		return fmt.Errorf("failed to encode status packet: %w", err)
@@ -418,7 +420,7 @@ func createRLPxConnection(node *enode.Node, privateKey *ecdsa.PrivateKey) (*rlpx
 
 // 	fmt.Println("ETH status packet sent")
 
-// 	// 接收对方的状态包
+// 	// Receive peer's status packet
 // 	code, data, _, err := conn.Read()
 // 	if err != nil {
 // 		return fmt.Errorf("failed to read status response: %w", err)
@@ -427,11 +429,11 @@ func createRLPxConnection(node *enode.Node, privateKey *ecdsa.PrivateKey) (*rlpx
 // 	fmt.Printf("Received message - Code: %d, Data length: %d\n", code, len(data))
 // 	fmt.Printf("Raw data (hex): %x\n", data)
 
-// 	// 解析原始数据为可读格式
+// 	// Parse raw data to readable format
 // 	handshake := parseRawData(data)
 // 	fmt.Printf("Parsed data: %v\n", handshake)
 
-// 	// 专门解析P2P握手数据
+// 	// Specifically parse P2P handshake data
 // 	parseP2PHandshakeData(data)
 
 // 	if code == 0x00 {
@@ -444,22 +446,22 @@ func createRLPxConnection(node *enode.Node, privateKey *ecdsa.PrivateKey) (*rlpx
 // 	return nil
 // }
 
-// parseRawData 解析原始数据为可读格式
+// parseRawData parse raw data to readable format
 func parseRawData(data []byte) *protocolHandshake {
 	if len(data) == 0 {
 		fmt.Println("empty data")
 		return nil
 	}
 
-	// 尝试解析为RLP结构
+	// Try to parse as RLP structure
 	var result interface{}
 	err := rlp.DecodeBytes(data, &result)
 	if err != nil {
 		fmt.Println("rlp decode error")
 		return nil
 	}
-	fmt.Println("解析前data:", data)
-	// 尝试解析为P2P握手消息
+	fmt.Println("Data before parsing:", data)
+	// Try to parse as P2P handshake message
 	var handshake protocolHandshake
 	err = rlp.DecodeBytes(data, &handshake)
 	if err == nil {
@@ -475,7 +477,7 @@ func parseRawData(data []byte) *protocolHandshake {
 	}
 }
 
-// parseP2PHandshakeData 专门解析P2P握手数据
+// parseP2PHandshakeData specifically parses P2P handshake data
 func parseP2PHandshakeData(data []byte) {
 	var handshake protocolHandshake
 	err := rlp.DecodeBytes(data, &handshake)
@@ -496,21 +498,21 @@ func parseP2PHandshakeData(data []byte) {
 	fmt.Printf("==============================\n")
 }
 
-// 直接解析十六进制字符串
+// Parse hexadecimal string directly
 func parseJWTSecretFromHexString(hexString string) ([]byte, error) {
-	// 去除可能的0x前缀和空白字符
+	// Remove possible 0x prefix and whitespace
 	hexString = strings.TrimSpace(hexString)
 	if strings.HasPrefix(hexString, "0x") {
 		hexString = hexString[2:]
 	}
 
-	// 转换为字节数组
+	// Convert to byte array
 	jwtSecret, err := hex.DecodeString(hexString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode hex string: %w", err)
 	}
 
-	// 验证长度
+	// Validate length
 	if len(jwtSecret) != 32 {
 		return nil, fmt.Errorf("invalid JWT secret length: expected 32 bytes, got %d", len(jwtSecret))
 	}
@@ -518,7 +520,7 @@ func parseJWTSecretFromHexString(hexString string) ([]byte, error) {
 	return jwtSecret, nil
 }
 
-// runSingleNodeTestingWithUI 处理单节点测试的用户交互逻辑
+// runSingleNodeTestingWithUI handle user interaction logic for single node testing
 func runSingleNodeTestingWithUI(elNames []string, config *Config) {
 	fmt.Println("\nAvailable nodes:")
 	for i, name := range elNames {
@@ -551,7 +553,7 @@ func runSingleNodeTestingWithUI(elNames []string, config *Config) {
 	var batchSizeInput string
 	fmt.Scanln(&batchSizeInput)
 
-	batchSize := 3 // 默认值
+	batchSize := 3 // Default value
 	if batchSizeInput != "" {
 		if size, err := strconv.Atoi(batchSizeInput); err == nil && size > 0 {
 			batchSize = size
@@ -563,37 +565,38 @@ func runSingleNodeTestingWithUI(elNames []string, config *Config) {
 }
 
 func main() {
-	// ========== 测试配置变量 ==========
-	// 修改这些变量来控制测试行为，无需从控制台输入
-
-	// 测试模式: "multi" = 多节点测试, "single" = 单节点测试, "interactive" = 交互式选择
-	testMode := "single"
-
-	// 多节点测试配置 (仅在 testMode = "multi" 时生效)
-	multiNodeNonceInitialValues := []uint64{
-		6, // Node 0 (geth) 的初始nonce
-		8, // Node 1 (nethermind) 的初始nonce
-		4, // Node 2 (reth) 的初始nonce
-		6, // Node 3 (erigon) 的初始nonce
-		6, // Node 4 (besu) 的初始nonce
-	}
-	multiNodeBatchSize := 3 // 每个节点发送的交易数量
-
-	// 单节点测试配置 (仅在 testMode = "single" 时生效)
-	singleNodeIndex := 2          // 要测试的节点索引 (0=geth, 1=nethermind, 2=reth, 3=erigon, 4=besu)
-	singleNodeNonce := uint64(10) // 起始nonce值
-	singleNodeBatchSize := 3      // 要发送的交易数量
-
-	// ========================================
-
-	// 1. 读取当前目录下config.yaml文件的配置
+	// ========== Test Configuration Variables ==========
+	// Modify these variables to control test behavior without console input
+	// 1. Read configuration from config.yaml file in current directory
 	config, err := loadConfig("config.yaml")
 	if err != nil {
 		fmt.Printf("Failed to load config: %v\n", err)
 		return
 	}
+	// Test mode: "multi" = multi-node testing, "single" = single node testing,
+	// "interactive" = interactive selection,
+	// "oneTransaction" = single transaction testing,
+	// "largeTransactions" = large batch transaction testing
+	testMode := config.testMode.TestMode
 
-	// 2. 获取其中的enode值，解析之后获取其中的IP和端口
+	// Multi-node testing configuration (only effective when testMode = "multi")
+	multiNodeNonceInitialValues := []uint64{
+		0, // Node 0 (geth) initial nonce
+		0, // Node 1 (nethermind) initial nonce
+		0, // Node 2 (reth) initial nonce
+		0, // Node 3 (erigon) initial nonce
+		0, // Node 4 (besu) initial nonce
+	}
+	multiNodeBatchSize := 2 // Number of transactions to send per node
+
+	// Single node testing configuration (only effective when testMode = "single")
+	singleNodeIndex := 2          // Node index to test (0=geth, 1=nethermind, 2=reth, 3=erigon, 4=besu)
+	singleNodeNonce := uint64(13) // Starting nonce value
+	singleNodeBatchSize := 1      // Number of transactions to send
+
+	// ========================================
+
+	// 2. Get enode values, parse to extract IP and port
 	if len(config.P2P.BootstrapNodes) == 0 {
 		fmt.Println("No bootstrap nodes found in config")
 		return
@@ -601,16 +604,16 @@ func main() {
 
 	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
 
-	// 根据配置变量执行相应的测试
+	// Execute corresponding tests based on configuration variables
 	switch testMode {
 	case "multi":
-		// 多节点测试
+		// Multi-node testing
 		fmt.Println("=== D2PFuzz Multi-Node Testing Tool ===")
 		fmt.Println("🚀 Starting multi-node testing...")
 		multiNodesTesting(elNames, config, multiNodeNonceInitialValues, multiNodeBatchSize)
 
 	case "single":
-		// 单节点测试
+		// Single node testing
 		fmt.Println("=== D2PFuzz Single-Node Testing Tool ===")
 		if singleNodeIndex < 0 || singleNodeIndex >= len(elNames) {
 			fmt.Printf("Invalid node index: %d. Valid range: 0-%d\n", singleNodeIndex, len(elNames)-1)
@@ -618,9 +621,17 @@ func main() {
 		}
 		fmt.Printf("🎯 Starting single node testing for %s (Node %d)...\n", elNames[singleNodeIndex], singleNodeIndex)
 		singleNodeTesting(elNames, config, singleNodeIndex, &singleNodeNonce, singleNodeBatchSize)
+	case "oneTransaction":
+		// Single node testing, send only one transaction
+		fmt.Println("=== D2PFuzz Single-Transaction Testing Tool ===")
 
+		sendTransaction(config)
+	case "largeTransactions":
+		// Single node testing, send only one transaction
+		fmt.Println("=== D2PFuzz Large-Transaction Testing Tool ===")
+		sendLargeTransactions(config)
 	case "interactive":
-		// 交互式选择模式
+		// Interactive selection mode
 		fmt.Println("=== D2PFuzz Multi-Node Testing Tool ===")
 		fmt.Println("Available test modes:")
 		fmt.Println("1. Multi-node testing (all nodes)")
@@ -654,7 +665,7 @@ func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonc
 	fmt.Printf("\n=== Single Node Testing ===\n")
 	fmt.Printf("●Execution Client: %v (Node %d)\n", elNames[elIndex], elIndex)
 
-	// 设置nonce初始值
+	// Set nonce initial value
 	nodeNonceInitialValues := []uint64{0, 0, 0, 0, 0}
 	if customNonce != nil {
 		if elIndex < len(nodeNonceInitialValues) {
@@ -662,7 +673,7 @@ func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonc
 		}
 	}
 
-	// 创建节点账户管理器，只为当前节点分配账户
+	// Create node account manager, allocate accounts only for current node
 	nodeAccountManager := NewNodeAccountManagerWithNonces(PredefinedAccounts, len(elNames), nodeNonceInitialValues)
 
 	// parse node info
@@ -674,22 +685,23 @@ func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonc
 	}
 
 	fmt.Printf("🔗 Connecting to %s node:\n", elNames[elIndex])
+	fmt.Printf("📍 IP: %s, Port: %d\n", node.IP(), node.TCP())
 
-	// 读取JWTSecret
+	// Read JWTSecret
 	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
 	if err != nil {
 		fmt.Printf("❌ Failed to parse JWT secret: %v\n", err)
 		return
 	}
 
-	// 创建suite
-	suite, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]))
+	// Create suite
+	suite, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), elNames[elIndex])
 	if err != nil {
 		fmt.Printf("❌ Failed to create suite: %v\n", err)
 		return
 	}
 
-	// 获取当前节点的固定账户信息
+	// Get fixed account information for current node
 	nodeAccount := nodeAccountManager.GetNodeAccount(elIndex)
 	if nodeAccount == nil {
 		fmt.Printf("❌ Failed to get account for node %d\n", elIndex)
@@ -700,15 +712,16 @@ func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonc
 	fmt.Printf("   From: %s (Initial Nonce: %d)\n", nodeAccount.FromAccount.Address, nodeAccount.Nonce)
 	fmt.Printf("   To: %s\n", nodeAccount.ToAccount.Address)
 
-	// 初始化交易哈希记录文件 - 单节点测试直接使用 txhashes.txt
+	// Initialize transaction hash record file - single node testing directly uses txhashes.txt
 	hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
-	// 清空文件内容
-	if err := os.WriteFile(hashFilePath, []byte(""), 0644); err != nil {
+	// Clear file content and add node name comment
+	nodeHeader := fmt.Sprintf("# %s\n", elNames[elIndex])
+	if err := os.WriteFile(hashFilePath, []byte(nodeHeader), 0644); err != nil {
 		fmt.Printf("❌ Failed to initialize hash file: %v\n", err)
 		return
 	}
 
-	// 批量发送交易测试
+	// Batch transaction sending test
 	fmt.Printf("📤 Sending %d transactions...\n", batchSize)
 
 	successCount := 0
@@ -722,30 +735,31 @@ func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonc
 			break
 		}
 
-		// 将交易哈希写入文件
+		// Write transaction hash to file
 		hashLine := fmt.Sprintf("%s\n", txHash.Hex())
 		if err := appendToFile(hashFilePath, hashLine); err != nil {
 			fmt.Printf(" ⚠️ Failed to write hash to file: %v", err)
 		}
 
-		// 交易成功后增加该节点的nonce
+		// Increment nonce for this node after successful transaction
 		nodeAccountManager.IncrementNonce(elIndex)
 		fmt.Printf(" ✅ Finished! (New Nonce: %d, Hash: %s)\n", nodeAccountManager.GetCurrentNonce(elIndex), txHash.Hex())
 		successCount++
 
-		// 在交易之间添加小延迟，避免nonce冲突
+		// Add small delay between transactions to avoid nonce conflicts
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// 打印测试总结
+	// Print test summary
 	// fmt.Printf("\n=== Single Node Testing Summary ===\n")
 	// fmt.Printf("Node: %s (Index: %d)\n", elNames[elIndex], elIndex)
 	// fmt.Printf("Transactions sent: %d/%d\n", successCount, batchSize)
 	fmt.Printf("=== Single Node Testing Completed ===\n")
 	// fmt.Printf("📄 Transaction hashes saved to: %s\n", hashFilePath)
 }
+
 func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues []uint64, batchSize int) {
-	// 确保nonce初始值列表长度足够
+	// Ensure nonce initial values list has sufficient length
 	for len(nodeNonceInitialValues) < len(elNames) {
 		nodeNonceInitialValues = append(nodeNonceInitialValues, 0)
 	}
@@ -756,7 +770,7 @@ func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues 
 	}
 	fmt.Println()
 
-	// 创建节点账户管理器，为每个节点分配固定的账户和独立的nonce管理
+	// Create node account manager, allocate fixed accounts and independent nonce management for each node
 	nodeAccountManager := NewNodeAccountManagerWithNonces(PredefinedAccounts, len(elNames), nodeNonceInitialValues)
 
 	fmt.Printf("\n=== Multi-Node Testing Started ===\n")
@@ -764,13 +778,13 @@ func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues 
 	// fmt.Printf("Account allocation strategy: Fixed accounts per node\n")
 	// fmt.Printf("Nonce management: Independent per node\n\n")
 
-	// 统计测试结果
+	// Statistics for test results
 	// successCount := 0
 	failureCount := 0
 
-	// 初始化交易哈希记录文件
+	// Initialize transaction hash record file
 	hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
-	// 清空文件内容
+	// Clear file content
 	if err := os.WriteFile(hashFilePath, []byte(""), 0644); err != nil {
 		fmt.Printf("❌ Failed to initialize hash file: %v\n", err)
 		return
@@ -783,7 +797,7 @@ func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues 
 		return
 	}
 
-	// 循环测试所有node
+	// Loop test all nodes
 	for i := 0; i < len(elNames); i++ {
 		fmt.Printf("●Execution Client: %v (Node %d/%d)\n", elNames[i], i+1, len(elNames))
 
@@ -797,17 +811,17 @@ func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues 
 		}
 
 		fmt.Printf("🔗 Connecting to %s node:\n", elNames[i])
-		// fmt.Printf("📍 IP: %s, Port: %d\n", node.IP(), node.TCP())
+		fmt.Printf("📍 IP: %s, Port: %d\n", node.IP(), node.TCP())
 
-		// 创建suite
-		suite, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]))
+		// Create suite
+		suite, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), elNames[i])
 		if err != nil {
 			fmt.Printf("❌ Failed to create suite: %v\n", err)
 			failureCount++
 			continue
 		}
 
-		// 获取当前节点的固定账户信息
+		// Get fixed account information for current node
 		nodeAccount := nodeAccountManager.GetNodeAccount(i)
 		if nodeAccount == nil {
 			fmt.Printf("❌ Failed to get account for node %d\n", i)
@@ -819,13 +833,13 @@ func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues 
 		fmt.Printf("   From: %s (Nonce: %d)\n", nodeAccount.FromAccount.Address, nodeAccount.Nonce)
 		fmt.Printf("   To: %s\n", nodeAccount.ToAccount.Address)
 
-		// 写入节点名称到哈希文件
+		// Write node name to hash file
 		nodeHeader := fmt.Sprintf("# %s\n", elNames[i])
 		if err := appendToFile(hashFilePath, nodeHeader); err != nil {
 			fmt.Printf("❌ Failed to write node header to hash file: %v\n", err)
 		}
 
-		// 批量发送交易测试（可以根据需要调整交易数量）
+		// Batch transaction sending test (can adjust transaction count as needed)
 		fmt.Printf("📤 Sending %d transactions for Node %d...\n", batchSize, i+1)
 
 		// nodeSuccess := true
@@ -840,17 +854,17 @@ func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues 
 				break
 			}
 
-			// 将交易哈希写入文件
+			// Write transaction hash to file
 			hashLine := fmt.Sprintf("%s\n", txHash.Hex())
 			if err := appendToFile(hashFilePath, hashLine); err != nil {
 				fmt.Printf(" ⚠️ Failed to write hash to file: %v", err)
 			}
 
-			// 交易成功后增加该节点的nonce
+			// Increment nonce for this node after successful transaction
 			nodeAccountManager.IncrementNonce(i)
 			fmt.Printf(" Finished. (New Nonce: %d, Hash: %s)\n", nodeAccountManager.GetCurrentNonce(i), txHash.Hex())
 
-			// 在交易之间添加小延迟，避免nonce冲突
+			// Add small delay between transactions to avoid nonce conflicts
 			time.Sleep(100 * time.Millisecond)
 		}
 
@@ -865,14 +879,14 @@ func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues 
 		fmt.Println(strings.Repeat("-", 60))
 	}
 
-	// 打印测试总结
+	// Print test summary
 	// fmt.Printf("\n=== Multi-Node Testing Summary ===\n")
 	fmt.Printf("Total nodes tested: %d\n", len(elNames))
 	// fmt.Printf("Successful nodes: %d\n", successCount)
 	// fmt.Printf("Failed nodes: %d\n", failureCount)
 	// fmt.Printf("Success rate: %.1f%%\n", float64(successCount)/float64(len(elNames))*100)
 
-	// 打印最终的nonce状态
+	// Print final nonce status
 	fmt.Println("\n=== Final Nonce Status ===")
 	for i := 0; i < len(elNames); i++ {
 		nodeAccount := nodeAccountManager.GetNodeAccount(i)
@@ -895,16 +909,16 @@ func printTransaction(tx *types.Transaction) {
 	fmt.Printf("  To: %s\n", tx.To().Hex())
 	fmt.Printf("  Value: %s\n", tx.Value())
 	fmt.Printf("  Data: %x\n", tx.Data())
-	// 签名信息
+	// Signature information
 	v, r, s := tx.RawSignatureValues()
-	fmt.Printf("签名 V: %d\n", v.Uint64())
-	fmt.Printf("签名 R: %s\n", r.String())
-	fmt.Printf("签名 S: %s\n", s.String())
+	fmt.Printf("Signature V: %d\n", v.Uint64())
+	fmt.Printf("Signature R: %s\n", r.String())
+	fmt.Printf("Signature S: %s\n", s.String())
 }
 
-// queryTransactionByHash 通过交易哈希查询交易是否在链上
+// queryTransactionByHash queries whether a transaction is on the chain by transaction hash
 func queryTransactionByHash(s *ethtest.Suite, txHash common.Hash) (tx *types.Transaction, err error) {
-	// 建立连接
+	// Establish connection
 	conn, err := s.Dial()
 	if err != nil {
 		return nil, fmt.Errorf("dial failed: %v", err)
@@ -915,7 +929,7 @@ func queryTransactionByHash(s *ethtest.Suite, txHash common.Hash) (tx *types.Tra
 		return nil, fmt.Errorf("peering failed: %v", err)
 	}
 
-	// 创建交易查询请求（使用 GetPooledTransactions 作为查询机制）
+	// Create transaction query request (using GetPooledTransactions as query mechanism)
 	req := &eth.GetPooledTransactionsPacket{
 		RequestId:                    999,
 		GetPooledTransactionsRequest: []common.Hash{txHash},
@@ -925,7 +939,7 @@ func queryTransactionByHash(s *ethtest.Suite, txHash common.Hash) (tx *types.Tra
 		return nil, fmt.Errorf("failed to write transaction query: %v", err)
 	}
 	fmt.Println("req: ", req)
-	// 等待响应
+	// Wait for response
 	err = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	if err != nil {
 		return nil, fmt.Errorf("failed to set read deadline: %v", err)
@@ -936,17 +950,17 @@ func queryTransactionByHash(s *ethtest.Suite, txHash common.Hash) (tx *types.Tra
 	}
 	fmt.Println("resp: ", resp)
 
-	// 验证响应
+	// Verify response
 	if got, want := resp.RequestId, req.RequestId; got != want {
 		return nil, fmt.Errorf("unexpected request id in response: got %d, want %d", got, want)
 	}
 
-	// 检查是否找到了交易
+	// Check if transaction was found
 	if len(resp.PooledTransactionsResponse) == 0 {
 		return nil, fmt.Errorf("transaction not found: %s", txHash.Hex())
 	}
 
-	// 验证返回的交易哈希是否匹配
+	// Verify if returned transaction hash matches
 	foundTx := resp.PooledTransactionsResponse[0]
 	if foundTx.Hash() != txHash {
 		return nil, fmt.Errorf("transaction hash mismatch: expected %s, got %s",
@@ -957,12 +971,20 @@ func queryTransactionByHash(s *ethtest.Suite, txHash common.Hash) (tx *types.Tra
 	return foundTx, nil
 }
 
-func sendLargeTransactions(s *ethtest.Suite) (eth.PooledTransactionsResponse, []common.Hash) {
-	// 这个测试首先向节点发送count笔交易，然后请求这些交易使用 GetPooledTransactions 在另一个对等连接上。
+func sendLargeTransactions(config *Config) (eth.PooledTransactionsResponse, []common.Hash) {
+	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
+	if err != nil {
+		return eth.PooledTransactionsResponse{}, nil
+	}
+	enodeStr := config.P2P.BootstrapNodes[1]
+	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
+	s, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), "nethermind")
+	fmt.Printf("🎯 Starting large transactions testing for %s ...\n", s.GetElName())
+	// This test first sends count transactions to the node, then requests these transactions using GetPooledTransactions on another peer connection.
 	var (
-		nonce  = uint64(20967)
-		from   = PredefinedAccounts[0].PrivateKey
-		count  = 1
+		nonce  = uint64(31)
+		from   = PredefinedAccounts[1].PrivateKey
+		count  = 20000
 		txs    []*types.Transaction
 		hashes []common.Hash
 		set    = make(map[common.Hash]struct{})
@@ -972,14 +994,14 @@ func sendLargeTransactions(s *ethtest.Suite) (eth.PooledTransactionsResponse, []
 		fmt.Println("failed to generate private key")
 		return nil, nil
 	}
-	var to common.Address = common.HexToAddress(PredefinedAccounts[1].Address)
+	var to common.Address = common.HexToAddress(PredefinedAccounts[6].Address)
 	for i := 0; i < count; i++ {
 		inner := &types.DynamicFeeTx{
 			ChainID: big.NewInt(3151908),
 			// Nonce:     nonce + uint64(i),
 			Nonce:     nonce,
-			GasTipCap: big.NewInt(1),
-			GasFeeCap: big.NewInt(10000000000),
+			GasTipCap: big.NewInt(1000000000),
+			GasFeeCap: big.NewInt(20000000000),
 			Gas:       21000,
 			To:        &to,
 			Value:     common.Big1,
@@ -994,7 +1016,7 @@ func sendLargeTransactions(s *ethtest.Suite) (eth.PooledTransactionsResponse, []
 		hashes = append(hashes, tx.Hash())
 	}
 	// Send txs.
-	// 记录发送时间
+	// Record sending time
 	sendStart := time.Now()
 	s.SendTxs(txs)
 	elapsed := time.Since(sendStart)
@@ -1003,7 +1025,7 @@ func sendLargeTransactions(s *ethtest.Suite) (eth.PooledTransactionsResponse, []
 	}
 	fmt.Printf("Transaction sending time consumed: %v", elapsed)
 
-	// 将交易哈希写入到文件
+	// Write transaction hashes to file
 	hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
 	if err := writeHashesToFile(hashes, hashFilePath); err != nil {
 		fmt.Printf("Failed to write hashes to file: %v\n", err)
@@ -1142,21 +1164,38 @@ func printMsg(msg any) {
 	fmt.Printf("Msg: %v\n", msg)
 }
 
-func sendTransaction(s *ethtest.Suite) error {
-	nonce := uint64(math.MaxUint64)
+func sendTransaction(config *Config) error {
+	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
+	if err != nil {
+		return err
+	}
+	enodeStr := config.P2P.BootstrapNodes[0]
+	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
+	s, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), "besu")
+	if err != nil {
+		return err
+	}
+	fmt.Printf("🎯 Starting single transaction testing for %s ...\n", s.GetElName())
+	nonce := uint64(0)
 	// nonce := uint64(9999999)
-	var to common.Address = common.HexToAddress(PredefinedAccounts[15].Address)
+	var to common.Address = common.HexToAddress(PredefinedAccounts[0].Address)
 	txdata := &types.DynamicFeeTx{
 		ChainID:   big.NewInt(3151908),
 		Nonce:     nonce,
-		GasTipCap: big.NewInt(30000000),
-		GasFeeCap: big.NewInt(30000000),
+		GasTipCap: big.NewInt(100000000),
+		GasFeeCap: big.NewInt(2000000000),
 		Gas:       21000,
 		To:        &to,
-		Value:     common.Big1,
+		Value: func() *big.Int {
+			val, ok := new(big.Int).SetString("999999999999000000000000000", 10)
+			if !ok {
+				panic("failed to parse big integer string")
+			}
+			return val
+		}(),
 	}
 	innertx := types.NewTx(txdata)
-	prik, err := crypto.HexToECDSA(PredefinedAccounts[16].PrivateKey)
+	prik, err := crypto.HexToECDSA(PredefinedAccounts[13].PrivateKey)
 	if err != nil {
 		fmt.Printf("failed to sign tx: %v", err)
 		return err
@@ -1171,7 +1210,7 @@ func sendTransaction(s *ethtest.Suite) error {
 		return err
 	}
 
-	// 记录发送时间
+	// Record sending time
 	sendStart := time.Now()
 	// if err = s.SendTxs([]*types.Transaction{tx}); err != nil {
 	// elapsed := time.Since(sendStart)
@@ -1182,13 +1221,13 @@ func sendTransaction(s *ethtest.Suite) error {
 	elapsed := time.Since(sendStart)
 	fmt.Printf("Transaction sending time consumed: %v\n", elapsed)
 
-	// 将交易哈希写入到文件
-	hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
-	if err := writeHashesToFile(hashes, hashFilePath); err != nil {
-		fmt.Printf("Failed to write hashes to file: %v\n", err)
-	}
+	// Write transaction hashes to file
+	// hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
+	// if err := writeHashesToFile(hashes, hashFilePath); err != nil {
+	// 	fmt.Printf("Failed to write hashes to file: %v\n", err)
+	// }
 
-	// 参考sendLargeTransactions的验证方式，建立连接验证交易是否被节点接收
+	// Reference sendLargeTransactions validation method, establish connection to verify if transactions are received by node
 	conn, err := s.Dial()
 	if err != nil {
 		fmt.Printf("dial failed: %v", err)
@@ -1198,7 +1237,7 @@ func sendTransaction(s *ethtest.Suite) error {
 		fmt.Printf("peering failed: %v", err)
 	}
 
-	// 创建并发送池化交易请求来验证交易
+	// Create and send pooled transaction request to verify transactions
 	req := &eth.GetPooledTransactionsPacket{
 		RequestId:                    1234,
 		GetPooledTransactionsRequest: hashes,
@@ -1206,7 +1245,7 @@ func sendTransaction(s *ethtest.Suite) error {
 	if err = conn.Write(1, eth.GetPooledTransactionsMsg, req); err != nil {
 		fmt.Printf("could not write to conn: %v", err)
 	}
-	// 检查是否收到了发送的交易
+	// Check if sent transactions were received
 	msg := new(eth.PooledTransactionsPacket)
 	if err := conn.ReadMsg(1, eth.PooledTransactionsMsg, &msg); err != nil {
 		fmt.Printf("error reading from connection: %v", err)
@@ -1254,13 +1293,13 @@ func sendTransactionWithAccounts(s *ethtest.Suite, fromAccount Account, toAccoun
 
 	fmt.Printf("Sending transaction from %s to %s (nonce: %d)\n", fromAccount.Address, toAccount.Address, nonce)
 
-	// 记录发送时间
+	// Record sending time
 	sendStart := time.Now()
 	s.SendTxs([]*types.Transaction{tx})
 	elapsed := time.Since(sendStart)
 	fmt.Printf("Transaction sending time consumed: %v\n", elapsed)
 
-	// 参考sendLargeTransactions的验证方式，建立连接验证交易是否被节点接收
+	// Refer to sendLargeTransactions verification method, establish connection to verify if transaction is received by node
 	conn, err := s.Dial()
 	if err != nil {
 		fmt.Printf("dial failed: %v", err)
@@ -1270,7 +1309,7 @@ func sendTransactionWithAccounts(s *ethtest.Suite, fromAccount Account, toAccoun
 		fmt.Printf("peering failed: %v", err)
 	}
 
-	// 创建并发送池化交易请求来验证交易
+	// Create and send pooled transaction request to verify transaction
 	req := &eth.GetPooledTransactionsPacket{
 		RequestId:                    1234,
 		GetPooledTransactionsRequest: hashes,
@@ -1278,7 +1317,7 @@ func sendTransactionWithAccounts(s *ethtest.Suite, fromAccount Account, toAccoun
 	if err = conn.Write(1, eth.GetPooledTransactionsMsg, req); err != nil {
 		fmt.Printf("could not write to conn: %v", err)
 	}
-	// 检查是否收到了发送的交易
+	// Check if the sent transaction was received
 	msg := new(eth.PooledTransactionsPacket)
 	if err := conn.ReadMsg(1, eth.PooledTransactionsMsg, &msg); err != nil {
 		fmt.Printf("error reading from connection: %v", err)
@@ -1297,17 +1336,24 @@ func sendTransactionWithAccounts(s *ethtest.Suite, fromAccount Account, toAccoun
 	return nil
 }
 
-// sendTransactionWithAccountsAndNonce 使用指定账户和nonce发送交易，返回交易哈希
+// sendTransactionWithAccountsAndNonce sends transaction using specified account and nonce, returns transaction hash
 func sendTransactionWithAccountsAndNonce(s *ethtest.Suite, fromAccount Account, toAccount Account, nonce uint64) (common.Hash, error) {
 	var to common.Address = common.HexToAddress(toAccount.Address)
 	txdata := &types.DynamicFeeTx{
 		ChainID:   big.NewInt(3151908),
 		Nonce:     nonce,
-		GasTipCap: big.NewInt(1),
-		GasFeeCap: big.NewInt(20000000),
-		Gas:       40000000,
+		GasTipCap: big.NewInt(1000000000),
+		GasFeeCap: big.NewInt(20000000000),
+		Gas:       21000,
 		To:        &to,
 		Value:     big.NewInt(1),
+		// Value: func() *big.Int {
+		// 	val, ok := new(big.Int).SetString("999999999998000000000000000", 10)
+		// 	if !ok {
+		// 		panic("failed to parse big integer string")
+		// 	}
+		// 	return val
+		// }(),
 	}
 	innertx := types.NewTx(txdata)
 	prik, err := crypto.HexToECDSA(fromAccount.PrivateKey)
@@ -1323,56 +1369,66 @@ func sendTransactionWithAccountsAndNonce(s *ethtest.Suite, fromAccount Account, 
 
 	txHash := tx.Hash()
 
-	// 记录发送时间
+	// Record sending time
 	sendStart := time.Now()
-	s.SendTxs([]*types.Transaction{tx})
+	if s.GetElName() == "reth" {
+		// reth must handle recv content
+		err = s.SendTxs([]*types.Transaction{tx})
+	} else {
+		// Other clients can skip recv content handling
+		err = s.SendTxsWithoutRecv([]*types.Transaction{tx})
+	}
+	if err != nil {
+		fmt.Printf("failed to send tx: %v", err)
+		return common.Hash{}, err
+	}
 	elapsed := time.Since(sendStart)
 	fmt.Printf("Transaction sending time consumed: %v\n", elapsed)
 
 	return txHash, nil
 }
 
-// 保留原有函数以保持向后兼容性
+// Keep original function for backward compatibility
 func sendTransactionWithNonce(s *ethtest.Suite, nonce uint64) error {
 	return sendTransactionWithAccounts(s, PredefinedAccounts[0], PredefinedAccounts[1], nonce)
 }
 
 func printReceipts(receipts []*eth.ReceiptList68) {
 	if len(receipts) == 0 {
-		fmt.Println("没有收据数据")
+		fmt.Println("No receipt data")
 		return
 	}
 
 	for i, receiptList := range receipts {
-		fmt.Printf("=== 区块 %d 的收据列表 ===\n", i+1)
+		fmt.Printf("=== Receipt list for block %d ===\n", i+1)
 
-		// ReceiptList68 应该是一个包含多个Receipt的列表
-		// 根据go-ethereum的实现，这应该是 []*types.Receipt
+		// ReceiptList68 should be a list containing multiple Receipts
+		// According to go-ethereum implementation, this should be []*types.Receipt
 		if receiptList == nil {
-			fmt.Println("收据列表为空")
+			fmt.Println("Receipt list is empty")
 			continue
 		}
 
-		// 由于ReceiptList68的具体结构不明确，我们需要通过反射来访问其字段
+		// Since the specific structure of ReceiptList68 is unclear, we need to access its fields through reflection
 		reflectValue := reflect.ValueOf(receiptList).Elem()
 		reflectType := reflectValue.Type()
 
-		fmt.Printf("收据列表类型: %s\n", reflectType.Name())
-		fmt.Printf("字段数量: %d\n", reflectValue.NumField())
+		fmt.Printf("Receipt list type: %s\n", reflectType.Name())
+		fmt.Printf("Field count: %d\n", reflectValue.NumField())
 
-		// 遍历所有字段
+		// Iterate through all fields
 		for j := 0; j < reflectValue.NumField(); j++ {
 			field := reflectType.Field(j)
 			fieldValue := reflectValue.Field(j)
 
-			fmt.Printf("  字段 %s (%s): ", field.Name, field.Type)
+			fmt.Printf("  Field %s (%s): ", field.Name, field.Type)
 
-			// 如果字段可以被访问
+			// If the field can be accessed
 			if fieldValue.CanInterface() {
 				switch fieldValue.Kind() {
 				case reflect.Slice:
-					fmt.Printf("切片长度 %d\n", fieldValue.Len())
-					// 如果是Receipt切片，打印每个Receipt的详细信息
+					fmt.Printf("Slice length %d\n", fieldValue.Len())
+					// If it's a Receipt slice, print detailed information for each Receipt
 					if field.Type.String() == "[]*types.Receipt" {
 						for k := 0; k < fieldValue.Len(); k++ {
 							receipt := fieldValue.Index(k).Interface().(*types.Receipt)
@@ -1389,7 +1445,7 @@ func printReceipts(receipts []*eth.ReceiptList68) {
 					fmt.Printf("%v\n", fieldValue.Interface())
 				}
 			} else {
-				fmt.Println("无法访问")
+				fmt.Println("Cannot access")
 			}
 		}
 		fmt.Println()
@@ -1397,64 +1453,64 @@ func printReceipts(receipts []*eth.ReceiptList68) {
 }
 
 func printSingleReceipt(receipt *types.Receipt, index int) {
-	fmt.Printf("    --- 收据 %d ---\n", index)
+	fmt.Printf("    --- Receipt %d ---\n", index)
 
-	// 基本信息
-	fmt.Printf("    交易类型: %d\n", receipt.Type)
-	fmt.Printf("    交易哈希: %s\n", receipt.TxHash.Hex())
-	fmt.Printf("    状态: %d\n", receipt.Status)
+	// Basic information
+	fmt.Printf("    Transaction Type: %d\n", receipt.Type)
+	fmt.Printf("    Transaction Hash: %s\n", receipt.TxHash.Hex())
+	fmt.Printf("    Status: %d\n", receipt.Status)
 
-	// Gas相关信息
-	fmt.Printf("    累计Gas使用量: %d\n", receipt.CumulativeGasUsed)
-	fmt.Printf("    Gas使用量: %d\n", receipt.GasUsed)
+	// Gas related information
+	fmt.Printf("    Cumulative Gas Used: %d\n", receipt.CumulativeGasUsed)
+	fmt.Printf("    Gas Used: %d\n", receipt.GasUsed)
 	if receipt.EffectiveGasPrice != nil {
-		fmt.Printf("    有效Gas价格: %s Wei\n", receipt.EffectiveGasPrice.String())
+		fmt.Printf("    Effective Gas Price: %s Wei\n", receipt.EffectiveGasPrice.String())
 	}
 
-	// 合约地址（如果是合约创建交易）
+	// Contract address (if it's a contract creation transaction)
 	if receipt.ContractAddress != (common.Address{}) {
-		fmt.Printf("    合约地址: %s\n", receipt.ContractAddress.Hex())
+		fmt.Printf("    Contract Address: %s\n", receipt.ContractAddress.Hex())
 	} else {
-		fmt.Printf("    合约地址: 无（非合约创建交易）\n")
+		fmt.Printf("    Contract Address: None (not a contract creation transaction)\n")
 	}
 
-	// 区块信息
+	// Block information
 	if receipt.BlockHash != (common.Hash{}) {
-		fmt.Printf("    区块哈希: %s\n", receipt.BlockHash.Hex())
+		fmt.Printf("    Block Hash: %s\n", receipt.BlockHash.Hex())
 	}
 	if receipt.BlockNumber != nil {
-		fmt.Printf("    区块号: %d\n", receipt.BlockNumber.Uint64())
+		fmt.Printf("    Block Number: %d\n", receipt.BlockNumber.Uint64())
 	}
-	fmt.Printf("    交易索引: %d\n", receipt.TransactionIndex)
+	fmt.Printf("    Transaction Index: %d\n", receipt.TransactionIndex)
 
-	// Bloom过滤器
-	fmt.Printf("    Bloom过滤器: %x\n", receipt.Bloom)
+	// Bloom filter
+	fmt.Printf("    Bloom Filter: %x\n", receipt.Bloom)
 
-	// Blob相关信息（如果存在）
+	// Blob related information (if exists)
 	if receipt.BlobGasUsed > 0 {
-		fmt.Printf("    Blob Gas使用量: %d\n", receipt.BlobGasUsed)
+		fmt.Printf("    Blob Gas Used: %d\n", receipt.BlobGasUsed)
 	}
 	if receipt.BlobGasPrice != nil {
-		fmt.Printf("    Blob Gas价格: %s Wei\n", receipt.BlobGasPrice.String())
+		fmt.Printf("    Blob Gas Price: %s Wei\n", receipt.BlobGasPrice.String())
 	}
 
-	// 日志信息
+	// Log information
 	if len(receipt.Logs) > 0 {
-		fmt.Printf("    日志数量: %d\n", len(receipt.Logs))
+		fmt.Printf("    Log Count: %d\n", len(receipt.Logs))
 		for j, log := range receipt.Logs {
-			fmt.Printf("      日志 %d:\n", j+1)
-			fmt.Printf("        地址: %s\n", log.Address.Hex())
-			fmt.Printf("        主题数量: %d\n", len(log.Topics))
+			fmt.Printf("      Log %d:\n", j+1)
+			fmt.Printf("        Address: %s\n", log.Address.Hex())
+			fmt.Printf("        Topic Count: %d\n", len(log.Topics))
 			for k, topic := range log.Topics {
-				fmt.Printf("        主题 %d: %s\n", k+1, topic.Hex())
+				fmt.Printf("        Topic %d: %s\n", k+1, topic.Hex())
 			}
-			fmt.Printf("        数据长度: %d 字节\n", len(log.Data))
+			fmt.Printf("        Data Length: %d bytes\n", len(log.Data))
 			if len(log.Data) > 0 && len(log.Data) <= 64 {
-				fmt.Printf("        数据: %x\n", log.Data)
+				fmt.Printf("        Data: %x\n", log.Data)
 			}
 		}
 	} else {
-		fmt.Printf("    日志: 无\n")
+		fmt.Printf("    Logs: None\n")
 	}
 
 	fmt.Println()
@@ -1505,17 +1561,17 @@ func getReceipts(s *ethtest.Suite) (list []*eth.ReceiptList68, err error) {
 func printHeaders(headers *eth.BlockHeadersPacket) {
 	for i, header := range headers.BlockHeadersRequest {
 		fmt.Printf("=== Header %d ===\n", i+1)
-		fmt.Printf("区块号: %d\n", header.Number.Uint64())
-		fmt.Printf("区块哈希: %s\n", header.Hash().Hex())
-		fmt.Printf("父区块哈希: %s\n", header.ParentHash.Hex())
-		fmt.Printf("时间戳: %d\n", header.Time)
-		fmt.Printf("Gas限制: %d\n", header.GasLimit)
-		fmt.Printf("Gas使用量: %d\n", header.GasUsed)
-		fmt.Printf("难度: %s\n", header.Difficulty.String())
-		fmt.Printf("矿工地址: %s\n", header.Coinbase.Hex())
-		fmt.Printf("状态根: %s\n", header.Root.Hex())
-		fmt.Printf("交易根: %s\n", header.TxHash.Hex())
-		fmt.Printf("收据根: %s\n", header.ReceiptHash.Hex())
+		fmt.Printf("Block Number: %d\n", header.Number.Uint64())
+		fmt.Printf("Block Hash: %s\n", header.Hash().Hex())
+		fmt.Printf("Parent Block Hash: %s\n", header.ParentHash.Hex())
+		fmt.Printf("Timestamp: %d\n", header.Time)
+		fmt.Printf("Gas Limit: %d\n", header.GasLimit)
+		fmt.Printf("Gas Used: %d\n", header.GasUsed)
+		fmt.Printf("Difficulty: %s\n", header.Difficulty.String())
+		fmt.Printf("Miner Address: %s\n", header.Coinbase.Hex())
+		fmt.Printf("State Root: %s\n", header.Root.Hex())
+		fmt.Printf("Transaction Root: %s\n", header.TxHash.Hex())
+		fmt.Printf("Receipt Root: %s\n", header.ReceiptHash.Hex())
 		fmt.Println()
 	}
 }

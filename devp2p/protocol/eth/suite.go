@@ -46,16 +46,21 @@ type Suite struct {
 	chain      *Chain
 	engine     *EngineClient
 	PrivateKey string
+	elName     string
 }
 
 func (s *Suite) GetChain() *Chain {
 	return s.chain
 }
 
+func (s *Suite) GetElName() string {
+	return s.elName
+}
+
 // NewSuite creates and returns a new eth-test suite that can
 // be used to test the given node against the given blockchain
 // data.
-func NewSuite(dest *enode.Node, engineURL, jwt string) (*Suite, error) {
+func NewSuite(dest *enode.Node, engineURL, jwt string, elName string) (*Suite, error) {
 	chain, err := NewChain("./testdata")
 	engine, err := NewEngineClient(engineURL, jwt)
 	if err != nil {
@@ -66,6 +71,7 @@ func NewSuite(dest *enode.Node, engineURL, jwt string) (*Suite, error) {
 		Dest:   dest,
 		chain:  chain,
 		engine: engine,
+		elName: elName,
 	}, nil
 }
 
@@ -177,7 +183,7 @@ func (suite *Suite) GetAllBlockHeaders() ([]*types.Header, error) {
 func (suite *Suite) GetBlockHeadersByRequest(req *eth.GetBlockHeadersRequest) ([]*types.Header, error) {
 	// 由于是测试环境，生成模拟的区块头数据
 	headers := make([]*types.Header, 0, req.Amount)
-	
+
 	// 获取起始区块号
 	var startBlockNum uint64
 	if req.Origin.Hash != (common.Hash{}) {
@@ -186,7 +192,7 @@ func (suite *Suite) GetBlockHeadersByRequest(req *eth.GetBlockHeadersRequest) ([
 	} else {
 		startBlockNum = req.Origin.Number
 	}
-	
+
 	// 生成请求数量的区块头
 	for i := uint64(0); i < req.Amount; i++ {
 		var blockNum uint64
@@ -200,7 +206,7 @@ func (suite *Suite) GetBlockHeadersByRequest(req *eth.GetBlockHeadersRequest) ([
 			// 正向：从起始区块向后
 			blockNum = startBlockNum + i*(1+req.Skip)
 		}
-		
+
 		// 创建模拟的区块头
 		header := &types.Header{
 			Number:     new(big.Int).SetUint64(blockNum),
@@ -209,15 +215,15 @@ func (suite *Suite) GetBlockHeadersByRequest(req *eth.GetBlockHeadersRequest) ([
 			GasUsed:    15000000,
 			Difficulty: big.NewInt(1000000),
 		}
-		
+
 		// 设置父区块哈希（简单模拟）
 		if blockNum > 0 {
 			header.ParentHash = common.BytesToHash([]byte(fmt.Sprintf("parent_%d", blockNum-1)))
 		}
-		
+
 		headers = append(headers, header)
 	}
-	
+
 	return headers, nil
 }
 

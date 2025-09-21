@@ -1,164 +1,217 @@
 #!/bin/bash
 
-# 查询指定账户地址的所有交易细节
-ACCOUNT="0x8943545177806ED17B9F23F0a21ee5948eCaa776"
-RPC_URL="http://127.0.0.1:32791"
+# Query all transaction details for specified account address
+ACCOUNT="0x614561D2d143621E126e87831AEF287678B442b8"
+RPC_URL="http://172.16.0.13:8545"
 
-echo "=== 账户 $ACCOUNT 完整分析 ==="
-echo "RPC端点: $RPC_URL"
+echo "=== Complete Analysis for Account $ACCOUNT ==="
+echo "RPC Endpoint: $RPC_URL"
 echo ""
 
-# 1. 基本信息查询
-echo "=== 1. 账户基本信息 ==="
+# 1. Basic information query
+echo "=== 1. Account Basic Information ==="
 
-# 获取当前区块高度
+# Get current block height
 LATEST_BLOCK_HEX=$(curl -s -X POST -H "Content-Type: application/json" \
     --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
     $RPC_URL | jq -r '.result')
 LATEST_BLOCK=$((16#${LATEST_BLOCK_HEX#0x}))
-echo "当前区块高度: $LATEST_BLOCK ($LATEST_BLOCK_HEX)"
+echo "Current block height: $LATEST_BLOCK ($LATEST_BLOCK_HEX)"
 
-# 获取账户当前nonce
+# Get account current nonce
 NONCE_HEX=$(curl -s -X POST -H "Content-Type: application/json" \
     --data '{"jsonrpc":"2.0","method":"eth_getTransactionCount","params":["'$ACCOUNT'", "latest"],"id":1}' \
     $RPC_URL | jq -r '.result')
 NONCE=$((16#${NONCE_HEX#0x}))
-echo "账户nonce: $NONCE (已发送 $NONCE 笔交易)"
+echo "Account nonce: $NONCE (sent $NONCE transactions)"
 
-# 获取账户余额
+# Get account balance
 BALANCE_HEX=$(curl -s -X POST -H "Content-Type: application/json" \
     --data '{"jsonrpc":"2.0","method":"eth_getBalance","params":["'$ACCOUNT'", "latest"],"id":1}' \
     $RPC_URL | jq -r '.result')
 
-# 处理负数余额（bash不能直接处理大数，使用bc）
+# Handle negative balance (bash cannot directly handle large numbers, use bc)
 if [[ $BALANCE_HEX == 0x* ]]; then
-    BALANCE_WEI=$(echo "ibase=16; ${BALANCE_HEX#0x}" | bc 2>/dev/null || echo "计算错误")
+    BALANCE_WEI=$(echo "ibase=16; ${BALANCE_HEX#0x}" | bc 2>/dev/null || echo "Calculation error")
 else
-    BALANCE_WEI="无法解析"
+    BALANCE_WEI="Unable to parse"
 fi
 
-echo "账户余额: $BALANCE_HEX ($BALANCE_WEI Wei)"
+echo "Account balance: $BALANCE_HEX ($BALANCE_WEI Wei)"
 echo ""
 
-# 2. 创世配置信息
-echo "=== 2. 创世配置信息 ==="
-echo "在genesis.json中的配置:"
-grep -A 3 -B 1 "$ACCOUNT" genesis_data/genesis.json 2>/dev/null || echo "未在genesis.json中找到"
+# 2. Genesis configuration information
+echo "=== 2. Genesis Configuration Information ==="
+echo "Configuration in genesis.json:"
+grep -A 3 -B 1 "$ACCOUNT" genesis_data/genesis.json 2>/dev/null || echo "Not found in genesis.json"
 echo ""
-echo "在mnemonics.yaml中的配置:"
-grep -A 5 -B 2 "$ACCOUNT" genesis_data/mnemonics.yaml 2>/dev/null || echo "未在mnemonics.yaml中找到"
+echo "Configuration in mnemonics.yaml:"
+grep -A 5 -B 2 "$ACCOUNT" genesis_data/mnemonics.yaml 2>/dev/null || echo "Not found in mnemonics.yaml"
 echo ""
 
-# 3. 交易历史搜索
-echo "=== 3. 交易历史搜索 ==="
+# 3. Transaction history search
+echo "=== 3. Transaction History Search ==="
 
 if [ $NONCE -eq 0 ]; then
-    echo "该账户尚未发送任何交易（nonce = 0）"
-    echo "正在搜索是否有其他账户向该账户发送交易..."
+    echo "This account has not sent any transactions yet (nonce = 0)"
+    echo "Searching for transactions from other accounts to this account..."
 else
-    echo "该账户已发送 $NONCE 笔交易，正在搜索交易记录..."
+    echo "This account has sent $NONCE transactions, searching transaction records..."
 fi
 echo ""
 
-# 搜索策略：分段搜索以提高效率
+# Search strategy: more comprehensive segmented search
 FOUND_TRANSACTIONS=0
-SEARCH_SEGMENTS=(
-    "1:500"      # 早期区块
-    "501:1000"   # 中期区块
-    "$((LATEST_BLOCK-500)):$LATEST_BLOCK"  # 最近区块
-)
+
+# If nonce > 0, there are sent transactions, need more comprehensive search
+if [ $NONCE -gt 0 ]; then
+    # Dynamically generate search segments, avoid invalid ranges
+    SEARCH_SEGMENTS=()
+    
+    # Basic search segments
+    base_segments=("1:200" "201:400" "401:600" "601:800" "801:1000" "1001:1200" "1201:1400")
+    
+    for segment in "${base_segments[@]}"; do
+        START_SEG=$(echo $segment | cut -d':' -f1)
+        END_SEG=$(echo $segment | cut -d':' -f2)
+        
+        # Only add valid search segments
+        if [ $START_SEG -le $LATEST_BLOCK ]; then
+            if [ $END_SEG -gt $LATEST_BLOCK ]; then
+                # If end block exceeds latest block, adjust to latest block
+                SEARCH_SEGMENTS+=("$START_SEG:$LATEST_BLOCK")
+            else
+                SEARCH_SEGMENTS+=("$segment")
+            fi
+        fi
+    done
+    
+    # If latest block exceeds 1400, add remaining range
+    if [ $LATEST_BLOCK -gt 1400 ]; then
+        SEARCH_SEGMENTS+=("1401:$LATEST_BLOCK")
+    fi
+else
+    # If nonce=0, only search blocks that might have received transactions
+    SEARCH_SEGMENTS=(
+        "1:500"      # Early blocks
+        "501:1000"   # Middle blocks
+        "$((LATEST_BLOCK-500)):$LATEST_BLOCK"  # Recent blocks
+    )
+fi
 
 for segment in "${SEARCH_SEGMENTS[@]}"; do
     START_BLOCK=$(echo $segment | cut -d':' -f1)
     END_BLOCK=$(echo $segment | cut -d':' -f2)
     
-    echo "搜索区块段: $START_BLOCK 到 $END_BLOCK"
+    echo "Searching block segment: $START_BLOCK to $END_BLOCK"
     
     for ((block=$START_BLOCK; block<=END_BLOCK; block++)); do
         block_hex=$(printf "0x%x" $block)
         
-        # 获取区块数据
+        # Get block data
         block_data=$(curl -s -X POST -H "Content-Type: application/json" \
             --data '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["'$block_hex'", true],"id":1}' \
             $RPC_URL 2>/dev/null)
         
         if [ $? -eq 0 ] && [ ! -z "$block_data" ]; then
-            # 检查是否有交易涉及该账户
-            account_txs=$(echo "$block_data" | jq -r '.result.transactions[]? | select(.from == "'$ACCOUNT'" or .to == "'$ACCOUNT'")' 2>/dev/null)
-            
-            if [ ! -z "$account_txs" ]; then
-                echo "" 
-                echo "📍 在区块 $block 中找到相关交易:"
-                echo "$account_txs" | jq -r '
-                    "  🔗 交易哈希: " + .hash + 
-                    "\n  📤 发送方: " + .from + 
-                    "\n  📥 接收方: " + (.to // "[合约创建]") + 
-                    "\n  💰 转账金额: " + .value + " Wei" + 
-                    "\n  ⛽ Gas限制: " + .gas + 
-                    "\n  💸 Gas价格: " + (.gasPrice // "N/A") + 
-                    "\n  🔢 Nonce: " + .nonce + 
-                    "\n  📊 交易索引: " + (.transactionIndex // "N/A") + 
-                    "\n"
-                ' 2>/dev/null
-                echo "  ----------------------------------------"
-                FOUND_TRANSACTIONS=$((FOUND_TRANSACTIONS + 1))
+            # Check if block data is valid
+            result_check=$(echo "$block_data" | jq -r '.result' 2>/dev/null)
+            if [ "$result_check" != "null" ] && [ ! -z "$result_check" ]; then
+                # Check if there are transactions involving this account - use safer method
+                has_transactions=$(echo "$block_data" | jq -r '.result.transactions | length' 2>/dev/null)
                 
-                # 获取交易收据以查看执行状态
-                tx_hash=$(echo "$account_txs" | jq -r '.hash' | head -1)
-                if [ ! -z "$tx_hash" ] && [ "$tx_hash" != "null" ]; then
-                    receipt=$(curl -s -X POST -H "Content-Type: application/json" \
-                        --data '{"jsonrpc":"2.0","method":"eth_getTransactionReceipt","params":["'$tx_hash'"],"id":1}' \
-                        $RPC_URL | jq -r '.result' 2>/dev/null)
-                    
-                    if [ ! -z "$receipt" ] && [ "$receipt" != "null" ]; then
-                        status=$(echo "$receipt" | jq -r '.status // "unknown"')
-                        gas_used=$(echo "$receipt" | jq -r '.gasUsed // "unknown"')
-                        echo "  ✅ 执行状态: $status (1=成功, 0=失败)"
-                        echo "  ⛽ 实际Gas消耗: $gas_used"
-                        echo "  ----------------------------------------"
-                    fi
-                fi
-                
-                # 限制显示数量
-                if [ $FOUND_TRANSACTIONS -ge 10 ]; then
-                    echo "  已显示前10笔交易，如需查看更多请调整脚本参数。"
-                    break 2
+                if [ "$has_transactions" != "null" ] && [ "$has_transactions" -gt 0 ]; then
+                    # Check each transaction individually
+                    for ((tx_idx=0; tx_idx<$has_transactions; tx_idx++)); do
+                        tx_from=$(echo "$block_data" | jq -r ".result.transactions[$tx_idx].from" 2>/dev/null)
+                        tx_to=$(echo "$block_data" | jq -r ".result.transactions[$tx_idx].to" 2>/dev/null)
+                        
+                        # Convert to lowercase for comparison
+                        tx_from_lower=$(echo "$tx_from" | tr '[:upper:]' '[:lower:]')
+                        tx_to_lower=$(echo "$tx_to" | tr '[:upper:]' '[:lower:]')
+                        account_lower=$(echo "$ACCOUNT" | tr '[:upper:]' '[:lower:]')
+                        
+                        if [ "$tx_from_lower" = "$account_lower" ] || [ "$tx_to_lower" = "$account_lower" ]; then
+                            echo "" 
+                            echo "📍 Found related transaction in block $block:"
+                            
+                            # Get complete transaction information
+                            tx_hash=$(echo "$block_data" | jq -r ".result.transactions[$tx_idx].hash" 2>/dev/null)
+                            tx_value=$(echo "$block_data" | jq -r ".result.transactions[$tx_idx].value" 2>/dev/null)
+                            tx_gas=$(echo "$block_data" | jq -r ".result.transactions[$tx_idx].gas" 2>/dev/null)
+                            tx_gasPrice=$(echo "$block_data" | jq -r ".result.transactions[$tx_idx].gasPrice" 2>/dev/null)
+                            tx_nonce=$(echo "$block_data" | jq -r ".result.transactions[$tx_idx].nonce" 2>/dev/null)
+                            tx_index=$(echo "$block_data" | jq -r ".result.transactions[$tx_idx].transactionIndex" 2>/dev/null)
+                            
+                            echo "  🔗 Transaction Hash: $tx_hash"
+                            echo "  📤 From: $tx_from"
+                            echo "  📥 To: ${tx_to:-[Contract Creation]}"
+                            echo "  💰 Transfer Amount: $tx_value Wei"
+                            echo "  ⛽ Gas Limit: $tx_gas"
+                            echo "  💸 Gas Price: ${tx_gasPrice:-N/A}"
+                            echo "  🔢 Nonce: $tx_nonce"
+                            echo "  📊 Transaction Index: ${tx_index:-N/A}"
+                            echo "  ----------------------------------------"
+                            FOUND_TRANSACTIONS=$((FOUND_TRANSACTIONS + 1))
+                            
+                            # Get transaction receipt to check execution status
+                            if [ ! -z "$tx_hash" ] && [ "$tx_hash" != "null" ]; then
+                                receipt=$(curl -s -X POST -H "Content-Type: application/json" \
+                                    --data '{"jsonrpc":"2.0","method":"eth_getTransactionReceipt","params":["'$tx_hash'"],"id":1}' \
+                                    $RPC_URL | jq -r '.result' 2>/dev/null)
+                                
+                                if [ ! -z "$receipt" ] && [ "$receipt" != "null" ]; then
+                                    status=$(echo "$receipt" | jq -r '.status // "unknown"')
+                                    gas_used=$(echo "$receipt" | jq -r '.gasUsed // "unknown"')
+                                    echo "  ✅ Execution Status: $status (1=success, 0=failed)"
+                                    echo "  ⛽ Actual Gas Used: $gas_used"
+                                    echo "  ----------------------------------------"
+                                fi
+                            fi
+                            
+                            # Limit display count
+                            if [ $FOUND_TRANSACTIONS -ge 10 ]; then
+                                echo "  Showing first 10 transactions, adjust script parameters to see more."
+                                break 3
+                            fi
+                        fi
+                    done
                 fi
             fi
         fi
         
-        # 显示进度
+        # Show progress
         if [ $((block % 50)) -eq 0 ]; then
-            echo "  已搜索到区块 $block..."
+            echo "  Searched up to block $block..."
         fi
     done
     
-    echo "区块段 $START_BLOCK-$END_BLOCK 搜索完成"
+    echo "Block segment $START_BLOCK-$END_BLOCK search completed"
     echo ""
 done
 
-echo "=== 4. 搜索结果总结 ==="
-echo "总共找到 $FOUND_TRANSACTIONS 笔相关交易"
+echo "=== 4. Search Results Summary ==="
+echo "Total found $FOUND_TRANSACTIONS related transactions"
 
 if [ $FOUND_TRANSACTIONS -eq 0 ]; then
     echo ""
-    echo "⚠️  未找到任何交易记录，可能的原因:"
-    echo "   1. 交易发生在未搜索的区块范围内"
-    echo "   2. 账户只在创世区块中有余额分配，未进行过实际交易"
-    echo "   3. 需要搜索更大的区块范围"
+    echo "⚠️  No transaction records found, possible reasons:"
+    echo "   1. Transactions occurred in unsearched block ranges"
+    echo "   2. Account only has balance allocation in genesis block, no actual transactions"
+    echo "   3. Need to search larger block ranges"
     echo ""
-    echo "💡 建议:"
-    echo "   - 使用区块链浏览器查看完整历史"
-    echo "   - 扩大搜索范围或使用专门的索引服务"
-    echo "   - 检查是否有内部交易（合约调用）"
+    echo "💡 Suggestions:"
+    echo "   - Use blockchain explorer to view complete history"
+    echo "   - Expand search range or use dedicated indexing services"
+    echo "   - Check for internal transactions (contract calls)"
 else
     echo ""
-    echo "✅ 成功找到该账户的交易记录"
-    echo "📊 账户活动统计:"
-    echo "   - 发送交易数: $NONCE"
-    echo "   - 找到的相关交易: $FOUND_TRANSACTIONS"
-    echo "   - 当前余额: $BALANCE_HEX"
+    echo "✅ Successfully found transaction records for this account"
+    echo "📊 Account activity statistics:"
+    echo "   - Sent transactions: $NONCE"
+    echo "   - Found related transactions: $FOUND_TRANSACTIONS"
+    echo "   - Current balance: $BALANCE_HEX"
 fi
 
 echo ""
-echo "🔍 查询完成 - $(date)"
+echo "🔍 Query completed - $(date)"

@@ -21,7 +21,7 @@ cd "$PROJECT_ROOT"
 # 确保可执行文件存在
 if [ ! -f "./tx_fuzz_example" ]; then
     echo -e "${YELLOW}编译 tx_fuzz_example...${NC}"
-    go build -o tx_fuzz_example ./examples/tx_fuzz_example.go
+    go build -o tx_fuzz_example ./stress_test/tx_fuzz_example.go
     echo -e "${GREEN}编译完成${NC}"
 fi
 
@@ -190,14 +190,14 @@ tx_fuzzer:
   value_range:
     min: 1000000000000000
     max: 10000000000000000
-
-p2p:
-  enabled: false
-
+# --- FIX: Moved fuzzing config inside tx_fuzzer ---
 fuzzing:
   enabled: true
   mutation_rate: 0.3
   max_mutations_per_tx: 5
+
+p2p:
+  enabled: false
 
 monitoring:
   enabled: true
@@ -237,14 +237,14 @@ tx_fuzzer:
   value_range:
     min: 1000000000000000
     max: 10000000000000000
+  # --- FIX: Moved fuzzing config inside tx_fuzzer ---
+  fuzzing:
+    enabled: true
+    mutation_rate: 0.2
+    max_mutations_per_tx: 3
 
 p2p:
   enabled: false
-
-fuzzing:
-  enabled: true
-  mutation_rate: 0.2
-  max_mutations_per_tx: 3
 
 monitoring:
   enabled: true
@@ -271,7 +271,7 @@ server:
 
 mode: "tx_fuzzer"
 
-tx_fuzzer:
+tx_fuzz:
   tx_per_second: 100
   fuzz_duration_sec: 900
   load_pattern_type: "ramp"
@@ -286,14 +286,14 @@ tx_fuzzer:
   value_range:
     min: 1000000000000000
     max: 10000000000000000
+  # --- FIX: Moved fuzzing config inside tx_fuzzer ---
+  fuzzing:
+    enabled: true
+    mutation_rate: 0.25
+    max_mutations_per_tx: 4
 
 p2p:
   enabled: false
-
-fuzzing:
-  enabled: true
-  mutation_rate: 0.25
-  max_mutations_per_tx: 4
 
 monitoring:
   enabled: true
@@ -317,14 +317,16 @@ create_custom_config() {
     local duration="$2"
     local load_pattern="$3"
     
-    cat > stress_test/custom_stress_config.yaml << EOF
+    # 注意这里的 EOF 前后不能有空格
+    cat > stress_test/custom_stress_config.yaml <<EOF
 server:
   host: "0.0.0.0"
   port: 8080
 
 mode: "tx_fuzzer"
 
-tx_fuzzer:
+tx_fuzz:
+  enabled: true
   tx_per_second: $tps
   fuzz_duration_sec: $duration
   load_pattern_type: "$load_pattern"
@@ -337,14 +339,13 @@ tx_fuzzer:
   value_range:
     min: 1000000000000000
     max: 10000000000000000
+  # --- FIX: Moved fuzzing config inside tx_fuzzer ---
+fuzzing:
+  mutation_rate: 0.2
+  max_mutations_per_tx: 3
 
 p2p:
   enabled: false
-
-fuzzing:
-  enabled: true
-  mutation_rate: 0.2
-  max_mutations_per_tx: 3
 
 monitoring:
   enabled: true
@@ -359,6 +360,12 @@ output:
 accounts:
   - private_key: "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
     address: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+
+log:
+  directory: "./logs/1000_tps"
+  template: "default"
+  auto_generate: true
+  include_details: true
 EOF
 }
 

@@ -7,23 +7,9 @@
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
-# RPC endpoint list (fixed pattern based on node count)
-RPC_ENDPOINTS=(
-    "http://172.16.0.11:8545"  # el-1-geth-lighthouse (geth)
-    "http://172.16.0.12:8545"  # el-2-nethermind-lighthouse (nethermind)
-    "http://172.16.0.13:8545"  # el-3-besu-lighthouse (besu)
-    "http://172.16.0.14:8545"  # el-4-reth-lighthouse (reth)
-    "http://172.16.0.15:8545"  # el-5-erigon-lighthouse (erigon)
-)
-
-# Node type to RPC endpoint mapping
-declare -A NODE_RPC_MAP=(
-    ["geth"]="http://172.16.0.11:8545"
-    ["nethermind"]="http://172.16.0.12:8545"
-    ["besu"]="http://172.16.0.13:8545"
-    ["reth"]="http://172.16.0.14:8545"
-    ["erigon"]="http://172.16.0.15:8545"
-)
+# Load RPC configuration from external file
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/rpc_config.sh"
 
 # Color definitions
 RED='\033[0;31m'
@@ -72,6 +58,55 @@ query_block_info() {
     fi
 }
 
+# Show usage information
+show_usage() {
+    echo "Usage:"
+    echo "  $0 <tx_hash1> [tx_hash2] [tx_hash3] ..."
+    echo "  $0 -f <filename>  # Read transaction hashes from file"
+    echo "  $0 -h|--help     # Show this help message"
+    echo ""
+    echo "Transaction Status Categories:"
+    echo "  ✓ Confirmed  - Transaction successfully mined and confirmed"
+    echo "  ⏳ Pending   - Transaction in mempool, ready for mining"
+    echo "  ⏸️ Queued    - Transaction in mempool, waiting for conditions"
+    echo "  ✗ Failed     - Transaction mined but execution failed"
+    echo "  ❌ Not Found - Transaction hash not found"
+    echo ""
+    echo "Examples:"
+    echo "  $0 0x1234567890abcdef..."
+    echo "  $0 -f sample_tx_hashes.txt"
+    echo "  $0 --help"
+}
+
+# Check if transaction is in mempool (pending or queued)
+check_mempool_status() {
+    local tx_hash=$1
+    local endpoint=$2
+    
+    # Query txpool_content to check if transaction is in pending or queued
+    local txpool_response=$(curl -s -X POST -H "Content-Type: application/json" \
+        --data '{"jsonrpc":"2.0","method":"txpool_content","params":[],"id":1}' \
+        --connect-timeout 5 --max-time 10 "$endpoint" 2>/dev/null)
+    
+    if [[ $? -eq 0 ]] && ! echo "$txpool_response" | grep -q '"error"'; then
+        # Check if transaction is in pending pool
+        if echo "$txpool_response" | grep -q "\"$tx_hash\""; then
+            # Check if it's in pending or queued
+            if echo "$txpool_response" | jq -r '.result.pending' 2>/dev/null | grep -q "\"$tx_hash\""; then
+                echo "pending"
+                return 0
+            elif echo "$txpool_response" | jq -r '.result.queued' 2>/dev/null | grep -q "\"$tx_hash\""; then
+                echo "queued"
+                return 0
+            fi
+        fi
+    fi
+    
+    # Fallback: if txpool_content is not available, assume it's pending
+    echo "pending"
+    return 0
+}
+
 # Query single transaction
 query_transaction() {
     local tx_hash=$1
@@ -93,10 +128,16 @@ query_transaction() {
         return 1
     elif echo "$tx_response" | grep -q '"result":{'; then
         # Extract block number
-        local block_number=$(echo "$tx_response" | grep -o '"blockNumber":"[^"]*"' | cut -d'"' -f4)
+        local block_number=$(echo "$tx_response" | grep -o '"blockNumber":[^,}]*' | cut -d':' -f2)
         
         if [[ "$block_number" == "null" || -z "$block_number" ]]; then
-            echo -e "${YELLOW}◐${NC} $tx_hash - Transaction exists but unconfirmed (in mempool)"
+            # Transaction is in mempool, check if it's pending or queued
+            local mempool_status=$(check_mempool_status "$tx_hash" "$endpoint")
+            if [[ "$mempool_status" == "queued" ]]; then
+                echo -e "${YELLOW}⏳${NC} $tx_hash - Transaction queued (waiting for conditions)"
+            else
+                echo -e "${YELLOW}◐${NC} $tx_hash - Transaction pending (ready for mining)"
+            fi
         else
             # Query transaction receipt to get status
             local receipt_response=$(curl -s -X POST -H "Content-Type: application/json" \
@@ -135,14 +176,14 @@ main() {
     
     # Check parameters
     if [[ $# -eq 0 ]]; then
-        echo "Usage:"
-        echo "  $0 <tx_hash1> [tx_hash2] [tx_hash3] ..."
-        echo "  $0 -f <filename>  # Read transaction hashes from file"
-        echo ""
-        echo "Examples:"
-        echo "  $0 0x1234567890abcdef..."
-        echo "  $0 -f sample_tx_hashes.txt"
+        show_usage
         exit 1
+    fi
+    
+    # Handle help parameter
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        show_usage
+        exit 0
     fi
     
     # Test RPC connections
@@ -213,6 +254,7 @@ main() {
     local non_existing_txs=()
     local confirmed_txs=()
     local pending_txs=()
+    local queued_txs=()
     local failed_txs=()
     
     echo -e "Preparing to query $total transaction hashes...\n"
@@ -250,10 +292,16 @@ main() {
             ((failed++))
         elif echo "$tx_response" | grep -q '"result":{'; then
             # Extract block number
-            local block_number=$(echo "$tx_response" | grep -o '"blockNumber":"[^"]*"' | cut -d'"' -f4)
+            local block_number=$(echo "$tx_response" | grep -o '"blockNumber":[^,}]*' | cut -d':' -f2 | tr -d '"')
             
             if [[ "$block_number" == "null" || -z "$block_number" ]]; then
-                pending_txs+=("${node_info}$tx_hash - Transaction exists but unconfirmed (in mempool)")
+                # Transaction is in mempool, check if it's pending or queued
+                local mempool_status=$(check_mempool_status "$tx_hash" "$endpoint")
+                if [[ "$mempool_status" == "queued" ]]; then
+                    queued_txs+=("${node_info}$tx_hash - Transaction queued (waiting for conditions)")
+                else
+                    pending_txs+=("${node_info}$tx_hash - Transaction pending (ready for mining)")
+                fi
                 existing_txs+=("${node_info}$tx_hash")
             else
                 # Query transaction receipt to get status
@@ -313,6 +361,15 @@ main() {
             echo -e "${YELLOW}  Pending Transactions:${NC}"
             for tx in "${pending_txs[@]}"; do
                 echo -e "    ${YELLOW}◐${NC} $tx"
+            done
+            echo ""
+        fi
+        
+        # Display queued transactions
+        if [[ ${#queued_txs[@]} -gt 0 ]]; then
+            echo -e "${BLUE}  Queued Transactions:${NC}"
+            for tx in "${queued_txs[@]}"; do
+                echo -e "    ${BLUE}⏳${NC} $tx"
             done
             echo ""
         fi
