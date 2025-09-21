@@ -309,9 +309,6 @@ tx_fuzz:
   load_pattern_type: "spike"
 ```
 
-## Summary
-
-D2PFuzz provides rich configuration options and advanced features. Through reasonable configuration, it can meet the testing needs of different scenarios. It is recommended to start with basic configuration and gradually optimize parameters based on test results to achieve the best testing results.
 
 ## License
 
@@ -321,4 +318,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 Current version: v0.3
 
-Tip: For fully tested versions of the past, see branches archive-v0.1 and v0.2
+Tip: For fully tested versions of the past, see branches archive-v0.1 and archive-v0.2
