@@ -1,230 +1,188 @@
 # D2PFuzz
 
-D2PFuzz is a fuzzer tool for analyze Ethereum client implentaion through DevP2P protocol. It is able to generate data corresponding to various sub-protocols including discv4 (e.g., Ping, Pong, etc.), discv5, rlpx, and eth according to the specification of Ethernet network communication protocols. and constructs data sequences according to the chain state and time, and adds mutation functions to them to detect the security of Ethernet network communication protocols.
+Fuzz the Ethereum networking stack—end to end.
+**D2PFuzz** generates and mutates DevP2P traffic (discv4/5, RLPx, `eth/*`) and drives tx-level fuzzing to surface client-specific mempool, networking, and consensus-edge bugs across Geth, Nethermind, Erigon, Besu, Reth, etc.
 
-## Project Structure
+---
+
+## Highlights
+
+* **Protocol fuzzing**: craft/sequence valid & mutated packets for discv4, discv5, RLPx, and `eth` sub-protocols.
+* **Transaction fuzzing**: sustained, patterned load with optional mutation and multi-RPC load balancing.
+* **Reproducible**: deterministic seeds and captured outputs for one-tx counterexamples.
+* **Operable**: simple YAML config, scripts to spin up a local multi-client devnet, real-time stats and JSON reports.
+
+---
+
+## Project Layout
 
 ```
 D2PFuzz/
-├── cmd/                # Command-line tools directory
-├── config/             # Configuration related modules
-├── devp2p/             # P2P network protocol modules
-├── fuzzer/             # Fuzzing core modules
-├── logs/               # Log files directory
-├── manual/             # Manual test
-├── mutation/           # Mutation Strategy
-├── output/             # Reports storage directory
-├── scripts/            # Scripts directory
-├── tress_test/         # Stress test directory
-├── templates/          # Template config files directory
-├── utils/              # Utility functions modules
-├── config.yaml         # configuration file
-└── main.go             # Program entry point
+├── cmd/             # CLI + tx-fuzz entrypoints
+├── config/          # Config structs & loaders
+├── devp2p/          # DevP2P stack (discv4/5, RLPx, eth)
+├── fuzzer/          # Fuzzing core
+├── logs/            # Runtime logs
+├── manual/          # Manual protocol test runner
+├── mutation/        # Mutation strategies
+├── output/          # Reports & artifacts
+├── scripts/         # Devnet + helpers
+├── stress_test/     # Stress test harness
+├── templates/       # Config templates
+├── utils/           # Utilities
+├── config.yaml      # Example config
+└── main.go          # Program entry
 ```
-## Quick Start
+
+---
+
+## Prerequisites
+
+* Go 1.21+
+* Docker & Docker Compose (for local multi-client testnet)
+* Git
+
+---
+
+## Install
 
 ```bash
-# Clone the project
 git clone https://github.com/AgnopraxLab/D2PFuzz.git
 cd D2PFuzz
-
-# Install dependencies
 go mod tidy
 ```
-### Test Environment
 
-This project utilizes [ethereum-package](https://github.com/ethpandaops/ethereum-package) to initiate the test environment.
-This script is used to deploy a local test environment for Ethereum nodes.
+---
+
+## Spin up a Local Ethereum Testnet (multi-client)
+
+We use [`ethpandaops/ethereum-package`](https://github.com/ethpandaops/ethereum-package).
+
 ```bash
 ./scripts/run_ethereum_network.sh -c <your_ethereumpackage_config.yaml>
+# Produces scripts/output.txt with enodes and RPC URLs
 ```
-For more details, please refer to SCRIPTS_USAGE.md in the `scripts` directory.
 
-### Prepare the configuration file
-Using the script from the previous step will result in a file named output.txt.
-This file contains the enode values and rpc_urls of all nodes in the local environment.
-You need to locate the enode address inside and place it in the YAML configuration file.
-You can find the template configuration file in the `template` directory
+Grab enodes/RPCs from `scripts/output.txt` and fill your YAML (see `templates/`).
 
-## run the D2PFuzz
-The following are the three main functions of this project
+---
 
-### manual test
+## Quick Start
+
+### 1) Manual protocol test (DevP2P / eth sub-protocols)
+
 ```bash
 cd manual
 go run main.go
+# reads manual/config.yaml and sends predefined sequences
 ```
-This will read the `config.yaml` file in the `manual` directory and send the sub-protocol of the eth protocol through a predefined scheme.
 
-### stress test
+### 2) Stress test
+
 ```bash
 cd stress_test
 ./run_stress_test.sh
 ```
 
-### tx-fuzz
+### 3) Transaction fuzzing
+
 ```bash
 cd cmd
-./livefuzzer spam --seed <seed> --sk <private_key> -rpc <rpc_url>
+./livefuzzer spam --seed <seed> --sk <hex_private_key> -rpc <rpc_url>
 ```
-Replace `<seed>` with a random number to ensure the reproducibility of the test results.
-Replace `<private_key>` with the private key of the account you want to use for fuzzing.
-Replace `<rpc_url>` with the RPC URL of the node you want to connect to.
 
-You can view more details through [tx-fuzz](https://github.com/MariusVanDerWijden/tx-fuzz/blob/master/README.md).
+* `--seed` any int (use fixed for reproducibility)
+* `--sk` account private key (fund it on your devnet)
+* `-rpc` target RPC (repeat flag to load balance across many)
 
+More flags mirror [tx-fuzz](https://github.com/MariusVanDerWijden/tx-fuzz/blob/master/README.md).
 
-## Core Configuration Parameters
+---
 
-### Transaction Fuzzing Configuration (tx_fuzz)
+## Configuration (YAML)
 
-#### Basic Parameters
+### `tx_fuzz` block
 
-- **enabled**: `true/false` - Whether to enable transaction fuzzing
-- **chain_id**: `3151908` - Blockchain network ID
-- **tx_per_second**: `10` - **TPS Setting** - Number of transactions sent per second
-- **fuzz_duration_sec**: `60` - Fuzzing duration in seconds
-- **seed**: `0` - Random seed (0 means use random seed)
-- **use_accounts**: `true` - Whether to use predefined accounts
+```yaml
+tx_fuzz:
+  enabled: true
+  chain_id: 3151908
+  tx_per_second: 10
+  fuzz_duration_sec: 60
+  seed: 0                 # 0 = random
+  use_accounts: true
 
-#### Gas Related Parameters
+  # gas
+  max_gas_price: 20000000000   # 20 gwei
+  max_gas_limit: 8000000
 
-- **max_gas_price**: `20000000000` - Maximum gas price (in wei, 20 Gwei)
-- **max_gas_limit**: `8000000` - Maximum gas limit
-
-#### Multi-node Configuration
-
-- **rpc_endpoints**: RPC node list
-  ```yaml
+  # multi-node
   rpc_endpoints:
     - "http://172.16.0.11:8545"
     - "http://172.16.0.12:8545"
-    - "http://172.16.0.13:8545"
-    - "http://172.16.0.14:8545"
-    - "http://172.16.0.15:8545"
-  ```
 
-#### Error Handling and Retry
+  # retries
+  max_retries: 3
+  retry_delay: 1s
+  circuit_breaker: true
+  failure_threshold: 5
 
-- **max_retries**: `3` - Maximum number of retries
-- **retry_delay**: `1s` - Retry interval time
-- **circuit_breaker**: `true` - Whether to enable circuit breaker
-- **failure_threshold**: `5` - Circuit breaker failure threshold
-
-#### Load Pattern
-
-- **load_pattern_type**: Load pattern type
-  - `"constant"` - Constant TPS
-  - `"ramp"` - Gradual increase mode (recommended)
-  - `"spike"` - Burst mode
-  - `"wave"` - Wave mode
-
-## Key Parameter Tuning Guide
-
-### 1. TPS (Transactions Per Second) Tuning
-
-**Parameter Location**: `config.yaml` -> `tx_fuzz.tx_per_second`
-
-```yaml
-tx_fuzz:
-  tx_per_second: 10  # Modify this value
+  # load shape: constant | ramp | spike | wave
+  load_pattern_type: "ramp"
 ```
 
-**Recommended Settings**:
-- **Test Environment**: 5-20 TPS
-- **Stress Testing**: 50-100 TPS
-- **Extreme Testing**: 100+ TPS
-
-**Notes**:
-- High TPS may cause node overload
-- Recommend starting with low TPS and gradually increasing
-- Monitor node response time and success rate
-
-### 2. Test Duration
-
-**Parameter Location**: `config.yaml` -> `tx_fuzz.fuzz_duration_sec`
-
-```yaml
-tx_fuzz:
-  fuzz_duration_sec: 60  # 60 seconds, adjust as needed
-```
-
-**Recommended Settings**:
-- **Quick Test**: 30-60 seconds
-- **Standard Test**: 300-600 seconds (5-10 minutes)
-- **Long Test**: 3600 seconds above (1 hour+))
-
-### 3. Gas Parameter Optimization
-
-```yaml
-tx_fuzz:
-  max_gas_price: 20000000000  # 20 Gwei
-  max_gas_limit: 8000000      # 8M gas
-```
-
-**Gas Price Recommendations**:
-- **Testnet**: 1-20 Gwei
-- **Mainnet Simulation**: 20-100 Gwei
-- **High Priority**: 100+ Gwei
-
-### 4. Load Pattern Selection
-
-```yaml
-tx_fuzz:
-  load_pattern_type: "ramp"  # Recommended to use gradual increase mode
-```
-
-**Pattern Description**:
-- **constant**: Fixed TPS, suitable for stability testing
-- **ramp**: Gradually increase from low TPS to target TPS, suitable for stress testing
-- **spike**: Burst high TPS, suitable for peak testing
-- **wave**: Periodic changes, suitable for long-term stability testing
-
-## Advanced Configuration
-
-### 1. Multi-node Load Balancing
-
-Automatically configured load distribution in code:
-
-```go
-LoadDistribution: map[string]float64{
-    "http://172.16.0.11:8545": 0.2,  // 20%
-    "http://172.16.0.12:8545": 0.2,  // 20%
-    "http://172.16.0.13:8545": 0.2,  // 20%
-    "http://172.16.0.14:8545": 0.2,  // 20%
-    "http://172.16.0.15:8545": 0.2,  // 20%
-}
-```
-
-### 2. Mutation Testing Configuration
+### Mutation & tracking (Go-side toggles)
 
 ```go
 fuzzConfig := &fuzzer.TxFuzzConfig{
-    UseMutation:     true,   // Enable mutation
-    MutationRatio:   0.3,    // 30% of transactions use mutation
-    EnableTracking:  true,   // Enable transaction tracking
-    ConfirmBlocks:   3,      // Wait for 3 confirmation blocks
+  UseMutation:    true,
+  MutationRatio:  0.3,   // 30% mutated
+  EnableTracking: true,  // track mined/failed/pending
+  ConfirmBlocks:  3,
 }
 ```
 
-### 3. System Monitoring
+### Metrics (Go-side)
 
 ```go
-EnableMetrics:   true,                    // Enable system metrics
-MetricsInterval: 10 * time.Second,        // Metrics collection interval
+EnableMetrics:   true
+MetricsInterval: 10 * time.Second
 ```
 
-## Output File Description
+---
 
-The following files will be generated after running:
+## Tuning Cheatsheet
 
-1. **output/tx_fuzz_results.json** - Detailed transaction records and statistics
-2. **output/success_tx_hashes.txt** - List of successful transaction hashes
-3. **output/failed_tx_hashes.txt** - List of failed transaction hashes
+* **TPS** (`tx_per_second`)
 
-## Real-time Monitoring
+  * Devnet sanity: 5–20
+  * Stress: 50–100
+  * Extreme: 100+
+* **Duration** (`fuzz_duration_sec`)
 
-Real-time statistics will be displayed during execution:
+  * Quick: 30–60s
+  * Standard: 300–600s
+  * Long: ≥3600s
+* **Load shape**
+
+  * `constant`: stability
+  * `ramp`: progressive stress (recommended)
+  * `spike`: peak/burst
+  * `wave`: long-run stability
+
+**Tips**: ramp up gradually, monitor latency/success, distribute load across multiple RPCs.
+
+---
+
+## Outputs
+
+Generated under `output/`:
+
+* `tx_fuzz_results.json` — per-tx records, timing, outcomes, mutation flags
+* `success_tx_hashes.txt` — mined tx hashes
+* `failed_tx_hashes.txt` — failures for triage
+
+Real-time console sample:
 
 ```
 --- Stats (Runtime: 30s) ---
@@ -233,89 +191,74 @@ Mutation Used: 45 | Random Used: 105
 Success Rate: 96.7% | Mutation Rate: 30.0%
 ```
 
-## Common Issues and Solutions
+---
 
-### 1. Connection Failure
+## Troubleshooting
 
-**Issue**: `connection refused` error
-**Solution**: Check if RPC endpoints are accessible, confirm nodes are running
+* **`connection refused`**
 
-### 2. Insufficient Gas
+  * Confirm RPC is reachable; node is up; firewall rules allow access.
+* **`insufficient funds for gas`**
 
-**Issue**: `insufficient funds for gas` error
-**Solution**: 
-- Lower `max_gas_price` or `max_gas_limit`
-- Ensure accounts have sufficient ETH balance
+  * Fund the sender; lower `max_gas_price`/`max_gas_limit`.
+* **Low observed TPS**
 
-### 3. Low TPS
+  * Check network latency; reduce `max_retries`/`retry_delay`; add RPCs and increase concurrency.
+* **High memory**
 
-**Issue**: Actual TPS is much lower than configured value
-**Solution**:
-- Check network latency
-- Lower `max_retries` and `retry_delay`
-- Increase concurrent connections
+  * Shorten `fuzz_duration_sec`; disable tracking; lower TPS.
 
-### 4. Memory Usage
+---
 
-**Issue**: Program occupies memory
-**Solution**:
-- Lower `fuzz_duration_sec`
-- Disable `EnableTracking`
-- Reduce `tx_per_second`
+## Example Presets
 
-## Performance Optimization
+**Lightweight**
 
-### 1. Network Optimization
-- Use local or low latency RPC nodes
-- Enable multi-node load balancing
-- Reasonably set retry parameters
-
-### 2. Resource Optimization
-- Adjust TPS according to system resources
-- Monitor CPU and memory usage
-- Appropriate adjustment of concurrent connections
-
-### 3. Test Strategy
-- Start from small-scale testing
-- Gradually increase the load
-- Record and analyze test results
-
-## Example Configuration
-
-### Lightweight Test Configuration
 ```yaml
 tx_fuzz:
   tx_per_second: 5
   fuzz_duration_sec: 30
-  max_gas_price: 10000000000  # 10 Gwei
+  max_gas_price: 10000000000
   load_pattern_type: "constant"
 ```
 
-### Stress Test Configuration
+**Stress**
+
 ```yaml
 tx_fuzz:
   tx_per_second: 50
   fuzz_duration_sec: 300
-  max_gas_price: 50000000000  # 50 Gwei
+  max_gas_price: 50000000000
   load_pattern_type: "ramp"
 ```
 
-### Extreme Test Configuration
+**Extreme**
+
 ```yaml
 tx_fuzz:
   tx_per_second: 100
   fuzz_duration_sec: 600
-  max_gas_price: 100000000000  # 100 Gwei
+  max_gas_price: 100000000000
   load_pattern_type: "spike"
 ```
 
+---
+
+## Notes on Scope
+
+* **Protocol fuzzing** targets discv4/5 discovery, RLPx handshakes/frames, and `eth/*` messages (Ping/Pong/NewBlock/Txs, etc.), including mutated sequences and time/chain-state-aware flows.
+* **Tx-fuzz** complements network fuzzing by stressing mempool rules (nonce gaps, gas pricing, batch shapes) and surfacing divergent behaviors across clients.
+
+---
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT. See [LICENSE](LICENSE).
 
 ## Version
 
-Current version: v0.3
+Current: **v0.3**
+Older, fully tested snapshots: `archive-v0.1`, `archive-v0.2`.
 
-Tip: For fully tested versions of the past, see branches archive-v0.1 and archive-v0.2
+---
+
