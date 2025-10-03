@@ -12,9 +12,80 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Default configuration
+OUTPUT_FORMAT="normal"  # normal, txt
+OUTPUT_FILE=""
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --format)
+            OUTPUT_FORMAT="$2"
+            shift 2
+            ;;
+        --output)
+            OUTPUT_FILE="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --format FORMAT    Output format: normal|txt (default: normal)"
+            echo "  --output FILE      Output to file instead of stdout"
+            echo "  --help, -h         Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0                           # Normal output to console"
+            echo "  $0 --format txt              # Simple txt format to console"
+            echo "  $0 --format txt --output hashes.txt  # Save txt format to file"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 # Load RPC configuration from external file
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/rpc_config.sh"
+
+# Array to store unique transaction hashes for deduplication
+declare -A seen_hashes
+
+# Function to check if hash has been seen before
+is_hash_seen() {
+    local hash=$1
+    if [[ -n "${seen_hashes[$hash]}" ]]; then
+        return 0  # Hash already seen
+    else
+        seen_hashes[$hash]=1
+        return 1  # Hash is new
+    fi
+}
+
+# Output function that handles both console and file output
+output_line() {
+    local line="$1"
+    if [[ -n "$OUTPUT_FILE" ]]; then
+        echo "$line" >> "$OUTPUT_FILE"
+    else
+        echo -e "$line"
+    fi
+}
+
+# Output function for txt format (no colors, no echo -e)
+output_txt() {
+    local line="$1"
+    if [[ -n "$OUTPUT_FILE" ]]; then
+        echo "$line" >> "$OUTPUT_FILE"
+    else
+        echo "$line"
+    fi
+}
 
 # Test RPC connection
 test_rpc_connection() {
@@ -33,21 +104,28 @@ test_rpc_connection() {
 # Query pending transactions (simple method)
 query_pending_transactions() {
     local endpoint=$1
-    echo -e "${CYAN}📡 Querying node: $endpoint${NC}"
+    
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        output_line "${CYAN}📡 Querying node: $endpoint${NC}"
+    fi
     
     local response=$(curl -s -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","method":"eth_pendingTransactions","params":[],"id":1}' \
         --connect-timeout 10 --max-time 15 "$endpoint" 2>/dev/null)
     
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}✗ RPC call failed${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            output_line "${RED}✗ RPC call failed${NC}"
+        fi
         return 1
     fi
     
     # Check for errors
     if echo "$response" | grep -q '"error"'; then
         local error_msg=$(echo "$response" | jq -r '.error.message // "Unknown error"' 2>/dev/null)
-        echo -e "${RED}✗ RPC error: $error_msg${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            output_line "${RED}✗ RPC error: $error_msg${NC}"
+        fi
         return 1
     fi
     
@@ -55,17 +133,47 @@ query_pending_transactions() {
     local tx_count=$(echo "$response" | jq -r '.result | length' 2>/dev/null)
     
     if [[ "$tx_count" == "null" ]] || [[ -z "$tx_count" ]]; then
-        echo -e "${YELLOW}⚠ Unable to parse response or method not supported${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            output_line "${YELLOW}⚠ Unable to parse response or method not supported${NC}"
+        fi
         return 1
     fi
     
     if [[ "$tx_count" -eq 0 ]]; then
-        echo -e "${GREEN}✓ Mempool is empty, no pending transactions${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            output_line "${GREEN}✓ Mempool is empty, no pending transactions${NC}"
+        fi
         return 0
     fi
     
-    echo -e "${YELLOW}📊 Found $tx_count pending transactions:${NC}"
-    echo "$response" | jq -r '.result[] | "  🔗 " + .hash + " | From: " + .from + " | To: " + (.to // "[Contract Creation]") + " | Value: " + .value + " Wei | Gas: " + .gas + " | Nonce: " + .nonce' 2>/dev/null
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        output_line "${YELLOW}📊 Found $tx_count pending transactions:${NC}"
+    fi
+    
+    # Process transactions with deduplication
+    local unique_count=0
+    local node_comment="# Node: $endpoint"
+    local has_output=false
+    
+    while IFS= read -r tx_line; do
+        local hash=$(echo "$tx_line" | grep -o '0x[a-fA-F0-9]\{64\}')
+        if [[ -n "$hash" ]] && ! is_hash_seen "$hash"; then
+            if [[ "$OUTPUT_FORMAT" == "txt" ]]; then
+                if [[ "$has_output" == "false" ]]; then
+                    output_txt "$node_comment"
+                    has_output=true
+                fi
+                output_txt "$hash"
+            else
+                output_line "$tx_line"
+            fi
+            ((unique_count++))
+        fi
+    done < <(echo "$response" | jq -r '.result[] | "  🔗 " + .hash + " | From: " + .from + " | To: " + (.to // "[Contract Creation]") + " | Value: " + .value + " Wei | Gas: " + .gas + " | Nonce: " + .nonce' 2>/dev/null)
+    
+    if [[ "$OUTPUT_FORMAT" != "txt" ]] && [[ $unique_count -lt $tx_count ]]; then
+        output_line "${CYAN}ℹ️  Filtered out $((tx_count - unique_count)) duplicate transactions${NC}"
+    fi
     
     return 0
 }
@@ -73,21 +181,28 @@ query_pending_transactions() {
 # Query mempool detailed content
 query_txpool_content() {
     local endpoint=$1
-    echo -e "${CYAN}🔍 Querying mempool detailed content: $endpoint${NC}"
+    
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        output_line "${CYAN}🔍 Querying mempool detailed content: $endpoint${NC}"
+    fi
     
     local response=$(curl -s -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","method":"txpool_content","params":[],"id":1}' \
         --connect-timeout 10 --max-time 15 "$endpoint" 2>/dev/null)
     
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}✗ RPC call failed${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            output_line "${RED}✗ RPC call failed${NC}"
+        fi
         return 1
     fi
     
     # Check for errors
     if echo "$response" | grep -q '"error"'; then
         local error_msg=$(echo "$response" | jq -r '.error.message // "Unknown error"' 2>/dev/null)
-        echo -e "${RED}✗ RPC error: $error_msg${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            output_line "${RED}✗ RPC error: $error_msg${NC}"
+        fi
         return 1
     fi
     
@@ -96,18 +211,50 @@ query_txpool_content() {
     local queued_count=$(echo "$response" | jq -r '.result.queued | keys | length' 2>/dev/null)
     
     if [[ "$pending_count" == "null" ]]; then
-        echo -e "${YELLOW}⚠ Unable to parse response or method not supported${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            output_line "${YELLOW}⚠ Unable to parse response or method not supported${NC}"
+        fi
         return 1
     fi
     
-    echo -e "${BLUE}📈 Mempool statistics:${NC}"
-    echo -e "  📤 Pending transaction accounts: ${pending_count:-0}"
-    echo -e "  📥 Queued transaction accounts: ${queued_count:-0}"
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        output_line "${BLUE}📈 Mempool statistics:${NC}"
+        output_line "  📤 Pending transaction accounts: ${pending_count:-0}"
+        output_line "  📥 Queued transaction accounts: ${queued_count:-0}"
+    fi
     
     # Display pending transaction details
     if [[ "$pending_count" -gt 0 ]]; then
-        echo -e "\n${YELLOW}🔄 Pending transaction details:${NC}"
-        echo "$response" | jq -r '
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            output_line "\n${YELLOW}🔄 Pending transaction details:${NC}"
+        fi
+        
+        # Process transactions with deduplication
+        local unique_count=0
+        local total_processed=0
+        local node_comment="# Node: $endpoint"
+        local has_output=false
+        
+        while IFS= read -r tx_line; do
+            ((total_processed++))
+            local hash=$(echo "$tx_line" | grep -o '0x[a-fA-F0-9]\{64\}')
+            if [[ -n "$hash" ]] && ! is_hash_seen "$hash"; then
+                if [[ "$OUTPUT_FORMAT" == "txt" ]]; then
+                    if [[ "$has_output" == "false" ]]; then
+                        output_txt "$node_comment"
+                        has_output=true
+                    fi
+                    output_txt "$hash"
+                else
+                    output_line "$tx_line"
+                fi
+                ((unique_count++))
+            fi
+            # Limit output lines
+            if [[ $total_processed -ge 50 ]]; then
+                break
+            fi
+        done < <(echo "$response" | jq -r '
             .result.pending | 
             to_entries[] | 
             .key as $addr | 
@@ -122,12 +269,16 @@ query_txpool_content() {
             "\n    💸 Gas Price: " + (.value.gasPrice // .value.maxFeePerGas // "N/A") + 
             "\n    🔢 Transaction Type: " + (.value.type // "0x0") + 
             "\n    ----------------------------------------"
-        ' 2>/dev/null | head -50  # Limit output lines
+        ' 2>/dev/null)
+        
+        if [[ "$OUTPUT_FORMAT" != "txt" ]] && [[ $unique_count -lt $total_processed ]]; then
+            output_line "${CYAN}ℹ️  Filtered out $((total_processed - unique_count)) duplicate transactions from detailed view${NC}"
+        fi
     fi
     
-    # Display queued transaction summary
-    if [[ "$queued_count" -gt 0 ]]; then
-        echo -e "\n${PURPLE}⏳ Queued transaction summary:${NC}"
+    # Display queued transaction summary (only for normal format)
+    if [[ "$queued_count" -gt 0 ]] && [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        output_line "\n${PURPLE}⏳ Queued transaction summary:${NC}"
         echo "$response" | jq -r '
             .result.queued | 
             to_entries[] | 
@@ -135,7 +286,32 @@ query_txpool_content() {
             .value | 
             keys | 
             "  📍 Account: " + $addr + " | Queued transactions: " + (length | tostring)
-        ' 2>/dev/null
+        ' 2>/dev/null | while IFS= read -r line; do
+            output_line "$line"
+        done
+    fi
+    
+    # Handle queued transactions for txt format
+    if [[ "$queued_count" -gt 0 ]] && [[ "$OUTPUT_FORMAT" == "txt" ]]; then
+        local node_comment="# Node: $endpoint"
+        local has_output=false
+        
+        # Extract queued transaction hashes
+        while IFS= read -r hash; do
+            if [[ -n "$hash" ]] && ! is_hash_seen "$hash"; then
+                if [[ "$has_output" == "false" ]]; then
+                    output_txt "$node_comment"
+                    has_output=true
+                fi
+                output_txt "$hash"
+            fi
+        done < <(echo "$response" | jq -r '
+            .result.queued | 
+            to_entries[] | 
+            .value | 
+            to_entries[] | 
+            .value.hash
+        ' 2>/dev/null)
     fi
     
     return 0
@@ -144,21 +320,28 @@ query_txpool_content() {
 # Query mempool status
 query_txpool_status() {
     local endpoint=$1
-    echo -e "${CYAN}📊 Querying mempool status: $endpoint${NC}"
+    
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        output_line "${CYAN}📊 Querying mempool status: $endpoint${NC}"
+    fi
     
     local response=$(curl -s -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","method":"txpool_status","params":[],"id":1}' \
         --connect-timeout 5 --max-time 10 "$endpoint" 2>/dev/null)
     
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}✗ RPC call failed${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            output_line "${RED}✗ RPC call failed${NC}"
+        fi
         return 1
     fi
     
     # Check for errors
     if echo "$response" | grep -q '"error"'; then
         local error_msg=$(echo "$response" | jq -r '.error.message // "Unknown error"' 2>/dev/null)
-        echo -e "${RED}✗ RPC error: $error_msg${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            output_line "${RED}✗ RPC error: $error_msg${NC}"
+        fi
         return 1
     fi
     
@@ -166,9 +349,11 @@ query_txpool_status() {
     local pending=$(echo "$response" | jq -r '.result.pending // "N/A"' 2>/dev/null)
     local queued=$(echo "$response" | jq -r '.result.queued // "N/A"' 2>/dev/null)
     
-    echo -e "${GREEN}✓ Mempool status:${NC}"
-    echo -e "  🔄 Pending: $pending"
-    echo -e "  ⏳ Queued: $queued"
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        output_line "${GREEN}✓ Mempool status:${NC}"
+        output_line "  🔄 Pending: $pending"
+        output_line "  ⏳ Queued: $queued"
+    fi
     
     return 0
 }
@@ -177,6 +362,9 @@ query_txpool_status() {
 main() {
     echo -e "${BLUE}🔍 Ethereum Mempool Transaction Query Tool${NC}"
     echo "================================================================================"
+    
+    # Initialize deduplication array for each run
+    declare -gA seen_hashes
     
     # Test RPC connections
     echo -e "\n${CYAN}🔗 Testing RPC connections...${NC}"

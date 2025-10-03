@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"math"
 	"math/big"
 	"net"
 	"os"
@@ -51,7 +54,194 @@ type NodeAccount struct {
 	Nonce       uint64
 }
 
-// NewNodeAccountManager create node account manager
+// Config configuration structure
+type Config struct {
+	P2P struct {
+		MaxPeers       int      `yaml:"max_peers"`
+		ListenPort     int      `yaml:"listen_port"`
+		BootstrapNodes []string `yaml:"bootstrap_nodes"`
+		JWTSecret      string   `yaml:"jwt_secret"`
+	} `yaml:"p2p"`
+	testMode struct {
+		TestMode string `yaml:"testMode"`
+	}
+}
+
+type protocolHandshake struct {
+	Version    uint64
+	Name       string
+	Caps       []p2p.Cap
+	ListenPort uint64
+	ID         []byte // secp256k1 public key
+
+	// Ignore additional fields (for forward compatibility).
+	Rest []rlp.RawValue `rlp:"tail"`
+}
+
+func main() {
+	// ========== Test Configuration Variables ==========
+	// Modify these variables to control test behavior without console input
+	// 1. Read configuration from config.yaml file in current directory
+	config, err := loadConfig("config.yaml")
+	if err != nil {
+		fmt.Printf("Failed to load config: %v\n", err)
+		return
+	}
+	// Test mode:
+	// "multi" = multi-node testing,
+	// "single" = single node testing,
+	// "interactive" = interactive selection,
+	// "oneTransaction" = single transaction testing,
+	// "largeTransactions" = large batch transaction testing
+	// "GetPooledTxs" = test GetPooledTransactions
+	// "test-soft-limit" = test NewPooledTransactionHashes soft limit
+	// "test-soft-limit-single" = test NewPooledTransactionHashes soft limit for single client
+	// "test-soft-limit-report" = generate concise test report for all clients
+	testMode := "test-soft-limit-report"
+
+	getPooledTxsNodeIndex := 1 //0:"geth", 1:"nethermind", 2:"reth", 3:"erigon", 4:"besu"
+
+	// Multi-node testing configuration (only effective when testMode = "multi")
+	multiNodeNonceInitialValues := []uint64{
+		0, // Node 0 (geth) initial nonce
+		0, // Node 1 (nethermind) initial nonce
+		0, // Node 2 (reth) initial nonce
+		0, // Node 3 (erigon) initial nonce
+		0, // Node 4 (besu) initial nonce
+	}
+	multiNodeBatchSize := 20 // Number of transactions to send per node
+
+	// Single node testing configuration (only effective when testMode = "single")
+	singleNodeIndex := 1          // Node index to test (0=geth, 1=nethermind, 2=reth, 3=erigon, 4=besu)
+	singleNodeNonce := uint64(53) // Starting nonce value
+	singleNodeBatchSize := 4      // Number of transactions to send
+
+	// ========================================
+
+	// 2. Get enode values, parse to extract IP and port
+	if len(config.P2P.BootstrapNodes) == 0 {
+		fmt.Println("No bootstrap nodes found in config")
+		return
+	}
+
+	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+
+	// Execute corresponding tests based on configuration variables
+	switch testMode {
+	case "multi":
+		// Multi-node testing
+		fmt.Println("=== D2PFuzz Multi-Node Testing Tool ===")
+		fmt.Println("🚀 Starting multi-node testing...")
+		multiNodesTesting(elNames, config, multiNodeNonceInitialValues, multiNodeBatchSize)
+
+	case "single":
+		// Single node testing
+		fmt.Println("=== D2PFuzz Single-Node Testing Tool ===")
+		if singleNodeIndex < 0 || singleNodeIndex >= len(elNames) {
+			fmt.Printf("Invalid node index: %d. Valid range: 0-%d\n", singleNodeIndex, len(elNames)-1)
+			return
+		}
+		fmt.Printf("🎯 Starting single node testing for %s (Node %d)...\n", elNames[singleNodeIndex], singleNodeIndex)
+		singleNodeTesting(elNames, config, singleNodeIndex, &singleNodeNonce, singleNodeBatchSize)
+	case "GetPooledTxs":
+		fmt.Println("=== D2PFuzz GetPooledTxs Testing Tool ===")
+		getPooledTxs(config, getPooledTxsNodeIndex)
+		// Test soft limit
+	case "test-soft-limit":
+		fmt.Println("=== D2PFuzz Test All Clients Soft Limit ===")
+		TestAllClientsSoftLimit(config)
+
+	// Or test single client
+	case "test-soft-limit-single":
+		nodeIndex := 1             // 0: geth, 1: nethermind, 2: reth, 3: erigon, 4: besu
+		hashCount := 4096          // Test 4096 hashes (at soft limit)
+		startNonce := uint64(9999) // Start from real nonce value
+
+		elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+		fmt.Printf("\n========================================\n")
+		fmt.Printf("Testing: %s\n", strings.ToUpper(elNames[nodeIndex]))
+		fmt.Printf("Scenario: %d items\n", hashCount)
+		fmt.Printf("Starting nonce: %d\n", startNonce)
+		fmt.Printf("========================================\n\n")
+
+		requested, status, err := TestNewPooledTransactionHashesSoftLimitWithNonceDetailed(config, nodeIndex, hashCount, startNonce)
+		if err != nil {
+			fmt.Printf("❌ Test error: %v\n", err)
+		} else {
+			percentage := float64(requested) * 100.0 / float64(hashCount)
+			symbol := "✓"
+			if requested < hashCount && hashCount > 4096 {
+				symbol = "⚠"
+			}
+			if status != "SUCCESS" {
+				symbol = "❌"
+			}
+
+			fmt.Printf("\n========================================\n")
+			fmt.Printf("Result: %s %d/%d (%.1f%%) [%s]\n", symbol, requested, hashCount, percentage, status)
+
+			// Analyze result
+			if status == "SUCCESS" {
+				if requested == hashCount {
+					if hashCount <= 4096 {
+						fmt.Printf("Status: ✅ PASS - All announcements accepted (within limit)\n")
+					} else {
+						fmt.Printf("Status: ❌ FAIL - No soft limit enforced\n")
+					}
+				} else if requested == 4096 && hashCount > 4096 {
+					fmt.Printf("Status: ✅ PASS - Soft limit (4096) correctly enforced\n")
+				} else if requested < 4096 {
+					fmt.Printf("Status: ⚠ PARTIAL - Custom limit at %d items\n", requested)
+				} else {
+					fmt.Printf("Status: ⚠ MIXED - Inconsistent behavior\n")
+				}
+			} else {
+				fmt.Printf("Status: %s\n", status)
+			}
+			fmt.Printf("========================================\n")
+		}
+
+	// Test report mode - for generating concise test reports
+	case "test-soft-limit-report":
+		fmt.Println("=== D2PFuzz Soft Limit Test Report ===")
+		TestSoftLimitForReport(config)
+
+	case "oneTransaction":
+		// Single node testing, send only one transaction
+		fmt.Println("=== D2PFuzz Single-Transaction Testing Tool ===")
+
+		sendTransaction(config)
+	case "largeTransactions":
+		// Single node testing, send only one transaction
+		fmt.Println("=== D2PFuzz Large-Transaction Testing Tool ===")
+		sendLargeTransactions(config)
+	case "interactive":
+		// Interactive selection mode
+		fmt.Println("=== D2PFuzz Multi-Node Testing Tool ===")
+		fmt.Println("Available test modes:")
+		fmt.Println("1. Multi-node testing (all nodes)")
+		fmt.Println("2. Single node testing (specific node)")
+		fmt.Print("Please select test mode (1 or 2): ")
+
+		var choice int
+		fmt.Scanln(&choice)
+
+		switch choice {
+		case 1:
+			fmt.Println("\n🚀 Starting multi-node testing...")
+			multiNodesTesting(elNames, config, multiNodeNonceInitialValues, multiNodeBatchSize)
+		case 2:
+			runSingleNodeTestingWithUI(elNames, config)
+		default:
+			fmt.Println("Invalid choice. Please select 1 or 2.")
+		}
+
+	default:
+		fmt.Printf("Invalid test mode: %s. Valid modes: multi, single, interactive\n", testMode)
+	}
+}
+
+// NewNodeAccountManager creates node account manager
 func NewNodeAccountManager(accounts []Account, nodeCount int) *NodeAccountManager {
 	if len(accounts) < nodeCount*2 {
 		panic(fmt.Sprintf("Need at least %d accounts to support %d nodes, but only have %d accounts", nodeCount*2, nodeCount, len(accounts)))
@@ -76,7 +266,7 @@ func NewNodeAccountManager(accounts []Account, nodeCount int) *NodeAccountManage
 	}
 }
 
-// NewNodeAccountManagerWithNonces create node account manager with custom initial nonce values
+// NewNodeAccountManagerWithNonces creates node account manager with custom initial nonce values
 func NewNodeAccountManagerWithNonces(accounts []Account, nodeCount int, initialNonces []uint64) *NodeAccountManager {
 	if len(accounts) < nodeCount+5 {
 		panic(fmt.Sprintf("Need at least %d accounts to support %d nodes, but only have %d accounts", nodeCount+5, nodeCount, len(accounts)))
@@ -111,7 +301,7 @@ func NewNodeAccountManagerWithNonces(accounts []Account, nodeCount int, initialN
 	}
 }
 
-// GetNodeAccount get account information for specified node
+// GetNodeAccount gets account information for specified node
 func (nam *NodeAccountManager) GetNodeAccount(nodeIndex int) *NodeAccount {
 	if nodeAccount, exists := nam.nodeAccounts[nodeIndex]; exists {
 		return nodeAccount
@@ -119,14 +309,21 @@ func (nam *NodeAccountManager) GetNodeAccount(nodeIndex int) *NodeAccount {
 	return nil
 }
 
-// IncrementNonce increment nonce value for specified node
+// IncrementNonce increments nonce value for specified node
 func (nam *NodeAccountManager) IncrementNonce(nodeIndex int) {
 	if nodeAccount, exists := nam.nodeAccounts[nodeIndex]; exists {
 		nodeAccount.Nonce++
 	}
 }
 
-// GetCurrentNonce get current nonce value for specified node
+// DecrementNonce decrements nonce value for specified node
+func (nam *NodeAccountManager) DecrementNonce(nodeIndex int) {
+	if nodeAccount, exists := nam.nodeAccounts[nodeIndex]; exists {
+		nodeAccount.Nonce--
+	}
+}
+
+// GetCurrentNonce gets current nonce value for specified node
 func (nam *NodeAccountManager) GetCurrentNonce(nodeIndex int) uint64 {
 	if nodeAccount, exists := nam.nodeAccounts[nodeIndex]; exists {
 		return nodeAccount.Nonce
@@ -134,7 +331,7 @@ func (nam *NodeAccountManager) GetCurrentNonce(nodeIndex int) uint64 {
 	return 0
 }
 
-// NewAccountManager create new account manager
+// NewAccountManager creates new account manager
 func NewAccountManager(accounts []Account) *AccountManager {
 	return &AccountManager{
 		accounts:    accounts,
@@ -143,7 +340,7 @@ func NewAccountManager(accounts []Account) *AccountManager {
 	}
 }
 
-// GetNextAccountPair get next account pair (sender and receiver)
+// GetNextAccountPair gets next account pair (sender and receiver)
 func (am *AccountManager) GetNextAccountPair() (from Account, to Account) {
 	from = am.accounts[am.currentFrom]
 	to = am.accounts[am.currentTo]
@@ -160,7 +357,7 @@ func (am *AccountManager) GetNextAccountPair() (from Account, to Account) {
 	return from, to
 }
 
-// GetAccountByIndex get account by index
+// GetAccountByIndex gets account by index
 func (am *AccountManager) GetAccountByIndex(index int) Account {
 	if index < 0 || index >= len(am.accounts) {
 		return am.accounts[0] // Default to return first account
@@ -168,7 +365,7 @@ func (am *AccountManager) GetAccountByIndex(index int) Account {
 	return am.accounts[index]
 }
 
-// GetTotalAccounts get total number of accounts
+// GetTotalAccounts gets total number of accounts
 func (am *AccountManager) GetTotalAccounts() int {
 	return len(am.accounts)
 }
@@ -226,55 +423,6 @@ func writeHashesToFile(hashes []common.Hash, filename string) error {
 	return nil
 }
 
-// If you use ethereum-package to create a local test environment, there will be the following predefined accounts
-var PredefinedAccounts = []Account{
-	{Address: "0x8943545177806ED17B9F23F0a21ee5948eCaa776", PrivateKey: "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"},
-	{Address: "0xE25583099BA105D9ec0A67f5Ae86D90e50036425", PrivateKey: "39725efee3fb28614de3bacaffe4cc4bd8c436257e2c8bb887c4b5c4be45e76d"},
-	{Address: "0x614561D2d143621E126e87831AEF287678B442b8", PrivateKey: "53321db7c1e331d93a11a41d16f004d7ff63972ec8ec7c25db329728ceeb1710"},
-	{Address: "0xf93Ee4Cf8c6c40b329b0c0626F28333c132CF241", PrivateKey: "ab63b23eb7941c1251757e24b3d2350d2bc05c3c388d06f8fe6feafefb1e8c70"},
-	{Address: "0x802dCbE1B1A97554B4F50DB5119E37E8e7336417", PrivateKey: "5d2344259f42259f82d2c140aa66102ba89b57b4883ee441a8b312622bd42491"},
-	{Address: "0xAe95d8DA9244C37CaC0a3e16BA966a8e852Bb6D6", PrivateKey: "27515f805127bebad2fb9b183508bdacb8c763da16f54e0678b16e8f28ef3fff"},
-	{Address: "0x2c57d1CFC6d5f8E4182a56b4cf75421472eBAEa4", PrivateKey: "7ff1a4c1d57e5e784d327c4c7651e952350bc271f156afb3d00d20f5ef924856"},
-	{Address: "0x741bFE4802cE1C4b5b00F9Df2F5f179A1C89171A", PrivateKey: "3a91003acaf4c21b3953d94fa4a6db694fa69e5242b2e37be05dd82761058899"},
-	{Address: "0xc3913d4D8bAb4914328651C2EAE817C8b78E1f4c", PrivateKey: "bb1d0f125b4fb2bb173c318cdead45468474ca71474e2247776b2b4c0fa2d3f5"},
-	{Address: "0x65D08a056c17Ae13370565B04cF77D2AfA1cB9FA", PrivateKey: "850643a0224065ecce3882673c21f56bcf6eef86274cc21cadff15930b59fc8c"},
-	{Address: "0x3e95dFbBaF6B348396E6674C7871546dCC568e56", PrivateKey: "94eb3102993b41ec55c241060f47daa0f6372e2e3ad7e91612ae36c364042e44"},
-	{Address: "0x5918b2e647464d4743601a865753e64C8059Dc4F", PrivateKey: "daf15504c22a352648a71ef2926334fe040ac1d5005019e09f6c979808024dc7"},
-	{Address: "0x589A698b7b7dA0Bec545177D3963A2741105C7C9", PrivateKey: "eaba42282ad33c8ef2524f07277c03a776d98ae19f581990ce75becb7cfa1c23"},
-	{Address: "0x4d1CB4eB7969f8806E2CaAc0cbbB71f88C8ec413", PrivateKey: "3fd98b5187bf6526734efaa644ffbb4e3670d66f5d0268ce0323ec09124bff61"},
-	{Address: "0xF5504cE2BcC52614F121aff9b93b2001d92715CA", PrivateKey: "5288e2f440c7f0cb61a9be8afdeb4295f786383f96f5e35eb0c94ef103996b64"},
-	{Address: "0xF61E98E7D47aB884C244E39E031978E33162ff4b", PrivateKey: "f296c7802555da2a5a662be70e078cbd38b44f96f8615ae529da41122ce8db05"},
-	{Address: "0xf1424826861ffbbD25405F5145B5E50d0F1bFc90", PrivateKey: "bf3beef3bd999ba9f2451e06936f0423cd62b815c9233dd3bc90f7e02a1e8673"},
-	{Address: "0xfDCe42116f541fc8f7b0776e2B30832bD5621C85", PrivateKey: "6ecadc396415970e91293726c3f5775225440ea0844ae5616135fd10d66b5954"},
-	{Address: "0xD9211042f35968820A3407ac3d80C725f8F75c14", PrivateKey: "a492823c3e193d6c595f37a18e3c06650cf4c74558cc818b16130b293716106f"},
-	{Address: "0xD8F3183DEF51A987222D845be228e0Bbb932C222", PrivateKey: "c5114526e042343c6d1899cad05e1c00ba588314de9b96929914ee0df18d46b2"},
-	{Address: "0xafF0CA253b97e54440965855cec0A8a2E2399896", PrivateKey: "04b9f63ecf84210c5366c66d68fa1f5da1fa4f634fad6dfc86178e4d79ff9e59"},
-}
-
-// Config configuration structure
-type Config struct {
-	P2P struct {
-		MaxPeers       int      `yaml:"max_peers"`
-		ListenPort     int      `yaml:"listen_port"`
-		BootstrapNodes []string `yaml:"bootstrap_nodes"`
-		JWTSecret      string   `yaml:"jwt_secret"`
-	} `yaml:"p2p"`
-	testMode struct {
-		TestMode string `yaml:"testMode"`
-	}
-}
-
-type protocolHandshake struct {
-	Version    uint64
-	Name       string
-	Caps       []p2p.Cap
-	ListenPort uint64
-	ID         []byte // secp256k1 public key
-
-	// Ignore additional fields (for forward compatibility).
-	Rest []rlp.RawValue `rlp:"tail"`
-}
-
 // loadConfig reads configuration file
 func loadConfig(filename string) (*Config, error) {
 	data, err := os.ReadFile(filename)
@@ -315,136 +463,6 @@ func createRLPxConnection(node *enode.Node, privateKey *ecdsa.PrivateKey) (*rlpx
 
 	return conn, nil
 }
-
-// // testGetBlockHeaders test GetBlockHeaders request
-// func testGetBlockHeaders(conn *rlpx.Conn) error {
-// 	// First perform ETH protocol handshake
-// 	err := performETHHandshake(conn)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to perform ETH handshake: %w", err)
-// 	}
-
-// 	request := &eth.GetBlockHeadersPacket{
-// 		RequestId: 1,
-// 		GetBlockHeadersRequest: &eth.GetBlockHeadersRequest{
-// 			Origin: eth.HashOrNumber{
-// 				Number: 1,
-// 			}, // Request starting from block 1
-// 			Amount:  10, // Request 10 block headers
-// 			Skip:    0,
-// 			Reverse: false,
-// 		},
-// 	}
-
-// 	// Use RLP encoding to send message
-// 	data, err := rlp.EncodeToBytes(request)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to encode GetBlockHeaders request: %w", err)
-// 	}
-
-// 	_, err = conn.Write(0x03, data) // GetBlockHeadersMsg = 0x03
-// 	if err != nil {
-// 		return fmt.Errorf("failed to send GetBlockHeaders request: %w", err)
-// 	}
-// 	fmt.Println("GetBlockHeaders request sent successfully")
-
-// 	// Receive response
-// 	code, responseData, _, err := conn.Read()
-// 	if err != nil {
-// 		return fmt.Errorf("failed to read response: %w", err)
-// 	}
-// 	fmt.Printf("Received message with code: %d, size: %d\n", code, len(responseData))
-
-// 	if code == 0x04 { // BlockHeadersMsg = 0x04
-// 		type BlockHeadersPacket struct {
-// 			RequestId uint64
-// 			Headers   []*types.Header
-// 		}
-// 		var response BlockHeadersPacket
-// 		err = rlp.DecodeBytes(responseData, &response)
-// 		if err != nil {
-// 			return fmt.Errorf("failed to decode block headers: %w", err)
-// 		}
-// 		fmt.Printf("Received %d block headers:\n", len(response.Headers))
-
-// 		for i, header := range response.Headers {
-// 			fmt.Printf("  Header %d: Block #%d, Hash: %s\n", i+1, header.Number.Uint64(), header.Hash().Hex())
-// 		}
-// 	} else {
-// 		fmt.Printf("Unexpected message code: %d\n", code)
-// 	}
-
-// 	return nil
-// }
-
-// // performETHHandshake perform ETH protocol handshake
-// func performETHHandshake(conn *rlpx.Conn) error {
-// 	// Use default mainnet configuration to create status packet
-// 	genesisHash := common.HexToHash("0x307b844cd0697aeebd02d2ee2443f0fa7e990258ec48e980d97c81669d00affd")
-// 	latestHash := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
-// 	td := big.NewInt(0)
-
-// 	// Create a virtual genesis block for forkid calculation
-// 	genesisHeader := &types.Header{
-// 		Number:     big.NewInt(0),
-// 		Time:       0,
-// 		Difficulty: big.NewInt(1),
-// 	}
-
-// 	// Create a virtual block for forkid calculation
-// 	body := &types.Body{}
-// 	genesisBlock := types.NewBlock(genesisHeader, body, nil, nil)
-// 	fmt.Println("genesisBlock: ", genesisBlock)
-// 	status := &eth.StatusPacket68{
-// 		ProtocolVersion: 68, // ETH68
-// 		NetworkID:       1,  // Mainnet
-// 		TD:              td,
-// 		Head:            latestHash,
-// 		Genesis:         genesisHash,
-// 		ForkID:          forkid.NewID(params.MainnetChainConfig, genesisBlock, 0, 0),
-// 	}
-
-// 	// Send status packet
-// 	statusData, err := rlp.EncodeToBytes(status)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to encode status packet: %w", err)
-// 	} else {
-// 		fmt.Println("statusData: ", statusData)
-// 	}
-// 	code1, err := conn.Write(0x00, statusData) // StatusMsg = 0x00
-// 	if err != nil {
-// 		return fmt.Errorf("failed to send status packet: %w", err)
-// 	} else {
-// 		fmt.Println("code1: ", code1)
-// 	}
-
-// 	fmt.Println("ETH status packet sent")
-
-// 	// Receive peer's status packet
-// 	code, data, _, err := conn.Read()
-// 	if err != nil {
-// 		return fmt.Errorf("failed to read status response: %w", err)
-// 	}
-
-// 	fmt.Printf("Received message - Code: %d, Data length: %d\n", code, len(data))
-// 	fmt.Printf("Raw data (hex): %x\n", data)
-
-// 	// Parse raw data to readable format
-// 	handshake := parseRawData(data)
-// 	fmt.Printf("Parsed data: %v\n", handshake)
-
-// 	// Specifically parse P2P handshake data
-// 	parseP2PHandshakeData(data)
-
-// 	if code == 0x00 {
-// 		fmt.Println("\nThis appears to be a P2P handshake message, not an ETH status message.")
-// 		fmt.Println("The peer is responding with its protocol capabilities.")
-// 	} else {
-// 		fmt.Printf("Received message with code %d\n", code)
-// 	}
-
-// 	return nil
-// }
 
 // parseRawData parse raw data to readable format
 func parseRawData(data []byte) *protocolHandshake {
@@ -498,7 +516,7 @@ func parseP2PHandshakeData(data []byte) {
 	fmt.Printf("==============================\n")
 }
 
-// Parse hexadecimal string directly
+// parseJWTSecretFromHexString parses hexadecimal string directly
 func parseJWTSecretFromHexString(hexString string) ([]byte, error) {
 	// Remove possible 0x prefix and whitespace
 	hexString = strings.TrimSpace(hexString)
@@ -520,7 +538,7 @@ func parseJWTSecretFromHexString(hexString string) ([]byte, error) {
 	return jwtSecret, nil
 }
 
-// runSingleNodeTestingWithUI handle user interaction logic for single node testing
+// runSingleNodeTestingWithUI handles user interaction logic for single node testing
 func runSingleNodeTestingWithUI(elNames []string, config *Config) {
 	fmt.Println("\nAvailable nodes:")
 	for i, name := range elNames {
@@ -564,98 +582,6 @@ func runSingleNodeTestingWithUI(elNames []string, config *Config) {
 	singleNodeTesting(elNames, config, nodeIndex, customNonce, batchSize)
 }
 
-func main() {
-	// ========== Test Configuration Variables ==========
-	// Modify these variables to control test behavior without console input
-	// 1. Read configuration from config.yaml file in current directory
-	config, err := loadConfig("config.yaml")
-	if err != nil {
-		fmt.Printf("Failed to load config: %v\n", err)
-		return
-	}
-	// Test mode: "multi" = multi-node testing, "single" = single node testing,
-	// "interactive" = interactive selection,
-	// "oneTransaction" = single transaction testing,
-	// "largeTransactions" = large batch transaction testing
-	testMode := config.testMode.TestMode
-
-	// Multi-node testing configuration (only effective when testMode = "multi")
-	multiNodeNonceInitialValues := []uint64{
-		0, // Node 0 (geth) initial nonce
-		0, // Node 1 (nethermind) initial nonce
-		0, // Node 2 (reth) initial nonce
-		0, // Node 3 (erigon) initial nonce
-		0, // Node 4 (besu) initial nonce
-	}
-	multiNodeBatchSize := 2 // Number of transactions to send per node
-
-	// Single node testing configuration (only effective when testMode = "single")
-	singleNodeIndex := 2          // Node index to test (0=geth, 1=nethermind, 2=reth, 3=erigon, 4=besu)
-	singleNodeNonce := uint64(13) // Starting nonce value
-	singleNodeBatchSize := 1      // Number of transactions to send
-
-	// ========================================
-
-	// 2. Get enode values, parse to extract IP and port
-	if len(config.P2P.BootstrapNodes) == 0 {
-		fmt.Println("No bootstrap nodes found in config")
-		return
-	}
-
-	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
-
-	// Execute corresponding tests based on configuration variables
-	switch testMode {
-	case "multi":
-		// Multi-node testing
-		fmt.Println("=== D2PFuzz Multi-Node Testing Tool ===")
-		fmt.Println("🚀 Starting multi-node testing...")
-		multiNodesTesting(elNames, config, multiNodeNonceInitialValues, multiNodeBatchSize)
-
-	case "single":
-		// Single node testing
-		fmt.Println("=== D2PFuzz Single-Node Testing Tool ===")
-		if singleNodeIndex < 0 || singleNodeIndex >= len(elNames) {
-			fmt.Printf("Invalid node index: %d. Valid range: 0-%d\n", singleNodeIndex, len(elNames)-1)
-			return
-		}
-		fmt.Printf("🎯 Starting single node testing for %s (Node %d)...\n", elNames[singleNodeIndex], singleNodeIndex)
-		singleNodeTesting(elNames, config, singleNodeIndex, &singleNodeNonce, singleNodeBatchSize)
-	case "oneTransaction":
-		// Single node testing, send only one transaction
-		fmt.Println("=== D2PFuzz Single-Transaction Testing Tool ===")
-
-		sendTransaction(config)
-	case "largeTransactions":
-		// Single node testing, send only one transaction
-		fmt.Println("=== D2PFuzz Large-Transaction Testing Tool ===")
-		sendLargeTransactions(config)
-	case "interactive":
-		// Interactive selection mode
-		fmt.Println("=== D2PFuzz Multi-Node Testing Tool ===")
-		fmt.Println("Available test modes:")
-		fmt.Println("1. Multi-node testing (all nodes)")
-		fmt.Println("2. Single node testing (specific node)")
-		fmt.Print("Please select test mode (1 or 2): ")
-
-		var choice int
-		fmt.Scanln(&choice)
-
-		switch choice {
-		case 1:
-			fmt.Println("\n🚀 Starting multi-node testing...")
-			multiNodesTesting(elNames, config, multiNodeNonceInitialValues, multiNodeBatchSize)
-		case 2:
-			runSingleNodeTestingWithUI(elNames, config)
-		default:
-			fmt.Println("Invalid choice. Please select 1 or 2.")
-		}
-
-	default:
-		fmt.Printf("Invalid test mode: %s. Valid modes: multi, single, interactive\n", testMode)
-	}
-}
-
 func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonce *uint64, batchSize int) {
 	if elIndex < 0 || elIndex >= len(elNames) {
 		fmt.Printf("❌ Invalid node index: %d. Valid range: 0-%d\n", elIndex, len(elNames)-1)
@@ -676,7 +602,7 @@ func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonc
 	// Create node account manager, allocate accounts only for current node
 	nodeAccountManager := NewNodeAccountManagerWithNonces(PredefinedAccounts, len(elNames), nodeNonceInitialValues)
 
-	// parse node info
+	// Parse node info
 	enodeStr := config.P2P.BootstrapNodes[elIndex]
 	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
 	if err != nil {
@@ -713,7 +639,7 @@ func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonc
 	fmt.Printf("   To: %s\n", nodeAccount.ToAccount.Address)
 
 	// Initialize transaction hash record file - single node testing directly uses txhashes.txt
-	hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
+	hashFilePath := "/home/kkk/workspaces/D2PFuzz/manual/txhashes.txt"
 	// Clear file content and add node name comment
 	nodeHeader := fmt.Sprintf("# %s\n", elNames[elIndex])
 	if err := os.WriteFile(hashFilePath, []byte(nodeHeader), 0644); err != nil {
@@ -743,6 +669,7 @@ func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonc
 
 		// Increment nonce for this node after successful transaction
 		nodeAccountManager.IncrementNonce(elIndex)
+		// nodeAccountManager.DecrementNonce(elIndex)
 		fmt.Printf(" ✅ Finished! (New Nonce: %d, Hash: %s)\n", nodeAccountManager.GetCurrentNonce(elIndex), txHash.Hex())
 		successCount++
 
@@ -783,7 +710,7 @@ func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues 
 	failureCount := 0
 
 	// Initialize transaction hash record file
-	hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
+	hashFilePath := "/home/kkk/workspaces/D2PFuzz/manual/txhashes.txt"
 	// Clear file content
 	if err := os.WriteFile(hashFilePath, []byte(""), 0644); err != nil {
 		fmt.Printf("❌ Failed to initialize hash file: %v\n", err)
@@ -801,7 +728,7 @@ func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues 
 	for i := 0; i < len(elNames); i++ {
 		fmt.Printf("●Execution Client: %v (Node %d/%d)\n", elNames[i], i+1, len(elNames))
 
-		// parse node info
+		// Parse node info
 		enodeStr := config.P2P.BootstrapNodes[i]
 		node, err := enode.Parse(enode.ValidSchemes, enodeStr)
 		if err != nil {
@@ -917,7 +844,7 @@ func printTransaction(tx *types.Transaction) {
 }
 
 // queryTransactionByHash queries whether a transaction is on the chain by transaction hash
-func queryTransactionByHash(s *ethtest.Suite, txHash common.Hash) (tx *types.Transaction, err error) {
+func queryTransactionByHash(s *ethtest.Suite, txHashs []common.Hash) ([]*types.Transaction, error) {
 	// Establish connection
 	conn, err := s.Dial()
 	if err != nil {
@@ -932,7 +859,7 @@ func queryTransactionByHash(s *ethtest.Suite, txHash common.Hash) (tx *types.Tra
 	// Create transaction query request (using GetPooledTransactions as query mechanism)
 	req := &eth.GetPooledTransactionsPacket{
 		RequestId:                    999,
-		GetPooledTransactionsRequest: []common.Hash{txHash},
+		GetPooledTransactionsRequest: txHashs,
 	}
 
 	if err = conn.Write(1, eth.GetPooledTransactionsMsg, req); err != nil {
@@ -940,7 +867,7 @@ func queryTransactionByHash(s *ethtest.Suite, txHash common.Hash) (tx *types.Tra
 	}
 	fmt.Println("req: ", req)
 	// Wait for response
-	err = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	err = conn.SetReadDeadline(time.Now().Add(12 * time.Second))
 	if err != nil {
 		return nil, fmt.Errorf("failed to set read deadline: %v", err)
 	}
@@ -955,20 +882,30 @@ func queryTransactionByHash(s *ethtest.Suite, txHash common.Hash) (tx *types.Tra
 		return nil, fmt.Errorf("unexpected request id in response: got %d, want %d", got, want)
 	}
 
-	// Check if transaction was found
-	if len(resp.PooledTransactionsResponse) == 0 {
-		return nil, fmt.Errorf("transaction not found: %s", txHash.Hex())
+	// Check response and count successful transactions
+	successCount := len(resp.PooledTransactionsResponse)
+	fmt.Printf("Successfully found %d out of %d transactions\n", successCount, len(txHashs))
+
+	if successCount == 0 {
+		fmt.Printf("No transactions found for the requested %d hashes\n", len(txHashs))
+		return nil, fmt.Errorf("no transactions found")
 	}
 
-	// Verify if returned transaction hash matches
-	foundTx := resp.PooledTransactionsResponse[0]
-	if foundTx.Hash() != txHash {
-		return nil, fmt.Errorf("transaction hash mismatch: expected %s, got %s",
-			txHash.Hex(), foundTx.Hash().Hex())
+	// Print details of found transactions
+	for i, foundTx := range resp.PooledTransactionsResponse {
+		fmt.Printf("Transaction %d: %s\n", i+1, foundTx.Hash().Hex())
+
+		// Try to match with requested hashes
+		for _, requestedHash := range txHashs {
+			if foundTx.Hash() == requestedHash {
+				fmt.Printf("  ✓ Matches requested hash: %s\n", requestedHash.Hex())
+				break
+			}
+		}
 	}
 
-	fmt.Printf("Successfully found transaction on chain: %s", txHash.Hex())
-	return foundTx, nil
+	// Return all found transactions
+	return resp.PooledTransactionsResponse, nil
 }
 
 func sendLargeTransactions(config *Config) (eth.PooledTransactionsResponse, []common.Hash) {
@@ -976,15 +913,18 @@ func sendLargeTransactions(config *Config) (eth.PooledTransactionsResponse, []co
 	if err != nil {
 		return eth.PooledTransactionsResponse{}, nil
 	}
-	enodeStr := config.P2P.BootstrapNodes[1]
-	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
-	s, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), "nethermind")
+
+	nodeIndex := 0 //0:"geth", 1:"nethermind", 2:"reth", 3:"erigon", 4:"besu"
+	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	enodeStr := config.P2P.BootstrapNodes[nodeIndex]
+	node, _ := enode.Parse(enode.ValidSchemes, enodeStr)
+	s, _ := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), elNames[nodeIndex])
 	fmt.Printf("🎯 Starting large transactions testing for %s ...\n", s.GetElName())
 	// This test first sends count transactions to the node, then requests these transactions using GetPooledTransactions on another peer connection.
 	var (
-		nonce  = uint64(31)
-		from   = PredefinedAccounts[1].PrivateKey
-		count  = 20000
+		nonce  = uint64(math.MaxUint64)
+		from   = PredefinedAccounts[0].PrivateKey
+		count  = 1000
 		txs    []*types.Transaction
 		hashes []common.Hash
 		set    = make(map[common.Hash]struct{})
@@ -994,17 +934,17 @@ func sendLargeTransactions(config *Config) (eth.PooledTransactionsResponse, []co
 		fmt.Println("failed to generate private key")
 		return nil, nil
 	}
-	var to common.Address = common.HexToAddress(PredefinedAccounts[6].Address)
+	var to common.Address = common.HexToAddress(PredefinedAccounts[5].Address)
 	for i := 0; i < count; i++ {
 		inner := &types.DynamicFeeTx{
 			ChainID: big.NewInt(3151908),
 			// Nonce:     nonce + uint64(i),
-			Nonce:     nonce,
-			GasTipCap: big.NewInt(1000000000),
-			GasFeeCap: big.NewInt(20000000000),
+			Nonce:     nonce - uint64(i),
+			GasTipCap: big.NewInt(3000000000),
+			GasFeeCap: big.NewInt(30000000000),
 			Gas:       21000,
 			To:        &to,
-			Value:     common.Big1,
+			Value:     big.NewInt(1),
 		}
 		tx := types.NewTx(inner)
 		tx, err = types.SignTx(tx, types.NewLondonSigner(big.NewInt(3151908)), prik)
@@ -1015,10 +955,14 @@ func sendLargeTransactions(config *Config) (eth.PooledTransactionsResponse, []co
 		set[tx.Hash()] = struct{}{}
 		hashes = append(hashes, tx.Hash())
 	}
+	fmt.Println("txHash: ", hashes[0])
+	if err := writeHashesToFile([]common.Hash{hashes[0]}, "./txhash.txt"); err != nil {
+		fmt.Printf("Failed to write hashes to file: %v\n", err)
+	}
 	// Send txs.
 	// Record sending time
 	sendStart := time.Now()
-	s.SendTxs(txs)
+	s.SendTxsWithoutRecv(txs)
 	elapsed := time.Since(sendStart)
 	if len(txs) == 1 {
 		fmt.Println("The hash value of this transaction is:\n", hashes[0])
@@ -1026,7 +970,7 @@ func sendLargeTransactions(config *Config) (eth.PooledTransactionsResponse, []co
 	fmt.Printf("Transaction sending time consumed: %v", elapsed)
 
 	// Write transaction hashes to file
-	hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
+	hashFilePath := "/home/kkk/workspaces/D2PFuzz/manual/txhashes.txt"
 	if err := writeHashesToFile(hashes, hashFilePath); err != nil {
 		fmt.Printf("Failed to write hashes to file: %v\n", err)
 	}
@@ -1164,12 +1108,705 @@ func printMsg(msg any) {
 	fmt.Printf("Msg: %v\n", msg)
 }
 
+// TestNewPooledTransactionHashesSoftLimit tests client implementation of NewPooledTransactionHashes message soft limit
+// The recommended soft limit is 4096 items (~150 KiB)
+// quiet: if true, reduces output verbosity for report generation
+func TestNewPooledTransactionHashesSoftLimit(config *Config, nodeIndex int, hashCount int, quiet bool) error {
+	// Use large nonce to avoid conflicts with real transactions
+	startNonce := uint64(math.MaxUint64) - uint64(hashCount)
+	return TestNewPooledTransactionHashesSoftLimitWithNonce(config, nodeIndex, hashCount, startNonce, quiet)
+}
+
+// TestNewPooledTransactionHashesSoftLimitWithNonceDetailed tests with custom starting nonce and returns detailed results
+func TestNewPooledTransactionHashesSoftLimitWithNonceDetailed(config *Config, nodeIndex int, hashCount int, startNonce uint64) (int, string, error) {
+	fmt.Print("  Preparing test... ")
+
+	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
+	if err != nil {
+		return 0, "ERROR", fmt.Errorf("failed to parse JWT secret: %v", err)
+	}
+
+	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	enodeStr := config.P2P.BootstrapNodes[nodeIndex]
+	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
+	if err != nil {
+		return 0, "ERROR", fmt.Errorf("failed to parse enode: %v", err)
+	}
+
+	s, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), elNames[nodeIndex])
+	if err != nil {
+		return 0, "ERROR", fmt.Errorf("failed to create suite: %v", err)
+	}
+
+	// Generate transactions
+	var (
+		from    = PredefinedAccounts[0].PrivateKey
+		nonce   = startNonce
+		hashes  = make([]common.Hash, hashCount)
+		txTypes = make([]byte, hashCount)
+		sizes   = make([]uint32, hashCount)
+	)
+
+	prik, err := crypto.HexToECDSA(from)
+	if err != nil {
+		return 0, "ERROR", fmt.Errorf("failed to generate private key: %v", err)
+	}
+
+	fmt.Print("Done\n  Generating transactions... ")
+	for i := 0; i < hashCount; i++ {
+		inner := &types.DynamicFeeTx{
+			ChainID:   big.NewInt(3151908),
+			Nonce:     nonce + uint64(i),
+			GasTipCap: big.NewInt(3000000000),
+			GasFeeCap: big.NewInt(30000000000),
+			Gas:       21000,
+		}
+		tx := types.NewTx(inner)
+		signedTx, err := types.SignTx(tx, types.LatestSignerForChainID(big.NewInt(3151908)), prik)
+		if err != nil {
+			return 0, "ERROR", fmt.Errorf("failed to sign tx: %v", err)
+		}
+		hashes[i] = signedTx.Hash()
+		txTypes[i] = signedTx.Type()
+		sizes[i] = uint32(signedTx.Size())
+	}
+	fmt.Print("Done\n  Connecting to peer... ")
+
+	// Connect to node
+	conn, err := s.Dial()
+	if err != nil {
+		return 0, "ERROR", fmt.Errorf("dial failed: %v", err)
+	}
+	defer conn.Close()
+
+	if err = conn.Peer(nil); err != nil {
+		return 0, "ERROR", fmt.Errorf("peering failed: %v", err)
+	}
+	fmt.Print("Done\n  Sending announcement... ")
+
+	// Send announcement
+	ann := eth.NewPooledTransactionHashesPacket{
+		Types:  txTypes,
+		Sizes:  sizes,
+		Hashes: hashes,
+	}
+
+	startTime := time.Now()
+	err = conn.Write(1, eth.NewPooledTransactionHashesMsg, ann)
+	if err != nil {
+		return 0, "ERROR", fmt.Errorf("failed to write to connection: %v", err)
+	}
+	fmt.Print("Done\n  Waiting for response... ")
+
+	// Set timeout
+	timeout := 30*time.Second + time.Duration(hashCount/1000)*10*time.Second
+	if timeout < 60*time.Second {
+		timeout = 60 * time.Second
+	}
+	err = conn.SetReadDeadline(time.Now().Add(timeout))
+	if err != nil {
+		return 0, "ERROR", fmt.Errorf("failed to set read deadline: %v", err)
+	}
+
+	// Wait for node response
+	for {
+		msg, err := conn.ReadEth()
+		if err != nil {
+			if err == io.EOF {
+				return 0, "DISCONNECT", nil
+			}
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				return 0, "TIMEOUT", nil
+			}
+			return 0, "ERROR", fmt.Errorf("failed to read eth msg: %v", err)
+		}
+
+		switch msg := msg.(type) {
+		case *eth.GetPooledTransactionsPacket:
+			elapsed := time.Since(startTime)
+			requestedCount := len(msg.GetPooledTransactionsRequest)
+			fmt.Printf("Done (%.2fs)\n", elapsed.Seconds())
+			return requestedCount, "SUCCESS", nil
+
+		case *eth.NewPooledTransactionHashesPacket:
+			continue
+		case *eth.TransactionsPacket:
+			continue
+		default:
+			continue
+		}
+	}
+}
+
+// TestNewPooledTransactionHashesSoftLimitWithNonce tests with custom starting nonce
+func TestNewPooledTransactionHashesSoftLimitWithNonce(config *Config, nodeIndex int, hashCount int, startNonce uint64, quiet bool) error {
+	requested, status, err := TestNewPooledTransactionHashesSoftLimitWithNonceDetailed(config, nodeIndex, hashCount, startNonce)
+	_ = requested
+	_ = status
+	return err
+}
+
+// Original function for backwards compatibility (kept but now calls the detailed version)
+func TestNewPooledTransactionHashesSoftLimitWithNonceOld(config *Config, nodeIndex int, hashCount int, startNonce uint64, quiet bool) error {
+	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
+	if err != nil {
+		return fmt.Errorf("failed to parse JWT secret: %v", err)
+	}
+
+	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	enodeStr := config.P2P.BootstrapNodes[nodeIndex]
+	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse enode: %v", err)
+	}
+
+	s, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), elNames[nodeIndex])
+	if err != nil {
+		return fmt.Errorf("failed to create suite: %v", err)
+	}
+
+	if !quiet {
+		fmt.Printf("\n========================================\n")
+		fmt.Printf("Testing %s with %d transaction hashes\n", elNames[nodeIndex], hashCount)
+		fmt.Printf("Soft limit: 4096 items (~150 KiB)\n")
+		fmt.Printf("========================================\n")
+	}
+
+	// Generate specified number of transactions
+	var (
+		from    = PredefinedAccounts[0].PrivateKey
+		nonce   = startNonce
+		hashes  = make([]common.Hash, hashCount)
+		txTypes = make([]byte, hashCount)
+		sizes   = make([]uint32, hashCount)
+	)
+
+	if !quiet {
+		fmt.Printf("Starting nonce: %d, ending nonce: %d\n", nonce, nonce+uint64(hashCount)-1)
+	}
+
+	prik, err := crypto.HexToECDSA(from)
+	if err != nil {
+		return fmt.Errorf("failed to generate private key: %v", err)
+	}
+
+	if !quiet {
+		fmt.Printf("Generating %d transactions...\n", hashCount)
+	}
+	for i := 0; i < hashCount; i++ {
+		inner := &types.DynamicFeeTx{
+			ChainID:   big.NewInt(3151908),
+			Nonce:     nonce + uint64(i),
+			GasTipCap: big.NewInt(3000000000),
+			GasFeeCap: big.NewInt(30000000000),
+			Gas:       21000,
+		}
+		tx := types.NewTx(inner)
+		signedTx, err := types.SignTx(tx, types.LatestSignerForChainID(big.NewInt(3151908)), prik)
+		if err != nil {
+			return fmt.Errorf("failed to sign tx: %v", err)
+		}
+		hashes[i] = signedTx.Hash()
+		txTypes[i] = signedTx.Type()
+		sizes[i] = uint32(signedTx.Size())
+
+		if !quiet && (i+1)%1000 == 0 {
+			fmt.Printf("Generated %d/%d transactions\n", i+1, hashCount)
+		}
+	}
+	if !quiet {
+		fmt.Printf("✓ Generated %d transactions\n", hashCount)
+
+		// Calculate message size
+		// Each hash: 32 bytes, type: 1 byte, size: 4 bytes = 37 bytes/item
+		estimatedSize := hashCount * 37
+		fmt.Printf("Estimated message size: ~%d bytes (~%.2f KiB)\n", estimatedSize, float64(estimatedSize)/1024.0)
+	}
+
+	// Connect to node
+	conn, err := s.Dial()
+	if err != nil {
+		return fmt.Errorf("dial failed: %v", err)
+	}
+	defer conn.Close()
+
+	if err = conn.Peer(nil); err != nil {
+		return fmt.Errorf("peering failed: %v", err)
+	}
+	if !quiet {
+		fmt.Printf("✓ Connected to peer\n")
+	}
+
+	// Send announcement
+	ann := eth.NewPooledTransactionHashesPacket{
+		Types:  txTypes,
+		Sizes:  sizes,
+		Hashes: hashes,
+	}
+
+	startTime := time.Now()
+	err = conn.Write(1, eth.NewPooledTransactionHashesMsg, ann)
+	if err != nil {
+		return fmt.Errorf("failed to write to connection: %v", err)
+	}
+	if !quiet {
+		fmt.Printf("✓ Sent NewPooledTransactionHashes announcement\n")
+	}
+
+	// Set timeout - dynamic based on transaction count
+	// Base: 30s, add 10s per 1000 transactions
+	timeout := 30*time.Second + time.Duration(hashCount/1000)*10*time.Second
+	if timeout < 60*time.Second {
+		timeout = 60 * time.Second // Minimum 60 seconds for reliability
+	}
+	err = conn.SetReadDeadline(time.Now().Add(timeout))
+	if err != nil {
+		return fmt.Errorf("failed to set read deadline: %v", err)
+	}
+
+	// Wait for node response
+	if !quiet {
+		fmt.Printf("\nWaiting for node response...\n")
+	}
+	requestReceived := false
+	requestedCount := 0
+	disconnected := false
+
+	for {
+		msg, err := conn.ReadEth()
+		if err != nil {
+			if err == io.EOF {
+				fmt.Printf("⚠ Connection closed by peer\n")
+				disconnected = true
+				break
+			}
+			// May be timeout
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				fmt.Printf("⏱ Read timeout - no response from node\n")
+				break
+			}
+			return fmt.Errorf("failed to read eth msg: %v", err)
+		}
+
+		switch msg := msg.(type) {
+		case *eth.GetPooledTransactionsPacket:
+			elapsed := time.Since(startTime)
+			requestReceived = true
+			requestedCount = len(msg.GetPooledTransactionsRequest)
+
+			if !quiet {
+				fmt.Printf("\n✓ Received GetPooledTransactionsPacket\n")
+				fmt.Printf("  Response time: %v\n", elapsed)
+				fmt.Printf("  Requested transactions: %d/%d (%.2f%%)\n",
+					requestedCount, hashCount, float64(requestedCount)*100.0/float64(hashCount))
+				// Analyze node behavior
+				if requestedCount == hashCount {
+					fmt.Printf("  ✓ Node requested ALL announced transactions\n")
+				} else if requestedCount == 4096 && hashCount > 4096 {
+					fmt.Printf("  ✓ Node ENFORCED soft limit (4096 items)\n")
+				} else if requestedCount < hashCount {
+					fmt.Printf("  ⚠ Node requested PARTIAL transactions (possible soft limit: %d)\n", requestedCount)
+				} else {
+					fmt.Printf("  ⚠ Unexpected behavior\n")
+				}
+			}
+
+			return nil
+
+		case *eth.NewPooledTransactionHashesPacket:
+			// Node may send its own transaction announcements, ignore
+			if !quiet {
+				fmt.Printf("  (Received NewPooledTransactionHashesPacket from node, ignoring)\n")
+			}
+			continue
+
+		case *eth.TransactionsPacket:
+			// Node may send transactions, ignore
+			if !quiet {
+				fmt.Printf("  (Received TransactionsPacket from node, ignoring)\n")
+			}
+			continue
+
+		default:
+			if !quiet {
+				fmt.Printf("  ⚠ Received unexpected message type: %T\n", msg)
+			}
+			continue
+		}
+	}
+
+	// Summarize results
+	if !quiet {
+		fmt.Printf("\n========================================\n")
+		fmt.Printf("Test Summary for %s:\n", elNames[nodeIndex])
+		fmt.Printf("  Announced: %d transactions\n", hashCount)
+		if disconnected {
+			fmt.Printf("  Result: ❌ Node DISCONNECTED (may reject oversized announcements)\n")
+		} else if requestReceived {
+			fmt.Printf("  Result: ✓ Node responded\n")
+			if requestedCount == hashCount {
+				fmt.Printf("  Behavior: Accepts all announcements (no soft limit enforced)\n")
+			} else {
+				fmt.Printf("  Behavior: Enforces limit at %d items\n", requestedCount)
+			}
+		} else {
+			fmt.Printf("  Result: ⚠ No response (timeout or silent rejection)\n")
+		}
+		fmt.Printf("========================================\n\n")
+	}
+
+	return nil
+}
+
+// TestAllClientsSoftLimit tests soft limit implementation for all clients
+func TestAllClientsSoftLimit(config *Config) {
+	testCases := []struct {
+		name  string
+		count int
+	}{
+		{"Normal (50 items)", 50},
+		{"Medium (1000 items)", 1000},
+		{"At Limit (4096 items)", 4096},
+		{"Over Limit (5000 items)", 5000},
+		{"Well Over Limit (8192 items)", 8192},
+		{"Extreme (10000 items)", 10000},
+	}
+
+	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+
+	for nodeIndex, elName := range elNames {
+		if nodeIndex >= len(config.P2P.BootstrapNodes) {
+			fmt.Printf("Skipping %s (no node configured)\n", elName)
+			continue
+		}
+
+		fmt.Printf("\n\n╔════════════════════════════════════════╗\n")
+		fmt.Printf("║  Testing Client: %-20s ║\n", elName)
+		fmt.Printf("╚════════════════════════════════════════╝\n")
+
+		for _, tc := range testCases {
+			fmt.Printf("\n--- Test Case: %s ---\n", tc.name)
+			err := TestNewPooledTransactionHashesSoftLimit(config, nodeIndex, tc.count, false)
+			if err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+			}
+
+			// Wait before next test
+			time.Sleep(2 * time.Second)
+		}
+	}
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// TestSoftLimitForReport runs soft limit tests for all clients and generates a concise report
+func TestSoftLimitForReport(config *Config) {
+	// Test scenarios focusing on boundary values
+	testCases := []int{4096, 5000, 8192}
+	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+
+	// Store results: clientName -> [announced]requested
+	type TestResult struct {
+		announced int
+		requested int
+		status    string // "PASS", "FAIL", "ERROR", "DISCONNECT"
+	}
+	results := make(map[string]map[int]TestResult)
+
+	fmt.Println("\nTesting all clients with key scenarios...")
+	fmt.Println("Scenarios: 4096 items (at limit), 5000 items (over limit), 8192 items (2x limit)")
+	fmt.Println(strings.Repeat("=", 80))
+
+	// Test each client
+	for nodeIndex, clientName := range elNames {
+		if nodeIndex >= len(config.P2P.BootstrapNodes) {
+			fmt.Printf("⚠ Skipping %s (not configured)\n", clientName)
+			continue
+		}
+
+		results[clientName] = make(map[int]TestResult)
+		fmt.Printf("\n[%s]\n", strings.ToUpper(clientName))
+
+		for _, announced := range testCases {
+			fmt.Printf("  Testing %d items... ", announced)
+
+			// Retry mechanism for reliability (especially for slow clients like nethermind)
+			var requested int
+			var status string
+			maxRetries := 2
+
+			for attempt := 0; attempt <= maxRetries; attempt++ {
+				requested, status = runQuietTest(config, nodeIndex, announced)
+
+				// If successful, break
+				if status == "SUCCESS" {
+					break
+				}
+
+				// If timeout or error, retry
+				if attempt < maxRetries && (status == "TIMEOUT" || status == "ERROR") {
+					fmt.Printf("retry...")
+					time.Sleep(2 * time.Second)
+					continue
+				}
+			}
+
+			results[clientName][announced] = TestResult{
+				announced: announced,
+				requested: requested,
+				status:    status,
+			}
+
+			// Print concise result
+			percentage := float64(requested) * 100.0 / float64(announced)
+			symbol := "✓"
+			if requested < announced && announced > 4096 {
+				symbol = "⚠"
+			}
+			if status == "ERROR" || status == "TIMEOUT" || status == "DISCONNECT" {
+				symbol = "❌"
+			}
+
+			fmt.Printf("%s %d/%d (%.0f%%) [%s]\n", symbol, requested, announced, percentage, status)
+
+			time.Sleep(1 * time.Second)
+		}
+	}
+
+	// Generate report table
+	fmt.Println("\n" + strings.Repeat("=", 88))
+	fmt.Println("                    SOFT LIMIT TEST REPORT")
+	fmt.Println(strings.Repeat("=", 88))
+	fmt.Printf("%-12s | %-10s | %-10s | %-10s | %-25s\n",
+		"Client", "4096 items", "5000 items", "8192 items", "Status")
+	fmt.Println(strings.Repeat("-", 88))
+
+	passCount := 0
+	for _, clientName := range elNames {
+		if _, exists := results[clientName]; !exists {
+			continue
+		}
+
+		r4096 := results[clientName][4096]
+		r5000 := results[clientName][5000]
+		r8192 := results[clientName][8192]
+
+		// Check for errors/timeouts first
+		status := ""
+		if r4096.status == "TIMEOUT" || r5000.status == "TIMEOUT" || r8192.status == "TIMEOUT" {
+			status = "⏱ TIMEOUT"
+		} else if r4096.status == "ERROR" || r5000.status == "ERROR" || r8192.status == "ERROR" {
+			status = "❌ ERROR"
+		} else if r4096.status == "DISCONNECT" || r5000.status == "DISCONNECT" || r8192.status == "DISCONNECT" {
+			status = "🔌 DISCONNECT"
+		} else if r5000.requested == 4096 && r8192.requested == 4096 {
+			// PASS: Both 5000 and 8192 tests limited to 4096
+			status = "✅ PASS"
+			passCount++
+		} else if r5000.requested == 5000 && r8192.requested == 8192 {
+			// FAIL: Accepts all announcements (no limit)
+			status = "❌ FAIL (No limit)"
+		} else if r5000.requested < 4096 || r8192.requested < 4096 {
+			// PARTIAL: Has some limit but < 4096
+			status = fmt.Sprintf("⚠ PARTIAL (limit=%d)", min(r5000.requested, r8192.requested))
+		} else {
+			status = "⚠ MIXED"
+		}
+
+		fmt.Printf("%-12s | %4d (100%%) | %4d (%3.0f%%) | %4d (%3.0f%%) | %-25s\n",
+			clientName,
+			r4096.requested,
+			r5000.requested, float64(r5000.requested)*100.0/5000.0,
+			r8192.requested, float64(r8192.requested)*100.0/8192.0,
+			status)
+	}
+
+	fmt.Println(strings.Repeat("=", 88))
+	fmt.Printf("\nSummary: %d/%d clients correctly enforce the 4096 soft limit\n",
+		passCount, len(results))
+	fmt.Println("\nStatus Legend:")
+	fmt.Println("  ✅ PASS         - Correctly enforces 4096 soft limit")
+	fmt.Println("  ❌ FAIL         - No limit enforced (accepts all)")
+	fmt.Println("  ⚠ PARTIAL      - Has custom limit < 4096")
+	fmt.Println("  ⚠ MIXED        - Inconsistent behavior")
+	fmt.Println("  ⏱ TIMEOUT      - Request timed out (may need longer timeout)")
+	fmt.Println("  🔌 DISCONNECT  - Connection closed by peer")
+	fmt.Println("  ❌ ERROR       - Test error occurred")
+
+	// Markdown format
+	fmt.Println("\n" + strings.Repeat("-", 80))
+	fmt.Println("Markdown format (copy-paste ready):")
+	fmt.Println(strings.Repeat("-", 80))
+	fmt.Println("\n## NewPooledTransactionHashes Soft Limit Test Results\n")
+	fmt.Println("| Client     | 4096 items | 5000 items | 8192 items | Status               |")
+	fmt.Println("|------------|-----------|-----------|-----------|----------------------|")
+
+	for _, clientName := range elNames {
+		if _, exists := results[clientName]; !exists {
+			continue
+		}
+
+		r4096 := results[clientName][4096]
+		r5000 := results[clientName][5000]
+		r8192 := results[clientName][8192]
+
+		status := ""
+		if r4096.status == "TIMEOUT" || r5000.status == "TIMEOUT" || r8192.status == "TIMEOUT" {
+			status = "⏱ Timeout"
+		} else if r4096.status == "ERROR" || r5000.status == "ERROR" || r8192.status == "ERROR" {
+			status = "❌ Error"
+		} else if r4096.status == "DISCONNECT" || r5000.status == "DISCONNECT" || r8192.status == "DISCONNECT" {
+			status = "🔌 Disconnect"
+		} else if r5000.requested == 4096 && r8192.requested == 4096 {
+			status = "✅ Enforced"
+		} else if r5000.requested == 5000 && r8192.requested == 8192 {
+			status = "❌ Not enforced"
+		} else if r5000.requested < 4096 || r8192.requested < 4096 {
+			status = fmt.Sprintf("⚠ Partial (limit=%d)", min(r5000.requested, r8192.requested))
+		} else {
+			status = "⚠ Mixed"
+		}
+
+		fmt.Printf("| %-10s | %4d (100%%) | %4d (%3.0f%%) | %4d (%3.0f%%) | %-20s |\n",
+			clientName,
+			r4096.requested,
+			r5000.requested, float64(r5000.requested)*100.0/5000.0,
+			r8192.requested, float64(r8192.requested)*100.0/8192.0,
+			status)
+	}
+
+	fmt.Printf("\n**Summary:** %d/%d clients correctly enforce the 4096 soft limit\n",
+		passCount, len(results))
+}
+
+// runQuietTest runs a test and returns the requested count
+func runQuietTest(config *Config, nodeIndex int, hashCount int) (int, string) {
+	// Use reasonable nonce value (same as single test mode)
+	startNonce := uint64(70)
+	return runQuietTestWithNonce(config, nodeIndex, hashCount, startNonce)
+}
+
+// runQuietTestWithNonce runs a test with custom starting nonce
+func runQuietTestWithNonce(config *Config, nodeIndex int, hashCount int, startNonce uint64) (int, string) {
+	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
+	if err != nil {
+		return 0, "ERROR"
+	}
+
+	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	enodeStr := config.P2P.BootstrapNodes[nodeIndex]
+	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
+	if err != nil {
+		return 0, "ERROR"
+	}
+
+	s, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), elNames[nodeIndex])
+	if err != nil {
+		return 0, "ERROR"
+	}
+
+	// Generate transactions
+	var (
+		from    = PredefinedAccounts[0].PrivateKey
+		nonce   = startNonce
+		hashes  = make([]common.Hash, hashCount)
+		txTypes = make([]byte, hashCount)
+		sizes   = make([]uint32, hashCount)
+	)
+
+	prik, err := crypto.HexToECDSA(from)
+	if err != nil {
+		return 0, "ERROR"
+	}
+
+	for i := 0; i < hashCount; i++ {
+		inner := &types.DynamicFeeTx{
+			ChainID:   big.NewInt(3151908),
+			Nonce:     nonce + uint64(i),
+			GasTipCap: big.NewInt(3000000000),
+			GasFeeCap: big.NewInt(30000000000),
+			Gas:       21000,
+		}
+		tx := types.NewTx(inner)
+		signedTx, err := types.SignTx(tx, types.LatestSignerForChainID(big.NewInt(3151908)), prik)
+		if err != nil {
+			return 0, "ERROR"
+		}
+		hashes[i] = signedTx.Hash()
+		txTypes[i] = signedTx.Type()
+		sizes[i] = uint32(signedTx.Size())
+	}
+
+	// Connect and send
+	conn, err := s.Dial()
+	if err != nil {
+		return 0, "ERROR"
+	}
+	defer conn.Close()
+
+	if err = conn.Peer(nil); err != nil {
+		return 0, "ERROR"
+	}
+
+	ann := eth.NewPooledTransactionHashesPacket{
+		Types:  txTypes,
+		Sizes:  sizes,
+		Hashes: hashes,
+	}
+
+	err = conn.Write(1, eth.NewPooledTransactionHashesMsg, ann)
+	if err != nil {
+		return 0, "ERROR"
+	}
+
+	// Dynamic timeout based on transaction count
+	timeout := 30*time.Second + time.Duration(hashCount/1000)*10*time.Second
+	if timeout < 60*time.Second {
+		timeout = 60 * time.Second
+	}
+	err = conn.SetReadDeadline(time.Now().Add(timeout))
+	if err != nil {
+		return 0, "ERROR"
+	}
+
+	// Wait for response
+	for {
+		msg, err := conn.ReadEth()
+		if err != nil {
+			if err == io.EOF {
+				return 0, "DISCONNECT"
+			}
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				return 0, "TIMEOUT"
+			}
+			return 0, "ERROR"
+		}
+
+		switch msg := msg.(type) {
+		case *eth.GetPooledTransactionsPacket:
+			return len(msg.GetPooledTransactionsRequest), "SUCCESS"
+		case *eth.NewPooledTransactionHashesPacket:
+			continue
+		case *eth.TransactionsPacket:
+			continue
+		default:
+			continue
+		}
+	}
+}
+
 func sendTransaction(config *Config) error {
 	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
 	if err != nil {
 		return err
 	}
-	enodeStr := config.P2P.BootstrapNodes[0]
+	enodeStr := config.P2P.BootstrapNodes[1]
 	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
 	s, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), "besu")
 	if err != nil {
@@ -1372,7 +2009,7 @@ func sendTransactionWithAccountsAndNonce(s *ethtest.Suite, fromAccount Account, 
 	// Record sending time
 	sendStart := time.Now()
 	if s.GetElName() == "reth" {
-		// reth must handle recv content
+		// Reth must handle recv content
 		err = s.SendTxs([]*types.Transaction{tx})
 	} else {
 		// Other clients can skip recv content handling
@@ -1516,6 +2153,63 @@ func printSingleReceipt(receipt *types.Receipt, index int) {
 	fmt.Println()
 }
 
+func getPooledTxs(config *Config, nodeIndex int) error {
+	jwtSecret, err := parseJWTSecretFromHexString(config.P2P.JWTSecret)
+	if err != nil {
+		return err
+	}
+	//0:"geth", 1:"nethermind", 2:"reth", 3:"erigon", 4:"besu"
+	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	enodeStr := config.P2P.BootstrapNodes[nodeIndex]
+	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
+	if err != nil {
+
+	}
+	s, err := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), elNames[nodeIndex])
+	if err != nil {
+
+	}
+	txHashes := []common.Hash{}
+
+	// Read hash values from file
+	// file, err := os.Open("/home/kkk/workspaces/D2PFuzz/manual/txhashes.txt")
+	file, err := os.Open("/home/kkk/workspaces/ethereum-package/tx_hashes.txt")
+	// file, err := os.Open("/home/kkk/workspaces/ethereum-package/scripts/mempool_hashes.txt")
+	if err != nil {
+		fmt.Printf("Failed to open txhashes.txt: %v\n", err)
+		return err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// Skip empty lines and lines starting with #
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Convert hex string to common.Hash and add to array
+		txHashes = append(txHashes, common.HexToHash(line))
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("Error reading txhashes.txt: %v\n", err)
+		return err
+	}
+
+	fmt.Printf("Loaded %d transaction hashes from file\n", len(txHashes))
+
+	// Query each transaction hash
+	foundTxs, err := queryTransactionByHash(s, txHashes[:])
+	if err != nil {
+		fmt.Printf("Query failed: %v\n", err)
+	} else {
+		fmt.Printf("Query completed successfully, found %d transactions\n", len(foundTxs))
+	}
+
+	return nil
+}
+
 func getReceipts(s *ethtest.Suite) (list []*eth.ReceiptList68, err error) {
 	conn, err := s.DialAndPeer(nil)
 	if err != nil {
@@ -1577,10 +2271,7 @@ func printHeaders(headers *eth.BlockHeadersPacket) {
 }
 
 func GetBlockHeaders(suite *ethtest.Suite) (*eth.BlockHeadersPacket, error) {
-	// chain, err := ethtest.NewChain("./testdata")
-	// if err != nil {
-	// 	return nil, err
-	// }
+
 	conn, err := suite.DialAndPeer(nil)
 	if err != nil {
 		return nil, err
@@ -1607,18 +2298,36 @@ func GetBlockHeaders(suite *ethtest.Suite) (*eth.BlockHeadersPacket, error) {
 	if got, want := headers.RequestId, req.RequestId; got != want {
 		fmt.Printf("unexpected request id")
 	}
-	// Check for correct headers.
-	// expected, err := suite.GetChain().GetHeaders(req)
-	// if err != nil {
-	// 	fmt.Printf("failed to get headers for given request: %v", err)
-	// }
-	// if !headersMatch(expected, headers.BlockHeadersRequest) {
-	// 	fmt.Printf("header mismatch: \nexpected %v \ngot %v", expected, headers)
-	// }
+
 	return headers, nil
 }
 
 // headersMatch returns whether the received headers match the given request
 func headersMatch(expected []*types.Header, headers []*types.Header) bool {
 	return reflect.DeepEqual(expected, headers)
+}
+
+// PredefinedAccounts are the accounts available when using ethereum-package to create a local test environment
+var PredefinedAccounts = []Account{
+	{Address: "0x8943545177806ED17B9F23F0a21ee5948eCaa776", PrivateKey: "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"},
+	{Address: "0xE25583099BA105D9ec0A67f5Ae86D90e50036425", PrivateKey: "39725efee3fb28614de3bacaffe4cc4bd8c436257e2c8bb887c4b5c4be45e76d"},
+	{Address: "0x614561D2d143621E126e87831AEF287678B442b8", PrivateKey: "53321db7c1e331d93a11a41d16f004d7ff63972ec8ec7c25db329728ceeb1710"},
+	{Address: "0xf93Ee4Cf8c6c40b329b0c0626F28333c132CF241", PrivateKey: "ab63b23eb7941c1251757e24b3d2350d2bc05c3c388d06f8fe6feafefb1e8c70"},
+	{Address: "0x802dCbE1B1A97554B4F50DB5119E37E8e7336417", PrivateKey: "5d2344259f42259f82d2c140aa66102ba89b57b4883ee441a8b312622bd42491"},
+	{Address: "0xAe95d8DA9244C37CaC0a3e16BA966a8e852Bb6D6", PrivateKey: "27515f805127bebad2fb9b183508bdacb8c763da16f54e0678b16e8f28ef3fff"},
+	{Address: "0x2c57d1CFC6d5f8E4182a56b4cf75421472eBAEa4", PrivateKey: "7ff1a4c1d57e5e784d327c4c7651e952350bc271f156afb3d00d20f5ef924856"},
+	{Address: "0x741bFE4802cE1C4b5b00F9Df2F5f179A1C89171A", PrivateKey: "3a91003acaf4c21b3953d94fa4a6db694fa69e5242b2e37be05dd82761058899"},
+	{Address: "0xc3913d4D8bAb4914328651C2EAE817C8b78E1f4c", PrivateKey: "bb1d0f125b4fb2bb173c318cdead45468474ca71474e2247776b2b4c0fa2d3f5"},
+	{Address: "0x65D08a056c17Ae13370565B04cF77D2AfA1cB9FA", PrivateKey: "850643a0224065ecce3882673c21f56bcf6eef86274cc21cadff15930b59fc8c"},
+	{Address: "0x3e95dFbBaF6B348396E6674C7871546dCC568e56", PrivateKey: "94eb3102993b41ec55c241060f47daa0f6372e2e3ad7e91612ae36c364042e44"},
+	{Address: "0x5918b2e647464d4743601a865753e64C8059Dc4F", PrivateKey: "daf15504c22a352648a71ef2926334fe040ac1d5005019e09f6c979808024dc7"},
+	{Address: "0x589A698b7b7dA0Bec545177D3963A2741105C7C9", PrivateKey: "eaba42282ad33c8ef2524f07277c03a776d98ae19f581990ce75becb7cfa1c23"},
+	{Address: "0x4d1CB4eB7969f8806E2CaAc0cbbB71f88C8ec413", PrivateKey: "3fd98b5187bf6526734efaa644ffbb4e3670d66f5d0268ce0323ec09124bff61"},
+	{Address: "0xF5504cE2BcC52614F121aff9b93b2001d92715CA", PrivateKey: "5288e2f440c7f0cb61a9be8afdeb4295f786383f96f5e35eb0c94ef103996b64"},
+	{Address: "0xF61E98E7D47aB884C244E39E031978E33162ff4b", PrivateKey: "f296c7802555da2a5a662be70e078cbd38b44f96f8615ae529da41122ce8db05"},
+	{Address: "0xf1424826861ffbbD25405F5145B5E50d0F1bFc90", PrivateKey: "bf3beef3bd999ba9f2451e06936f0423cd62b815c9233dd3bc90f7e02a1e8673"},
+	{Address: "0xfDCe42116f541fc8f7b0776e2B30832bD5621C85", PrivateKey: "6ecadc396415970e91293726c3f5775225440ea0844ae5616135fd10d66b5954"},
+	{Address: "0xD9211042f35968820A3407ac3d80C725f8F75c14", PrivateKey: "a492823c3e193d6c595f37a18e3c06650cf4c74558cc818b16130b293716106f"},
+	{Address: "0xD8F3183DEF51A987222D845be228e0Bbb932C222", PrivateKey: "c5114526e042343c6d1899cad05e1c00ba588314de9b96929914ee0df18d46b2"},
+	{Address: "0xafF0CA253b97e54440965855cec0A8a2E2399896", PrivateKey: "04b9f63ecf84210c5366c66d68fa1f5da1fa4f634fad6dfc86178e4d79ff9e59"},
 }

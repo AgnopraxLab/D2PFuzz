@@ -88,7 +88,6 @@ func (s *Suite) sendTxs(t *utesting.T, txs []*types.Transaction) error {
 		default:
 			return fmt.Errorf("unexpected eth wire msg: %s", pretty.Sdump(msg))
 		}
-
 		// Check if all txs received.
 		allReceived := func() bool {
 			for _, tx := range txs {
@@ -102,7 +101,6 @@ func (s *Suite) sendTxs(t *utesting.T, txs []*types.Transaction) error {
 			return nil
 		}
 	}
-
 	return errors.New("timed out waiting for txs")
 }
 

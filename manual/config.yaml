@@ -2,15 +2,15 @@ p2p:
   max_peers: 50
   listen_port: 30303
   bootstrap_nodes:
-    - "enode://e0928e46f536218315885e8a47f77d0d2afc11da06779d267f5317f85684c2f3a4b76a7320aa02af8b5745bd23784a0dc68d36714384c21ae0fb4c864817302a@172.16.0.11:30303"  # el-1-geth-lighthouse (geth)
-    - "enode://8f32a884c3fe7e24cd7cb4137f38c7d36f9028e5e3634f72433b3c4e667197fb9a937fd9053b80556c6e5b55e9a7fb95244be8c17a0701e65399ac3cd48b4165@172.16.0.13:30303"  # el-2-nethermind-lighthouse (nethermind)
-    - "enode://2beac2a466e86e5806a612facac98e5971c44db5d931c01bb115a5406cb3f79e1c00c76d3417545af85c42f14723a84524ef0394af66bbf0dabd358c474abae1@172.16.0.14:30303"  # el-3-reth-lighthouse (reth)
-    - "enode://b5f158065f28c932a1eb985f9a658c2710ce55071d8c9078549dd396ce76af30066c3f4bb756eccce56e12848863aca66a2cf64e926a75025cb4c9eac3c6697f@172.16.0.15:30303"  # el-4-erigon-lighthouse (erigon)
-    - "enode://f4f1ec3479c7ef13bafe7194af3d1018491f28b3afa5409e1337411f349554c7bf18c427ce60f65eebc12310bb6eb4ab408db2b8bcc2f0ad27be278e62717b7d@172.16.0.12:30303"  # el-5-besu-lighthouse (besu)
+    - "enode://e7cd693d4b2b5a0c17f8f948cc1b468bf84c0c3472ee10195ab6508cdec5a561fbe0101f3ad3e1c0a273546a72e44d6e46f1d81c4f63c0e3807e6c9fd42a101a@172.16.0.11:30303"  # el-1-geth-lighthouse (geth)
+    - "enode://3207e635a799725bd0a19752902e0406fbbe9f71d370f13b01634f908f7f16544c5abbd4f85f326da34d61e02fc55eadf806145859a00eac7f751f066c1cd08b@172.16.0.13:30303"  # el-2-nethermind-lighthouse (nethermind)
+    - "enode://7d3b1e5486597bf87fc6bf268951c3fcb269b2841ed5b76fde62c3ec488000b0e757b5cb0216188f5c8731e95fc467ead367591bc9ff8997994dd2736ebbf4ee@172.16.0.14:30303"  # el-3-reth-lighthouse (reth)
+    - "enode://9631e2be4c95dd9619d593ee103663d1bd36c74adb1e3d2c53f1ea2c6830cacc0fd48206d93201e9f1a564825214b4ca5d4bab9e2c1a43c1acf3ac46dad39c3a@172.16.0.15:30303"  # el-4-erigon-lighthouse (erigon)
+    - "enode://2d93bfc7455bd5554052ebeaf458cb77369e69c0255305010a6ddb9f09020c022999986f8ac510ba3a9bd59b95bc44c31af54397ee6eb9aaf53a4283feb5bf55@172.16.0.12:30303"  # el-5-besu-lighthouse (besu)
   jwt_secret: "0xdc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
 
 # Test mode: "multi" = multi-node testing, "single" = single node testing,
 # "interactive" = interactive selection,
 # "oneTransaction" = single transaction testing,
 # "largeTransactions" = large batch transaction testing
-testMode: manual
+testMode: largeTransactions

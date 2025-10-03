@@ -9,11 +9,11 @@ export LC_ALL=en_US.UTF-8
 
 # RPC endpoint list (extracted from output.txt)
 RPC_ENDPOINTS=(
-    "http://127.0.0.1:32769"  # el-1-geth-lighthouse
-    "http://127.0.0.1:32788"  # el-2-nethermind-lighthouse
-    "http://127.0.0.1:32783"  # el-3-reth-lighthouse
-    "http://127.0.0.1:32778"  # el-4-besu-lighthouse
-    "http://127.0.0.1:32774"  # el-5-erigon-lighthouse
+    "http://172.16.4.11:8545"  # el-1-geth-lighthouse
+    "http://172.16.4.13:8545"  # el-2-nethermind-lighthouse
+    "http://172.16.4.14:8545"  # el-3-reth-lighthouse
+    "http://172.16.4.15:8545"  # el-4-erigon-lighthouse
+    "http://172.16.4.12:8545"  # el-5-besu-lighthouse
 )
 
 # Color definitions
@@ -41,15 +41,15 @@ test_rpc_connection() {
 
 # Find available RPC endpoint
 find_available_rpc() {
-    echo -e "${CYAN}🔍 Testing RPC connections...${NC}"
+    echo -e "${CYAN}🔍 Testing RPC connections...${NC}" >&2
     
     for endpoint in "${RPC_ENDPOINTS[@]}"; do
         if test_rpc_connection "$endpoint"; then
-            echo -e "${GREEN}✅ Using RPC endpoint: $endpoint${NC}"
+            echo -e "${GREEN}✅ Using RPC endpoint: $endpoint${NC}" >&2
             echo "$endpoint"
             return 0
         else
-            echo -e "${RED}❌ $endpoint connection failed${NC}"
+            echo -e "${RED}❌ $endpoint connection failed${NC}" >&2
         fi
     done
     
@@ -128,9 +128,9 @@ query_transaction_details() {
     local tx_hash=$1
     local endpoint=$2
     
-    echo -e "\n${'='*80}"
+    echo -e "\n$(printf '=%.0s' {1..80})"
     echo -e "${BLUE}Transaction Details Query: $tx_hash${NC}"
-    echo -e "${'='*80}"
+    echo -e "$(printf '=%.0s' {1..80})"
     
     # Get transaction information
     echo -e "\n${CYAN}🔍 Querying transaction information...${NC}"
@@ -339,7 +339,7 @@ query_transaction_details() {
         fi
     fi
     
-    echo -e "\n${'='*80}"
+    echo -e "\n$(printf '=%.0s' {1..80})"
     echo -e "${GREEN}✅ Query completed${NC}"
 }
 
