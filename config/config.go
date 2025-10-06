@@ -18,6 +18,8 @@ type Config struct {
 	Monitoring MonitoringConfig `yaml:"monitoring"`
 	Output     OutputConfig     `yaml:"output"`
 	Log        LogConfig        `yaml:"log"`
+	Paths      PathsConfig      `yaml:"paths"`
+	Test       TestConfig       `yaml:"test"`
 	Accounts   []Account        `yaml:"accounts"`
 }
 
@@ -38,6 +40,8 @@ type P2PConfig struct {
 	MaxPeers       int      `yaml:"max_peers"`
 	ListenPort     int      `yaml:"listen_port"`
 	BootstrapNodes []string `yaml:"bootstrap_nodes"`
+	JWTSecret      string   `yaml:"jwt_secret"`
+	NodeNames      []string `yaml:"node_names"`
 }
 
 // FuzzingConfig holds fuzzing-related configuration
@@ -54,19 +58,19 @@ type TxFuzzingConfig struct {
 	Enabled         bool   `yaml:"enabled"`
 	RPCEndpoint     string `yaml:"rpc_endpoint"`
 	ChainID         int64  `yaml:"chain_id"`
-	MaxGasPrice     int64  `yaml:"max_gas_price"`     // in wei
+	MaxGasPrice     int64  `yaml:"max_gas_price"` // in wei
 	MaxGasLimit     uint64 `yaml:"max_gas_limit"`
 	TxPerSecond     int    `yaml:"tx_per_second"`
 	FuzzDurationSec int    `yaml:"fuzz_duration_sec"`
 	Seed            int64  `yaml:"seed"`
-	UseAccounts     bool   `yaml:"use_accounts"`       // whether to use predefined accounts
+	UseAccounts     bool   `yaml:"use_accounts"` // whether to use predefined accounts
 }
 
 // TxFuzzerConfig holds transaction fuzzer configuration
 type TxFuzzerConfig struct {
-	TxPerSecond      int      `yaml:"tx_per_second"`
-	FuzzDurationSec  int      `yaml:"fuzz_duration_sec"`
-	RPCEndpoints     []string `yaml:"rpc_endpoints"`
+	TxPerSecond     int      `yaml:"tx_per_second"`
+	FuzzDurationSec int      `yaml:"fuzz_duration_sec"`
+	RPCEndpoints    []string `yaml:"rpc_endpoints"`
 	// Error handling and retry configuration
 	MaxRetries       int           `yaml:"max_retries" json:"maxRetries"`             // Maximum retry attempts
 	RetryDelay       time.Duration `yaml:"retry_delay" json:"retryDelay"`             // Delay between retries
@@ -95,6 +99,25 @@ type LogConfig struct {
 	Template       string `yaml:"template"`
 	AutoGenerate   bool   `yaml:"auto_generate"`
 	IncludeDetails bool   `yaml:"include_details"`
+}
+
+// PathsConfig holds file paths configuration
+type PathsConfig struct {
+	TxHashes    string `yaml:"tx_hashes"`
+	TxHashesExt string `yaml:"tx_hashes_ext"`
+}
+
+// TestConfig holds test-related configuration
+type TestConfig struct {
+	Mode                  string   `yaml:"mode"`
+	SingleNodeIndex       int      `yaml:"single_node_index"`
+	SingleNodeNonce       uint64   `yaml:"single_node_nonce"`
+	SingleNodeBatchSize   int      `yaml:"single_node_batch_size"`
+	MultiNodeBatchSize    int      `yaml:"multi_node_batch_size"`
+	MultiNodeNonces       []uint64 `yaml:"multi_node_nonces"`
+	SoftLimitScenarios    []int    `yaml:"soft_limit_scenarios"`
+	DefaultTimeoutSeconds int      `yaml:"default_timeout_seconds"`
+	GetPooledTxsNodeIndex int      `yaml:"get_pooled_txs_node_index"`
 }
 
 // LoadConfig loads configuration from the specified YAML file
@@ -138,11 +161,27 @@ func (c *Config) IsFuzzingEnabled() bool {
 	return c.Fuzzing.Enabled
 }
 
-
-
 // IsMonitoringEnabled returns whether monitoring is enabled
 func (c *Config) IsMonitoringEnabled() bool {
 	return c.Monitoring.Enabled
+}
+
+// GetNodeName returns the node name by index
+func (c *Config) GetNodeName(index int) string {
+	if index < 0 || index >= len(c.P2P.NodeNames) {
+		return ""
+	}
+	return c.P2P.NodeNames[index]
+}
+
+// GetNodeCount returns the number of configured nodes
+func (c *Config) GetNodeCount() int {
+	return len(c.P2P.BootstrapNodes)
+}
+
+// GetTestMode returns the test mode
+func (c *Config) GetTestMode() string {
+	return c.Test.Mode
 }
 
 // IsTxFuzzingEnabled returns true if transaction fuzzing is enabled
