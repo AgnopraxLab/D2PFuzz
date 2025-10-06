@@ -1,0 +1,87 @@
+package transaction
+
+import (
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+
+	"D2PFuzz/config"
+	"D2PFuzz/ethclient"
+)
+
+// QuickSend is a convenience function for sending a simple transaction
+// This replaces the various sendTransactionWithAccountsAndNonce functions
+func QuickSend(client *ethclient.Client, from, to config.Account, nonce uint64, chainID *big.Int) (common.Hash, error) {
+	tx, err := NewBuilder(chainID).
+		WithFrom(from).
+		WithTo(to).
+		WithNonce(nonce).
+		WithType(TxTypeLegacy).
+		WithGas(33554432).
+		Build()
+
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	return Send(client, tx, DefaultSendOptions())
+}
+
+// QuickSendDynamic sends a dynamic fee transaction
+func QuickSendDynamic(client *ethclient.Client, from, to config.Account, nonce uint64, chainID *big.Int) (common.Hash, error) {
+	tx, err := NewBuilder(chainID).
+		WithFrom(from).
+		WithTo(to).
+		WithNonce(nonce).
+		WithType(TxTypeDynamic).
+		Build()
+
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	return Send(client, tx, DefaultSendOptions())
+}
+
+// BuildSimpleTx builds a simple transaction with minimal parameters
+func BuildSimpleTx(from, to config.Account, nonce uint64, chainID *big.Int, txType TxType) (*types.Transaction, error) {
+	return NewBuilder(chainID).
+		WithFrom(from).
+		WithTo(to).
+		WithNonce(nonce).
+		WithType(txType).
+		Build()
+}
+
+// BuildBatchTxs builds a batch of transactions with sequential nonces
+func BuildBatchTxs(from, to config.Account, startNonce uint64, count int, chainID *big.Int, txType TxType) ([]*types.Transaction, error) {
+	txs := make([]*types.Transaction, count)
+	
+	for i := 0; i < count; i++ {
+		tx, err := NewBuilder(chainID).
+			WithFrom(from).
+			WithTo(to).
+			WithNonce(startNonce + uint64(i)).
+			WithType(txType).
+			Build()
+		
+		if err != nil {
+			return nil, err
+		}
+		
+		txs[i] = tx
+	}
+	
+	return txs, nil
+}
+
+// ExtractHashes extracts hashes from a slice of transactions
+func ExtractHashes(txs []*types.Transaction) []common.Hash {
+	hashes := make([]common.Hash, len(txs))
+	for i, tx := range txs {
+		hashes[i] = tx.Hash()
+	}
+	return hashes
+}
+

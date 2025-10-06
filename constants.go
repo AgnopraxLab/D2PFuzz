@@ -1,4 +1,4 @@
-package d2pfuzz
+package main
 
 import (
 	"math/big"
