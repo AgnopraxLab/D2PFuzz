@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Query all transaction details for specified account address
-ACCOUNT="0x614561D2d143621E126e87831AEF287678B442b8"
+ACCOUNT="0x4d1CB4eB7969f8806E2CaAc0cbbB71f88C8ec413"
 RPC_URL="http://172.16.0.13:8545"
 
 echo "=== Complete Analysis for Account $ACCOUNT ==="

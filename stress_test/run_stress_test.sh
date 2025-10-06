@@ -15,7 +15,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Project root directory
-PROJECT_ROOT="/home/kkk/workspaces/D2PFuzz"
+PROJECT_ROOT="../"
 cd "$PROJECT_ROOT"
 
 # Ensure executable file exists

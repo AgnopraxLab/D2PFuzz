@@ -2,11 +2,11 @@ p2p:
   max_peers: 50
   listen_port: 30303
   bootstrap_nodes:
-    - "enode://e7cd693d4b2b5a0c17f8f948cc1b468bf84c0c3472ee10195ab6508cdec5a561fbe0101f3ad3e1c0a273546a72e44d6e46f1d81c4f63c0e3807e6c9fd42a101a@172.16.0.11:30303"  # el-1-geth-lighthouse (geth)
-    - "enode://3207e635a799725bd0a19752902e0406fbbe9f71d370f13b01634f908f7f16544c5abbd4f85f326da34d61e02fc55eadf806145859a00eac7f751f066c1cd08b@172.16.0.13:30303"  # el-2-nethermind-lighthouse (nethermind)
-    - "enode://7d3b1e5486597bf87fc6bf268951c3fcb269b2841ed5b76fde62c3ec488000b0e757b5cb0216188f5c8731e95fc467ead367591bc9ff8997994dd2736ebbf4ee@172.16.0.14:30303"  # el-3-reth-lighthouse (reth)
-    - "enode://9631e2be4c95dd9619d593ee103663d1bd36c74adb1e3d2c53f1ea2c6830cacc0fd48206d93201e9f1a564825214b4ca5d4bab9e2c1a43c1acf3ac46dad39c3a@172.16.0.15:30303"  # el-4-erigon-lighthouse (erigon)
-    - "enode://2d93bfc7455bd5554052ebeaf458cb77369e69c0255305010a6ddb9f09020c022999986f8ac510ba3a9bd59b95bc44c31af54397ee6eb9aaf53a4283feb5bf55@172.16.0.12:30303"  # el-5-besu-lighthouse (besu)
+    - "enode://eef482b983920da6d08685a237500f87bbf8f0df277f221104d1821dac0362849dc7de0e59ac748147b49f5d2495bad5ad30e1a7519e98d8650b1064f54519a8@172.16.0.11:30303"  # el-1-geth-lighthouse (geth)
+    - "enode://03a51a55626a4cd5f3633b04a5b4090eeb52bf2a7f95c203bcfc8ffbce2b2e9a8cb890d2b2d36ddc9de3be7d97da14a3994fd3669e45daeb3a047e776a838f67@172.16.0.13:30303"  # el-2-netherhmind-teku (nethermind)
+    - "enode://b301441fdcaa669031ecb5481ea51b6417ef8c9e5cfc16773bfcd37ae3044c4d75cfb06208daa24d32faf873f8457a145a887a3386552dbf8c5770e18beb5e5f@172.16.0.14:30303"  # el-3-besu-prysm (besu)
+    - "enode://4acc4207d9fe767e56c9af28f70567e30ec8fd4e8c428bfa2029dc14a2819419ee0a06419e34af3cad6b5a4bf30d94ee1f94090c2654753fa9b1e369ef82a202@172.16.0.15:30303"  # el-4-besu-lodestar (besu)
+    - "enode://bbdff23b06a172836e073378f558d00c17df1f1f647ee4576ae0c85ae8b9742a6feafa207ec67484d098f902553c956a9fa4e664661f1de92f53dc74363c4e10@172.16.0.12:30303"  # el-5-geth-nimbus (geth)
   jwt_secret: "0xdc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
 
 # Test mode: "multi" = multi-node testing, "single" = single node testing,

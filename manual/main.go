@@ -97,24 +97,31 @@ func main() {
 	// "test-soft-limit" = test NewPooledTransactionHashes soft limit
 	// "test-soft-limit-single" = test NewPooledTransactionHashes soft limit for single client
 	// "test-soft-limit-report" = generate concise test report for all clients
-	testMode := "test-soft-limit-report"
 
-	getPooledTxsNodeIndex := 1 //0:"geth", 1:"nethermind", 2:"reth", 3:"erigon", 4:"besu"
+	testMode := "single"
+	// Node index to test
+	//  0 # el-1-geth-lighthouse (geth)
+	//  1 # el-2-netherhmind-teku (nethermind)
+	//  2 # el-3-besu-prysm (besu)
+	//  3 # el-4-besu-lodestar (besu)
+	//  4 # el-5-geth-nimbus (geth)
+
+	getPooledTxsNodeIndex := 1 // Node index to test
 
 	// Multi-node testing configuration (only effective when testMode = "multi")
 	multiNodeNonceInitialValues := []uint64{
-		0, // Node 0 (geth) initial nonce
-		0, // Node 1 (nethermind) initial nonce
-		0, // Node 2 (reth) initial nonce
-		0, // Node 3 (erigon) initial nonce
-		0, // Node 4 (besu) initial nonce
+		0, // Node 0
+		0, // Node 1
+		0, // Node 2
+		0, // Node 3
+		0, // Node 4
 	}
 	multiNodeBatchSize := 20 // Number of transactions to send per node
 
 	// Single node testing configuration (only effective when testMode = "single")
-	singleNodeIndex := 1          // Node index to test (0=geth, 1=nethermind, 2=reth, 3=erigon, 4=besu)
-	singleNodeNonce := uint64(53) // Starting nonce value
-	singleNodeBatchSize := 4      // Number of transactions to send
+	singleNodeIndex := 4         // Node index to test
+	singleNodeNonce := uint64(1) // Starting nonce value
+	singleNodeBatchSize := 1     // Number of transactions to send
 
 	// ========================================
 
@@ -124,7 +131,7 @@ func main() {
 		return
 	}
 
-	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	elNames := []string{"geth-lighthouse", "netherhmind-teku", "besu-prysm", "besu-lodestar", "geth-nimbus"}
 
 	// Execute corresponding tests based on configuration variables
 	switch testMode {
@@ -157,7 +164,7 @@ func main() {
 		hashCount := 4096          // Test 4096 hashes (at soft limit)
 		startNonce := uint64(9999) // Start from real nonce value
 
-		elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+		elNames := []string{"geth-lighthouse", "netherhmind-teku", "besu-prysm", "besu-lodestar", "geth-nimbus"}
 		fmt.Printf("\n========================================\n")
 		fmt.Printf("Testing: %s\n", strings.ToUpper(elNames[nodeIndex]))
 		fmt.Printf("Scenario: %d items\n", hashCount)
@@ -639,7 +646,7 @@ func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonc
 	fmt.Printf("   To: %s\n", nodeAccount.ToAccount.Address)
 
 	// Initialize transaction hash record file - single node testing directly uses txhashes.txt
-	hashFilePath := "/home/kkk/workspaces/D2PFuzz/manual/txhashes.txt"
+	hashFilePath := "./txhashes.txt"
 	// Clear file content and add node name comment
 	nodeHeader := fmt.Sprintf("# %s\n", elNames[elIndex])
 	if err := os.WriteFile(hashFilePath, []byte(nodeHeader), 0644); err != nil {
@@ -710,7 +717,7 @@ func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues 
 	failureCount := 0
 
 	// Initialize transaction hash record file
-	hashFilePath := "/home/kkk/workspaces/D2PFuzz/manual/txhashes.txt"
+	hashFilePath := "./txhashes.txt"
 	// Clear file content
 	if err := os.WriteFile(hashFilePath, []byte(""), 0644); err != nil {
 		fmt.Printf("❌ Failed to initialize hash file: %v\n", err)
@@ -915,7 +922,7 @@ func sendLargeTransactions(config *Config) (eth.PooledTransactionsResponse, []co
 	}
 
 	nodeIndex := 0 //0:"geth", 1:"nethermind", 2:"reth", 3:"erigon", 4:"besu"
-	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	elNames := []string{"geth-lighthouse", "netherhmind-teku", "besu-prysm", "besu-lodestar", "geth-nimbus"}
 	enodeStr := config.P2P.BootstrapNodes[nodeIndex]
 	node, _ := enode.Parse(enode.ValidSchemes, enodeStr)
 	s, _ := ethtest.NewSuite(node, node.IP().String()+":8551", common.Bytes2Hex(jwtSecret[:]), elNames[nodeIndex])
@@ -1126,7 +1133,7 @@ func TestNewPooledTransactionHashesSoftLimitWithNonceDetailed(config *Config, no
 		return 0, "ERROR", fmt.Errorf("failed to parse JWT secret: %v", err)
 	}
 
-	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	elNames := []string{"geth-lighthouse", "netherhmind-teku", "besu-prysm", "besu-lodestar", "geth-nimbus"}
 	enodeStr := config.P2P.BootstrapNodes[nodeIndex]
 	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
 	if err != nil {
@@ -1253,7 +1260,7 @@ func TestNewPooledTransactionHashesSoftLimitWithNonceOld(config *Config, nodeInd
 		return fmt.Errorf("failed to parse JWT secret: %v", err)
 	}
 
-	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	elNames := []string{"geth-lighthouse", "netherhmind-teku", "besu-prysm", "besu-lodestar", "geth-nimbus"}
 	enodeStr := config.P2P.BootstrapNodes[nodeIndex]
 	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
 	if err != nil {
@@ -1472,7 +1479,7 @@ func TestAllClientsSoftLimit(config *Config) {
 		{"Extreme (10000 items)", 10000},
 	}
 
-	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	elNames := []string{"geth-lighthouse", "netherhmind-teku", "besu-prysm", "besu-lodestar", "geth-nimbus"}
 
 	for nodeIndex, elName := range elNames {
 		if nodeIndex >= len(config.P2P.BootstrapNodes) {
@@ -1509,7 +1516,7 @@ func min(a, b int) int {
 func TestSoftLimitForReport(config *Config) {
 	// Test scenarios focusing on boundary values
 	testCases := []int{4096, 5000, 8192}
-	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	elNames := []string{"geth-lighthouse", "netherhmind-teku", "besu-prysm", "besu-lodestar", "geth-nimbus"}
 
 	// Store results: clientName -> [announced]requested
 	type TestResult struct {
@@ -1699,7 +1706,7 @@ func runQuietTestWithNonce(config *Config, nodeIndex int, hashCount int, startNo
 		return 0, "ERROR"
 	}
 
-	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	elNames := []string{"geth-lighthouse", "netherhmind-teku", "besu-prysm", "besu-lodestar", "geth-nimbus"}
 	enodeStr := config.P2P.BootstrapNodes[nodeIndex]
 	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
 	if err != nil {
@@ -1976,29 +1983,37 @@ func sendTransactionWithAccounts(s *ethtest.Suite, fromAccount Account, toAccoun
 // sendTransactionWithAccountsAndNonce sends transaction using specified account and nonce, returns transaction hash
 func sendTransactionWithAccountsAndNonce(s *ethtest.Suite, fromAccount Account, toAccount Account, nonce uint64) (common.Hash, error) {
 	var to common.Address = common.HexToAddress(toAccount.Address)
-	txdata := &types.DynamicFeeTx{
-		ChainID:   big.NewInt(3151908),
-		Nonce:     nonce,
-		GasTipCap: big.NewInt(1000000000),
-		GasFeeCap: big.NewInt(20000000000),
-		Gas:       21000,
-		To:        &to,
-		Value:     big.NewInt(1),
-		// Value: func() *big.Int {
-		// 	val, ok := new(big.Int).SetString("999999999998000000000000000", 10)
-		// 	if !ok {
-		// 		panic("failed to parse big integer string")
-		// 	}
-		// 	return val
-		// }(),
+	txdata := &types.LegacyTx{
+		Nonce:    nonce,
+		GasPrice: big.NewInt(20000000000),
+		Gas:      33554432,
+		To:       &to,
+		Value:    big.NewInt(1),
 	}
+	// txdata := &types.DynamicFeeTx{
+	// 	ChainID:   big.NewInt(3151908),
+	// 	Nonce:     nonce,
+	// 	GasTipCap: big.NewInt(1000000000),
+	// 	GasFeeCap: big.NewInt(20000000000),
+	// 	Gas:       21000,
+	// 	To:        &to,
+	// 	Value:     big.NewInt(1),
+	// Value: func() *big.Int {
+	// 	val, ok := new(big.Int).SetString("999999999998000000000000000", 10)
+	// 	if !ok {
+	// 		panic("failed to parse big integer string")
+	// 	}
+	// 	return val
+	// }(),
+
 	innertx := types.NewTx(txdata)
 	prik, err := crypto.HexToECDSA(fromAccount.PrivateKey)
 	if err != nil {
 		fmt.Printf("failed to sign tx: %v", err)
 		return common.Hash{}, err
 	}
-	tx, err := types.SignTx(innertx, types.NewLondonSigner(big.NewInt(3151908)), prik)
+	// tx, err := types.SignTx(innertx, types.NewLondonSigner(big.NewInt(3151908)), prik)
+	tx, err := types.SignTx(innertx, types.NewEIP155Signer(big.NewInt(3151908)), prik)
 	if err != nil {
 		fmt.Printf("failed to sign tx: %v", err)
 		return common.Hash{}, err
@@ -2159,7 +2174,7 @@ func getPooledTxs(config *Config, nodeIndex int) error {
 		return err
 	}
 	//0:"geth", 1:"nethermind", 2:"reth", 3:"erigon", 4:"besu"
-	elNames := []string{"geth", "nethermind", "reth", "erigon", "besu"}
+	elNames := []string{"geth-lighthouse", "netherhmind-teku", "besu-prysm", "besu-lodestar", "geth-nimbus"}
 	enodeStr := config.P2P.BootstrapNodes[nodeIndex]
 	node, err := enode.Parse(enode.ValidSchemes, enodeStr)
 	if err != nil {
