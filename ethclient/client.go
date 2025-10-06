@@ -108,18 +108,9 @@ func (c *Client) Dial() (*ethtest.Conn, error) {
 }
 
 // DialAndPeer establishes a connection and performs peering
-func (c *Client) DialAndPeer(caps []ethtest.Capability) (*ethtest.Conn, error) {
-	conn, err := c.suite.Dial()
-	if err != nil {
-		return nil, fmt.Errorf("failed to dial %s: %w", c.nodeName, err)
-	}
-
-	if err := conn.Peer(caps); err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("failed to peer with %s: %w", c.nodeName, err)
-	}
-
-	return conn, nil
+// Pass nil for default peering
+func (c *Client) DialAndPeer() (*ethtest.Conn, error) {
+	return c.suite.DialAndPeer(nil)
 }
 
 // String returns a string representation of the client

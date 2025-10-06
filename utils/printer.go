@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 )
@@ -151,7 +152,7 @@ func PrintSingleReceipt(receipt *types.Receipt, index int) {
 		fmt.Printf("    Effective Gas Price: %s Wei\n", receipt.EffectiveGasPrice.String())
 	}
 
-	if receipt.ContractAddress != (types.Address{}) {
+	if receipt.ContractAddress != (common.Address{}) {
 		fmt.Printf("    Contract Address: %s\n", receipt.ContractAddress.Hex())
 	} else {
 		fmt.Printf("    Contract Address: None (not a contract creation transaction)\n")
