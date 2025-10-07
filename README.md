@@ -168,8 +168,6 @@ cd cmd/manual
 # Use custom config file
 ```
 
-For more detailed documentation, see `cmd/manual/README.md`.
-
 ### stress test
 ```bash
 cd stress_test
