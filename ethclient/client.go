@@ -149,3 +149,12 @@ func GeneratePrivateKey() (*ecdsa.PrivateKey, error) {
 func PrivateKeyFromHex(hexKey string) (*ecdsa.PrivateKey, error) {
 	return crypto.HexToECDSA(hexKey)
 }
+
+// ClientFromSuite creates a Client from an existing Suite (for legacy code compatibility)
+func ClientFromSuite(suite *ethtest.Suite, cfg *config.Config, nodeIndex int) *Client {
+	return &Client{
+		suite:    suite,
+		nodeName: cfg.GetNodeName(nodeIndex),
+		config:   cfg,
+	}
+}

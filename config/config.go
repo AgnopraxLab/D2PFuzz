@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math/big"
 	"os"
 	"time"
 
@@ -21,6 +22,11 @@ type Config struct {
 	Paths      PathsConfig      `yaml:"paths"`
 	Test       TestConfig       `yaml:"test"`
 	Accounts   []Account        `yaml:"accounts"`
+
+	// Transaction defaults (computed from constants or config)
+	ChainID          *big.Int
+	DefaultGasTipCap *big.Int
+	DefaultGasFeeCap *big.Int
 }
 
 type Account struct {
@@ -133,6 +139,11 @@ func LoadConfig(configPath string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
+
+	// Initialize transaction defaults
+	config.ChainID = big.NewInt(3151908)
+	config.DefaultGasTipCap = big.NewInt(3000000000)  // 3 Gwei
+	config.DefaultGasFeeCap = big.NewInt(30000000000) // 30 Gwei
 
 	return &config, nil
 }
