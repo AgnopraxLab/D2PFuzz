@@ -14,7 +14,7 @@ const version = "2.0.0-refactored"
 
 func main() {
 	// Command line flags
-	configPath := flag.String("config", "config.yaml", "Path to configuration file")
+	configPath := flag.String("config", "./config.yaml", "Path to configuration file (default: ./config.yaml in manual directory)")
 	testMode := flag.String("mode", "", "Test mode (overrides config file)")
 	listModes := flag.Bool("list", false, "List all available test modes")
 	showVersion := flag.Bool("version", false, "Show version information")
@@ -71,4 +71,3 @@ func main() {
 
 	fmt.Println("\n✅ Test completed successfully!")
 }
-
