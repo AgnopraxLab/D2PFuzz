@@ -7,20 +7,28 @@ D2PFuzz is a fuzzer tool for analyze the Ethernet DevP2P protocol. It is able to
 ```
 D2PFuzz/
 ├── cmd/                # Command-line tools directory
-├── config/             # Configuration related modules
+│   ├── livefuzzer/    # Transaction fuzzer tool
+│   └── manual/        # Manual testing tool (refactored v2.0)
+├── config/             # Configuration modules
 ├── devp2p/             # P2P network protocol modules
 ├── fuzzer/             # Fuzzing core modules
+├── account/            # Account management (v2.0)
+├── ethclient/          # Unified client management (v2.0)
+├── transaction/        # Transaction building (v2.0)
+├── testing/            # Test runner framework (v2.0)
+├── mutation/           # Mutation strategies
+├── utils/              # Utility functions
 ├── logs/               # Log files directory
-├── manual/             # Manual test
-├── mutation/           # Mutation Strategy
 ├── output/             # Reports storage directory
-├── scripts/            # Scripts directory
-├── tress_test/         # Stress test directory
-├── templates/          # Template config files directory
-├── utils/              # Utility functions modules
-├── config.yaml         # configuration file
+├── scripts/            # Helper scripts
+├── stress_test/        # Stress testing directory
+├── templates/          # Template config files
+├── config.yaml         # Main configuration file
+├── constants.go        # Global constants (v2.0)
 └── main.go             # Program entry point
 ```
+
+**New in v2.0:** Modular architecture with dedicated packages for better code organization and maintainability.
 ## Quick Start
 
 ```bash
@@ -49,12 +57,146 @@ You can find the template configuration file in the `template` directory
 ## run the D2PFuzz
 The following are the three main functions of this project
 
-### manual test
+### Manual Test
+
+The manual testing tool has been refactored with a modular architecture (v2.0.0). It provides comprehensive P2P protocol testing capabilities with clean, maintainable code.
+
+#### Features
+- ✅ Single node testing - Test specific nodes independently
+- ✅ Multi-node testing - Test all configured nodes simultaneously
+- ✅ Soft limit testing - Validate NewPooledTransactionHashes soft limit implementation
+- ✅ GetPooledTransactions testing - Test transaction pool queries
+- ✅ Interactive mode - Runtime test selection
+- ✅ Configuration-driven - No hardcoded values
+- ✅ Modular architecture - Easy to extend and maintain
+
+#### Quick Start
+
+**1. Build the tool:**
 ```bash
-cd manual
-go run main.go
+cd cmd/manual
+go build -o manual
 ```
-This will read the `config.yaml` file in the `manual` directory and send the sub-protocol of the eth protocol through a predefined scheme.
+
+**2. Configure (edit `cmd/manual/config.yaml`):**
+```yaml
+test:
+  mode: "single"              # Test mode
+  single_node_index: 4        # Which node to test (0-4)
+  single_node_batch_size: 1   # Number of transactions
+```
+
+**3. Run tests:**
+```bash
+# Use default config
+./manual
+
+# Specify custom config
+./manual -config /path/to/config.yaml
+
+# Override test mode from command line
+./manual -mode multi
+
+# List all available test modes
+./manual --list
+
+# Show version
+./manual --version
+```
+
+#### Available Test Modes
+
+| Mode | Description |
+|------|-------------|
+| `single` | Test a single specific node |
+| `multi` | Test all configured nodes |
+| `test-soft-limit` | Test soft limit for all clients |
+| `test-soft-limit-single` | Test soft limit for one client |
+| `test-soft-limit-report` | Generate soft limit test report |
+| `GetPooledTxs` | Test GetPooledTransactions protocol |
+| `oneTransaction` | Send a single transaction |
+| `largeTransactions` | Send large batch of transactions |
+| `interactive` | Interactive test selection |
+
+#### Configuration
+
+The manual tool uses its own `config.yaml` in `cmd/manual/` directory, independent from the root project configuration:
+
+```yaml
+# P2P Configuration
+p2p:
+  jwt_secret: "..."
+  node_names:
+    - "geth-lighthouse"
+    - "netherhmind-teku"
+    - "besu-prysm"
+    - "besu-lodestar"
+    - "geth-nimbus"
+  bootstrap_nodes: [...]
+
+# Test Configuration
+test:
+  mode: "single"
+  single_node_index: 4
+  single_node_nonce: 1
+  single_node_batch_size: 1
+  multi_node_batch_size: 20
+  multi_node_nonces: [0, 0, 0, 0, 0]
+  soft_limit_scenarios: [4096, 5000, 8192]
+```
+
+#### Example Usage
+
+**Single Node Test:**
+```bash
+cd cmd/manual
+./manual -mode single
+# Tests node 4 (configured in config.yaml) with 1 transaction
+```
+
+**Multi-Node Test:**
+```bash
+./manual -mode multi
+# Tests all 5 configured nodes with 20 transactions each
+```
+
+**Soft Limit Testing:**
+```bash
+./manual -mode test-soft-limit-report
+# Generates comprehensive soft limit test report for all clients
+```
+
+**Custom Configuration:**
+```bash
+./manual -config my-test-config.yaml -mode single
+# Use custom config file
+```
+
+#### Architecture
+
+The manual tool has been refactored from a monolithic 2348-line file to a clean modular architecture:
+
+```
+D2PFuzz/
+├── cmd/manual/           # Standalone testing tool
+│   ├── main.go          # Entry point (72 lines)
+│   ├── config.yaml      # Independent config
+│   └── README.md        # Detailed documentation
+├── ethclient/           # Unified client management
+├── account/             # Account management
+├── transaction/         # Transaction building
+├── testing/             # Test runners
+└── utils/               # Utilities
+```
+
+**Key improvements:**
+- 97% code reduction in main entry point (2348 → 72 lines)
+- Eliminated code duplication (dial repetition, hardcoded values)
+- Config-driven architecture
+- Easy to extend with new test modes
+- Clear separation of concerns
+
+For more details, see `cmd/manual/README.md`.
 
 ### stress test
 ```bash
@@ -319,6 +461,30 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Version
 
-Current version: v0.3
+Current version: **v2.0** (Manual Testing Tool Refactored)
 
-Tip: For fully tested versions of the past, see branches archive-v0.1 and v0.2
+### What's New in v2.0
+
+**Manual Testing Tool - Complete Refactoring:**
+- ✅ 97% code reduction in main entry (2348 → 72 lines)
+- ✅ Modular architecture with 6 new packages
+- ✅ Eliminated dial repetition and hardcoded values
+- ✅ Configuration-driven design
+- ✅ Independent config for manual tool
+- ✅ Strategy pattern for test modes
+- ✅ Builder pattern for transactions
+- ✅ 9 test modes with unified interface
+
+**Architecture Improvements:**
+- New `ethclient/` package - unified client management
+- New `account/` package - account management
+- New `transaction/` package - transaction building
+- New `testing/` package - test runner framework
+- Enhanced `utils/` package - file and print utilities
+- Enhanced `config/` package - with accounts management
+
+### Previous Versions
+
+- **v0.3** - Initial fuzzer and stress testing
+- **v0.2** - Enhanced protocol support (see branch archive-v0.2)
+- **v0.1** - Basic implementation (see branch archive-v0.1)
