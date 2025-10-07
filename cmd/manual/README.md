@@ -142,7 +142,7 @@ Transaction hashes are saved to the file specified in `paths.tx_hashes` (default
 
 ## Version
 
-Current version: `2.0.0-refactored`
+Current version: `1.0`
 
 Check with: `./manual --version`
 

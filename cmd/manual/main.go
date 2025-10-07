@@ -10,7 +10,7 @@ import (
 	"D2PFuzz/testing"
 )
 
-const version = "2.0.0-refactored"
+const version = "1.0"
 
 func main() {
 	// Command line flags
@@ -23,7 +23,6 @@ func main() {
 	// Show version
 	if *showVersion {
 		fmt.Printf("D2PFuzz Manual Testing Tool v%s\n", version)
-		fmt.Println("Refactored modular architecture")
 		return
 	}
 
