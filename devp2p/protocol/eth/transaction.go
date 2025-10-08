@@ -193,90 +193,24 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 }
 
 func (s *Suite) SendTxsWithoutRecv(txs []*types.Transaction) error {
-	// Open sending conn.
+	// Open sending connection only (simplified for better reliability)
 	sendConn, err := s.dial()
 	if err != nil {
 		return fmt.Errorf("sendConn failed: %v", err)
 	}
 	defer sendConn.Close()
+
+	// Perform peering handshake
 	if err = sendConn.peer(nil); err != nil {
 		return fmt.Errorf("peering failed: %v", err)
 	}
 
-	// Open receiving conn.
-	recvConn, err := s.dial()
-	if err != nil {
-		return err
-	}
-	defer recvConn.Close()
-	if err = recvConn.peer(nil); err != nil {
-		return fmt.Errorf("peering failed: %v", err)
-	}
-
+	// Send transactions
 	if err = sendConn.Write(ethProto, eth.TransactionsMsg, eth.TransactionsPacket(txs)); err != nil {
 		return fmt.Errorf("failed to write message to connection: %v", err)
 	}
 
-	// var (
-	// 	got = make(map[common.Hash]bool)
-	// 	end = time.Now().Add(timeout)
-	// )
-	// // Wait for the transaction announcements, make sure all txs are propagated.
-	// for time.Now().Before(end) {
-	// 	msg, err := recvConn.ReadEth()
-	// 	if err != nil {
-	// 		return fmt.Errorf("failed to read from connection: %w", err)
-	// 	}
-	// 	switch msg := msg.(type) {
-	// 	case *eth.TransactionsPacket:
-	// 		for _, tx := range *msg {
-	// 			got[tx.Hash()] = true
-	// 		}
-	// 	case *eth.NewPooledTransactionHashesPacket:
-	// 		for _, hash := range msg.Hashes {
-	// 			got[hash] = true
-	// 		}
-	// 	case *eth.GetBlockHeadersPacket:
-	// 		if err = sendConn.Write(ethProto, eth.GetBlockHeadersMsg, &eth.GetBlockHeadersPacket{
-	// 			RequestId: msg.RequestId,
-	// 			GetBlockHeadersRequest: &eth.GetBlockHeadersRequest{
-	// 				Origin:  eth.HashOrNumber{Hash: msg.GetBlockHeadersRequest.Origin.Hash, Number: 0},
-	// 				Amount:  uint64(512),
-	// 				Skip:    0,
-	// 				Reverse: msg.GetBlockHeadersRequest.Reverse,
-	// 			},
-	// 		}); err != nil {
-	// 			return fmt.Errorf("could not write to connection: %v", err)
-	// 		}
-	// 		headers := new(eth.BlockHeadersPacket)
-	// 		if err = sendConn.ReadMsg(ethProto, eth.BlockHeadersMsg, &headers); err != nil {
-	// 			return fmt.Errorf("error reading msg: %w", err)
-	// 		}
-
-	// 		sendConn.Write(ethProto, eth.BlockHeadersMsg, &eth.BlockHeadersPacket{
-	// 			RequestId: msg.RequestId,
-	// 			// BlockHeadersRequest: nil,
-	// 			BlockHeadersRequest: headers.BlockHeadersRequest,
-	// 		})
-	// 	default:
-	// 		return fmt.Errorf("unexpected eth wire msg: %s", pretty.Sdump(msg))
-	// 	}
-
-	// 	// Check if all txs received.
-	// 	allReceived := func() bool {
-	// 		for _, tx := range txs {
-	// 			if !got[tx.Hash()] {
-	// 				return false
-	// 			}
-	// 		}
-	// 		return true
-	// 	}
-	// 	if allReceived() {
-	// 		return nil
-	// 	}
-	// }
-
-	// return errors.New("timed out waiting for txs")
+	// Successfully sent transactions without waiting for propagation confirmation
 	return nil
 }
 

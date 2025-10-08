@@ -28,7 +28,12 @@ func QuickSend(client *ethclient.Client, from, to config.Account, nonce uint64, 
 		return common.Hash{}, err
 	}
 
-	return Send(client, tx, DefaultSendOptions())
+	// Disable verification for QuickSend to match original behavior
+	// In fast test environments, transactions may be included in blocks
+	// before verification completes, causing GetPooledTransactions to fail
+	opts := DefaultSendOptions()
+	opts.Verify = false
+	return Send(client, tx, opts)
 }
 
 // QuickSendDynamic sends a dynamic fee transaction
