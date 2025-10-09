@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/holiman/uint256"
 
 	"D2PFuzz/config"
 )
@@ -19,6 +20,7 @@ const (
 	TxTypeLegacy  TxType = "legacy"
 	TxTypeDynamic TxType = "dynamic"
 	TxTypeEIP1559 TxType = "eip1559"
+	TxTypeBlob    TxType = "blob" // EIP-4844 blob transaction
 )
 
 // TxOptions holds transaction configuration options
@@ -34,6 +36,10 @@ type TxOptions struct {
 	Data      []byte
 	ChainID   *big.Int
 	TxType    TxType
+
+	// Blob transaction specific (EIP-4844)
+	MaxFeePerBlobGas    *big.Int
+	BlobVersionedHashes []common.Hash
 }
 
 // Builder provides a fluent interface for building transactions
@@ -157,6 +163,29 @@ func (b *Builder) Build() (*types.Transaction, error) {
 		signer := types.NewLondonSigner(b.opts.ChainID)
 		return types.SignTx(tx, signer, privateKey)
 
+	case TxTypeBlob:
+		// For blob transactions, use the dedicated BlobTxBuilder in blob.go
+		// This is just for completeness, but blob txs should use BlobTxBuilder
+		if len(b.opts.BlobVersionedHashes) == 0 {
+			return nil, fmt.Errorf("blob transaction requires at least one blob hash")
+		}
+
+		tx = types.NewTx(&types.BlobTx{
+			ChainID:    uint256.MustFromBig(b.opts.ChainID),
+			Nonce:      b.opts.Nonce,
+			GasTipCap:  uint256.MustFromBig(b.opts.GasTipCap),
+			GasFeeCap:  uint256.MustFromBig(b.opts.GasFeeCap),
+			Gas:        b.opts.Gas,
+			To:         toAddr,
+			Value:      uint256.MustFromBig(b.opts.Value),
+			Data:       b.opts.Data,
+			BlobFeeCap: uint256.MustFromBig(b.opts.MaxFeePerBlobGas),
+			BlobHashes: b.opts.BlobVersionedHashes,
+		})
+		// Sign with CancunSigner
+		signer := types.NewCancunSigner(b.opts.ChainID)
+		return types.SignTx(tx, signer, privateKey)
+
 	default:
 		return nil, fmt.Errorf("unsupported transaction type: %s", b.opts.TxType)
 	}
@@ -189,6 +218,24 @@ func (b *Builder) BuildUnsigned() (*types.Transaction, error) {
 			Data:      b.opts.Data,
 		}), nil
 
+	case TxTypeBlob:
+		if len(b.opts.BlobVersionedHashes) == 0 {
+			return nil, fmt.Errorf("blob transaction requires at least one blob hash")
+		}
+
+		return types.NewTx(&types.BlobTx{
+			ChainID:    uint256.MustFromBig(b.opts.ChainID),
+			Nonce:      b.opts.Nonce,
+			GasTipCap:  uint256.MustFromBig(b.opts.GasTipCap),
+			GasFeeCap:  uint256.MustFromBig(b.opts.GasFeeCap),
+			Gas:        b.opts.Gas,
+			To:         toAddr,
+			Value:      uint256.MustFromBig(b.opts.Value),
+			Data:       b.opts.Data,
+			BlobFeeCap: uint256.MustFromBig(b.opts.MaxFeePerBlobGas),
+			BlobHashes: b.opts.BlobVersionedHashes,
+		}), nil
+
 	default:
 		return nil, fmt.Errorf("unsupported transaction type: %s", b.opts.TxType)
 	}
@@ -203,10 +250,11 @@ func SignTransaction(tx *types.Transaction, privateKey *ecdsa.PrivateKey, chainI
 		signer = types.NewEIP155Signer(chainID)
 	case types.DynamicFeeTxType:
 		signer = types.NewLondonSigner(chainID)
+	case types.BlobTxType:
+		signer = types.NewCancunSigner(chainID)
 	default:
 		signer = types.LatestSignerForChainID(chainID)
 	}
 
 	return types.SignTx(tx, signer, privateKey)
 }
-

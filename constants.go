@@ -68,6 +68,42 @@ const (
 	GetPooledTxsRequestID = 999
 )
 
+// Blob related constants (EIP-4844)
+const (
+	// MaxBlobsPerBlock is the maximum number of blobs per block
+	MaxBlobsPerBlock = 6
+
+	// TargetBlobsPerBlock is the target number of blobs per block
+	TargetBlobsPerBlock = 3
+
+	// BlobSize is the standard size of a blob (128 KB)
+	BlobSize = 131072
+
+	// FieldElementsPerBlob is the number of field elements in a blob
+	FieldElementsPerBlob = 4096
+
+	// BytesPerFieldElement is the number of bytes per field element
+	BytesPerFieldElement = 32
+
+	// TargetBlobGasPerBlock is the target blob gas per block (3 blobs)
+	TargetBlobGasPerBlock = 393216
+
+	// MaxBlobGasPerBlock is the maximum blob gas per block (6 blobs)
+	MaxBlobGasPerBlock = 786432
+
+	// BlobGasPerBlob is the gas cost per blob
+	BlobGasPerBlob = 131072
+
+	// MinBlobGasPrice is the minimum blob gas price (1 wei)
+	MinBlobGasPrice = 1
+
+	// BlobGasPriceUpdateFraction is used for blob gas price calculation
+	BlobGasPriceUpdateFraction = 3338477
+
+	// DefaultBlobGasPrice is the default blob gas price (1 Gwei)
+	DefaultBlobGasPrice = 1000000000
+)
+
 // Helper functions to return big.Int values
 var (
 	// ChainIDBigInt returns the chain ID as *big.Int
@@ -81,6 +117,9 @@ var (
 
 	// DefaultGasFeeCapBigInt returns the default fee cap as *big.Int
 	DefaultGasFeeCapBigInt = big.NewInt(DefaultGasFeeCap)
+
+	// DefaultBlobGasPriceBigInt returns the default blob gas price as *big.Int
+	DefaultBlobGasPriceBigInt = big.NewInt(DefaultBlobGasPrice)
 
 	// OneWei represents 1 wei value
 	OneWei = big.NewInt(1)

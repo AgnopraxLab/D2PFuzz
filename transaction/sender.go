@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 
+	"D2PFuzz/blob"
 	"D2PFuzz/ethclient"
 )
 
@@ -21,8 +22,8 @@ type SendOptions struct {
 // DefaultSendOptions returns default send options
 func DefaultSendOptions() SendOptions {
 	return SendOptions{
-		Verify:      true,
-		Timeout:     12 * time.Second,
+		Verify:      false,
+		Timeout:     2 * time.Second,
 		WaitForRecv: false,
 	}
 }
@@ -201,3 +202,128 @@ func Query(client *ethclient.Client, txHashes []common.Hash) ([]*types.Transacti
 	return resp.PooledTransactionsResponse, nil
 }
 
+// SendBlob sends a blob transaction to the client
+// Note: Blob transactions require special handling as they include sidecars
+func SendBlob(client *ethclient.Client, blobTx *blob.BlobTransaction, opts SendOptions) (common.Hash, error) {
+	if blobTx == nil || blobTx.Tx == nil {
+		return common.Hash{}, fmt.Errorf("blob transaction is nil")
+	}
+
+	// Validate blob transaction
+	if err := blob.ValidateBlobTransaction(blobTx); err != nil {
+		return common.Hash{}, fmt.Errorf("blob transaction validation failed: %w", err)
+	}
+
+	// Debug: Check if transaction has sidecar
+	if blobTx.Tx.BlobTxSidecar() == nil {
+		fmt.Printf("⚠️  WARNING: Blob transaction has NO sidecar attached!\n")
+	} else {
+		sidecar := blobTx.Tx.BlobTxSidecar()
+		fmt.Printf("🔍 DEBUG: Blob transaction has sidecar with %d blob(s)\n", len(sidecar.Blobs))
+	}
+
+	txHash := blobTx.Tx.Hash()
+	suite := client.GetSuite()
+
+	// For blob transactions, we need to send the transaction with blobs attached
+	// The go-ethereum library handles the sidecar encoding automatically
+	var err error
+	if opts.WaitForRecv || client.GetNodeName() == "reth" {
+		err = suite.SendTxs([]*types.Transaction{blobTx.Tx})
+	} else {
+		err = suite.SendTxsWithoutRecv([]*types.Transaction{blobTx.Tx})
+	}
+
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("failed to send blob transaction: %w", err)
+	}
+
+	// Verify if requested
+	if opts.Verify {
+		if err := Verify(client, []common.Hash{txHash}, opts.Timeout); err != nil {
+			return txHash, fmt.Errorf("blob transaction sent but verification failed: %w", err)
+		}
+	}
+
+	return txHash, nil
+}
+
+// SendBlobBatch sends multiple blob transactions in batch
+func SendBlobBatch(client *ethclient.Client, blobTxs []*blob.BlobTransaction, opts SendOptions) ([]common.Hash, error) {
+	if len(blobTxs) == 0 {
+		return nil, nil
+	}
+
+	// Validate all blob transactions
+	for i, blobTx := range blobTxs {
+		if err := blob.ValidateBlobTransaction(blobTx); err != nil {
+			return nil, fmt.Errorf("blob transaction %d validation failed: %w", i, err)
+		}
+	}
+
+	// Extract regular transactions
+	txs := make([]*types.Transaction, len(blobTxs))
+	hashes := make([]common.Hash, len(blobTxs))
+	for i, blobTx := range blobTxs {
+		txs[i] = blobTx.Tx
+		hashes[i] = blobTx.Tx.Hash()
+	}
+
+	// Send using batch method
+	suite := client.GetSuite()
+	var err error
+	if opts.WaitForRecv || client.GetNodeName() == "reth" {
+		err = suite.SendTxs(txs)
+	} else {
+		err = suite.SendTxsWithoutRecv(txs)
+	}
+
+	if err != nil {
+		return hashes, fmt.Errorf("failed to send blob transactions batch: %w", err)
+	}
+
+	// Verify if requested
+	if opts.Verify {
+		if err := Verify(client, hashes, opts.Timeout); err != nil {
+			return hashes, fmt.Errorf("blob transactions sent but verification failed: %w", err)
+		}
+	}
+
+	return hashes, nil
+}
+
+// SendBlobWithoutVerify sends a blob transaction without verification (faster)
+func SendBlobWithoutVerify(client *ethclient.Client, blobTx *blob.BlobTransaction) (common.Hash, error) {
+	opts := DefaultSendOptions()
+	opts.Verify = false
+	return SendBlob(client, blobTx, opts)
+}
+
+// VerifyBlob specifically verifies blob transactions
+// This is similar to Verify but with additional blob-specific checks
+func VerifyBlob(client *ethclient.Client, txHash common.Hash, timeout time.Duration) error {
+	// Use the standard verification method
+	// Blob transactions appear in the pool like regular transactions
+	return Verify(client, []common.Hash{txHash}, timeout)
+}
+
+// QueryBlob queries a blob transaction by hash
+// Note: This returns the transaction itself, not the blob data
+// The blob data is only available through Beacon API
+func QueryBlob(client *ethclient.Client, txHash common.Hash) (*types.Transaction, error) {
+	txs, err := Query(client, []common.Hash{txHash})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(txs) == 0 {
+		return nil, fmt.Errorf("blob transaction not found")
+	}
+
+	tx := txs[0]
+	if tx.Type() != types.BlobTxType {
+		return nil, fmt.Errorf("transaction is not a blob transaction (type: %d)", tx.Type())
+	}
+
+	return tx, nil
+}

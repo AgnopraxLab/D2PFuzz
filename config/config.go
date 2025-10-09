@@ -115,15 +115,50 @@ type PathsConfig struct {
 
 // TestConfig holds test-related configuration
 type TestConfig struct {
-	Mode                  string   `yaml:"mode"`
-	SingleNodeIndex       int      `yaml:"single_node_index"`
-	SingleNodeNonce       uint64   `yaml:"single_node_nonce"`
-	SingleNodeBatchSize   int      `yaml:"single_node_batch_size"`
-	MultiNodeBatchSize    int      `yaml:"multi_node_batch_size"`
-	MultiNodeNonces       []uint64 `yaml:"multi_node_nonces"`
-	SoftLimitScenarios    []int    `yaml:"soft_limit_scenarios"`
-	DefaultTimeoutSeconds int      `yaml:"default_timeout_seconds"`
-	GetPooledTxsNodeIndex int      `yaml:"get_pooled_txs_node_index"`
+	Mode                  string         `yaml:"mode"`
+	SingleNodeIndex       int            `yaml:"single_node_index"`
+	SingleNodeNonce       string         `yaml:"single_node_nonce"` // "auto" or numeric string
+	SingleNodeBatchSize   int            `yaml:"single_node_batch_size"`
+	MultiNodeBatchSize    int            `yaml:"multi_node_batch_size"`
+	MultiNodeNonces       []string       `yaml:"multi_node_nonces"` // Array of "auto" or numeric strings
+	SoftLimitScenarios    []int          `yaml:"soft_limit_scenarios"`
+	DefaultTimeoutSeconds int            `yaml:"default_timeout_seconds"`
+	GetPooledTxsNodeIndex int            `yaml:"get_pooled_txs_node_index"`
+	BlobTest              BlobTestConfig `yaml:"blob_test"`
+}
+
+// BlobTestConfig holds blob transaction test configuration
+type BlobTestConfig struct {
+	// Basic configuration
+	BlobCount        int    `yaml:"blob_count"`           // Number of blobs per transaction (1-6)
+	BlobDataSize     int    `yaml:"blob_data_size"`       // Size of blob data in bytes
+	MaxFeePerBlobGas string `yaml:"max_fee_per_blob_gas"` // Max fee per blob gas (in wei)
+
+	// Test scenarios
+	Scenarios []string `yaml:"scenarios"` // random, pattern, zero, l2-data
+
+	// Node configuration
+	SingleNodeIndex  int   `yaml:"single_node_index"`  // Node index for single-node tests
+	MultiNodeIndices []int `yaml:"multi_node_indices"` // Node indices for multi-node tests
+
+	// Nonce configuration for blob tests
+	SingleNodeNonce string   `yaml:"single_node_nonce"` // "auto" or numeric string
+	MultiNodeNonces []string `yaml:"multi_node_nonces"` // Array of "auto" or numeric strings
+
+	// Verification configuration
+	VerifyBeaconAPI   bool   `yaml:"verify_beacon_api"`   // Whether to verify via Beacon API
+	BeaconEndpoint    string `yaml:"beacon_endpoint"`     // Beacon node endpoint
+	VerifyAfterBlocks int    `yaml:"verify_after_blocks"` // Wait N blocks before verification
+
+	// Batch test configuration
+	BatchSize    int `yaml:"batch_size"`       // Number of transactions per batch
+	TotalBlobTxs int `yaml:"total_blob_txs"`   // Total number of blob transactions to send
+	SendInterval int `yaml:"send_interval_ms"` // Interval between sends in milliseconds
+
+	// Stress test configuration
+	StressTestDuration int  `yaml:"stress_test_duration_sec"` // Duration for stress test in seconds
+	MaxConcurrent      int  `yaml:"max_concurrent"`           // Max concurrent blob txs
+	FillBlobs          bool `yaml:"fill_blobs"`               // Fill all 6 blobs per tx
 }
 
 // LoadConfig loads configuration from the specified YAML file

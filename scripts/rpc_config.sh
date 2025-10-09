@@ -15,11 +15,11 @@ RPC_ENDPOINTS=(
 
 # Node type to RPC endpoint mapping
 declare -A NODE_RPC_MAP=(
-    ["geth"]="http://172.16.0.11:8545"
-    ["nethermind"]="http://172.16.0.13:8545"
-    ["reth"]="http://172.16.0.14:8545"
-    ["erigon"]="http://172.16.0.15:8545"
-    ["besu"]="http://172.16.0.12:8545"
+    ["geth-lighthouse"]="http://172.16.0.11:8545"
+    ["nethermind-teku"]="http://172.16.0.13:8545"
+    ["besu-prysm"]="http://172.16.0.14:8545"
+    ["besu-lodestar"]="http://172.16.0.15:8545"
+    ["geth-nimbus"]="http://172.16.0.12:8545"
 )
 
 # Function to get RPC endpoint by node type

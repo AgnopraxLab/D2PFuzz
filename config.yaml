@@ -36,7 +36,7 @@ tx_fuzz:
 p2p:
   max_peers: 50
   listen_port: 30303
-  jwt_secret: "688f5d737bad920bdfb2fc2f488d6b6209eebda1dae949a8de91398d932c517a"
+  jwt_secret: "0xdc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
   node_names:
     - "geth-lighthouse"
     - "netherhmind-teku"

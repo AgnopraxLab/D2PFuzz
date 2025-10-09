@@ -54,17 +54,23 @@ func (t *SoftLimitSingleTest) Run(cfg *config.Config) error {
 
 	nodeIndex := cfg.Test.SingleNodeIndex
 	hashCount := 4096 // Test at soft limit
-	startNonce := cfg.Test.SingleNodeNonce
+	nonceStr := cfg.Test.SingleNodeNonce
 
 	if nodeIndex < 0 || nodeIndex >= cfg.GetNodeCount() {
 		return fmt.Errorf("invalid node index: %d, valid range: 0-%d", nodeIndex, cfg.GetNodeCount()-1)
+	}
+
+	// Parse nonce value
+	startNonce, _, err := utils.ParseNonceValue(nonceStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse nonce: %w", err)
 	}
 
 	nodeName := cfg.GetNodeName(nodeIndex)
 	fmt.Printf("\n========================================\n")
 	fmt.Printf("Testing: %s\n", strings.ToUpper(nodeName))
 	fmt.Printf("Scenario: %d items\n", hashCount)
-	fmt.Printf("Starting nonce: %d\n", startNonce)
+	fmt.Printf("Starting nonce: %s -> %d\n", nonceStr, startNonce)
 	fmt.Printf("========================================\n\n")
 
 	requested, status, err := TestNewPooledTransactionHashesSoftLimitWithNonceDetailed(cfg, nodeIndex, hashCount, startNonce)
@@ -241,9 +247,15 @@ func (t *OneTransactionTest) Run(cfg *config.Config) error {
 
 	fmt.Printf("🎯 Starting single transaction testing for %s ...\n", s.GetElName())
 
-	nonce := cfg.Test.SingleNodeNonce
+	nonceStr := cfg.Test.SingleNodeNonce
 	fromAccount := config.PredefinedAccounts[0]
 	toAccount := config.PredefinedAccounts[5]
+
+	// Parse nonce value
+	nonce, _, err := utils.ParseNonceValue(nonceStr)
+	if err != nil {
+		return fmt.Errorf("failed to parse nonce: %w", err)
+	}
 
 	var to common.Address = common.HexToAddress(toAccount.Address)
 	txdata := &types.DynamicFeeTx{
@@ -438,17 +450,13 @@ func runInteractiveSingleNodeTest(cfg *config.Config) error {
 		return fmt.Errorf("invalid node index: %d. Valid range: 0-%d", nodeIndex, cfg.GetNodeCount()-1)
 	}
 
-	fmt.Print("Enter starting nonce (press Enter for 0): ")
+	fmt.Print("Enter starting nonce (press Enter for 'auto'): ")
 	var nonceInput string
 	fmt.Scanln(&nonceInput)
 
-	nonce := uint64(0)
+	nonceStr := "auto"
 	if nonceInput != "" {
-		if n, err := strconv.ParseUint(nonceInput, 10, 64); err == nil {
-			nonce = n
-		} else {
-			fmt.Printf("Invalid nonce value, using default 0\n")
-		}
+		nonceStr = nonceInput
 	}
 
 	fmt.Print("Enter number of transactions to send (default 3): ")
@@ -464,7 +472,7 @@ func runInteractiveSingleNodeTest(cfg *config.Config) error {
 
 	// Update config with user input
 	cfg.Test.SingleNodeIndex = nodeIndex
-	cfg.Test.SingleNodeNonce = nonce
+	cfg.Test.SingleNodeNonce = nonceStr
 	cfg.Test.SingleNodeBatchSize = batchSize
 
 	fmt.Printf("\n🎯 Starting single node testing for %s (Node %d)...\n", cfg.GetNodeName(nodeIndex), nodeIndex)

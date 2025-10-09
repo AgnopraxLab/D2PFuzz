@@ -10,10 +10,10 @@ import (
 type TestRunner interface {
 	// Name returns the test mode name
 	Name() string
-	
+
 	// Description returns a brief description of the test
 	Description() string
-	
+
 	// Run executes the test with the given configuration
 	Run(cfg *config.Config) error
 }
@@ -56,5 +56,8 @@ func init() {
 	Register("oneTransaction", &OneTransactionTest{})
 	Register("largeTransactions", &LargeTransactionsTest{})
 	Register("interactive", &InteractiveTest{})
-}
 
+	// Blob transaction tests (EIP-4844)
+	Register("blob-single", &BlobSingleNodeTest{})
+	Register("blob-multi", &BlobMultiNodeTest{})
+}

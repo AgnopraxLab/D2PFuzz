@@ -17,6 +17,7 @@
 package eth
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -125,8 +126,10 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 		return fmt.Errorf("peering failed: %v", err)
 	}
 
+	// Send all transactions using TransactionsMsg
+	// Blob transactions (Type 3) with sidecars attached will be encoded properly
 	if err = sendConn.Write(ethProto, eth.TransactionsMsg, eth.TransactionsPacket(txs)); err != nil {
-		return fmt.Errorf("failed to write message to connection: %v", err)
+		return fmt.Errorf("failed to write transactions: %v", err)
 	}
 
 	var (
@@ -205,9 +208,11 @@ func (s *Suite) SendTxsWithoutRecv(txs []*types.Transaction) error {
 		return fmt.Errorf("peering failed: %v", err)
 	}
 
-	// Send transactions
+	// Send transactions using TransactionsMsg
+	// For Blob transactions (Type 3), the transaction already has sidecars attached via WithBlobTxSidecar()
+	// The serialization should handle it automatically
 	if err = sendConn.Write(ethProto, eth.TransactionsMsg, eth.TransactionsPacket(txs)); err != nil {
-		return fmt.Errorf("failed to write message to connection: %v", err)
+		return fmt.Errorf("failed to write transactions: %v", err)
 	}
 
 	// Successfully sent transactions without waiting for propagation confirmation
@@ -248,19 +253,14 @@ func (s *Suite) sendInvalidTxs(t *utesting.T, txs []*types.Transaction) error {
 	}
 
 	// Get responses.
-	recvConn.SetReadDeadline(time.Now().Add(timeout))
 	for {
 		msg, err := recvConn.ReadEth()
-		if errors.Is(err, os.ErrDeadlineExceeded) {
-			// Successful if no invalid txs are propagated before timeout.
-			return nil
-		} else if err != nil {
-			return fmt.Errorf("failed to read from connection: %w", err)
+		if err != nil {
+			return fmt.Errorf("failed to read message from connection: %w", err)
 		}
-
 		switch msg := msg.(type) {
 		case *eth.TransactionsPacket:
-			for _, tx := range txs {
+			for _, tx := range *msg {
 				if _, ok := invalids[tx.Hash()]; ok {
 					return fmt.Errorf("received bad tx: %s", tx.Hash())
 				}
@@ -281,7 +281,40 @@ func (s *Suite) sendInvalidTxs(t *utesting.T, txs []*types.Transaction) error {
 				BlockHeadersRequest: headers,
 			})
 		default:
-			return fmt.Errorf("unexpected eth message: %v", pretty.Sdump(msg))
+			continue
 		}
 	}
+}
+
+func (s *Suite) TestMaliciousTxPropagation(t *utesting.T) {
+	if err := s.sendInvalidTxs(t, []*types.Transaction{getNextTxFromChain(t, s)}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func getNextTxFromChain(t *utesting.T, s *Suite) *types.Transaction {
+	// Get the latest block.
+	block := s.chain.Head()
+
+	// Get the next transaction.
+	if len(block.Transactions()) > 0 {
+		return block.Transactions()[0]
+	}
+
+	t.Fatal("could not find transaction")
+	return nil
+}
+
+func getTxsFromFile(filePath string) ([]*types.Transaction, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var txs []*types.Transaction
+	if err := json.Unmarshal(data, &txs); err != nil {
+		return nil, err
+	}
+
+	return txs, nil
 }

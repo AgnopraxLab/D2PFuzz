@@ -99,13 +99,20 @@ else
     )
 fi
 
-for segment in "${SEARCH_SEGMENTS[@]}"; do
+# Reverse the search order to start from the latest blocks
+REVERSED_SEGMENTS=()
+for ((i=${#SEARCH_SEGMENTS[@]}-1; i>=0; i--)); do
+    REVERSED_SEGMENTS+=("${SEARCH_SEGMENTS[$i]}")
+done
+
+for segment in "${REVERSED_SEGMENTS[@]}"; do
     START_BLOCK=$(echo $segment | cut -d':' -f1)
     END_BLOCK=$(echo $segment | cut -d':' -f2)
     
-    echo "Searching block segment: $START_BLOCK to $END_BLOCK"
+    echo "Searching block segment: $END_BLOCK to $START_BLOCK (newest first)"
     
-    for ((block=$START_BLOCK; block<=END_BLOCK; block++)); do
+    # Search from newest to oldest within each segment
+    for ((block=$END_BLOCK; block>=START_BLOCK; block--)); do
         block_hex=$(printf "0x%x" $block)
         
         # Get block data
@@ -186,7 +193,7 @@ for segment in "${SEARCH_SEGMENTS[@]}"; do
         fi
     done
     
-    echo "Block segment $START_BLOCK-$END_BLOCK search completed"
+    echo "Block segment $END_BLOCK-$START_BLOCK search completed"
     echo ""
 done
 
