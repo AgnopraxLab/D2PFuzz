@@ -29,16 +29,16 @@ paths:
 # Test Configuration
 test:
   # Test mode: single/multi/test-soft-limit/test-soft-limit-single/test-soft-limit-report/GetPooledTxs/oneTransaction/largeTransactions/interactive/blob-single/blob-multi
-  mode: "blob-single"
+  mode: "multi"
   
   # Single node test settings
   single_node_index: 0          # Which node to test (0-4)
-  single_node_nonce: "26"       # Starting nonce ("auto" or specific number)
+  single_node_nonce: "auto"       # Starting nonce ("auto" or specific number)
   single_node_batch_size: 1     # Number of transactions to send
   
   # Multi-node test settings
-  multi_node_batch_size: 2     # Transactions per node
-  multi_node_nonces: ["5", "3", "1", "1", "1"]  # Initial nonce for each node ("auto" or specific numbers)
+  multi_node_batch_size: 1     # Transactions per node
+  multi_node_nonces: ["auto", "auto", "auto", "auto", "auto"]  # Initial nonce for each node ("auto" or specific numbers)
   
   # Soft limit test settings
   soft_limit_scenarios: [4096, 5000, 8192]  # Test scenarios for soft limit
