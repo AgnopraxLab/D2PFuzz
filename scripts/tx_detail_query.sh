@@ -7,14 +7,18 @@
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
-# RPC endpoint list (extracted from output.txt)
-RPC_ENDPOINTS=(
-    "http://172.16.4.11:8545"  # el-1-geth-lighthouse
-    "http://172.16.4.13:8545"  # el-2-nethermind-lighthouse
-    "http://172.16.4.14:8545"  # el-3-reth-lighthouse
-    "http://172.16.4.15:8545"  # el-4-erigon-lighthouse
-    "http://172.16.4.12:8545"  # el-5-besu-lighthouse
-)
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source RPC configuration
+if [[ -f "${SCRIPT_DIR}/rpc_config.sh" ]]; then
+    source "${SCRIPT_DIR}/rpc_config.sh"
+else
+    echo "Error: rpc_config.sh not found in ${SCRIPT_DIR}"
+    exit 1
+fi
+
+# RPC_ENDPOINTS is now loaded from rpc_config.sh
 
 # Color definitions
 RED='\033[0;31m'

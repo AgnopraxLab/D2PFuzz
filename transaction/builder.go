@@ -53,9 +53,9 @@ func NewBuilder(chainID *big.Int) *Builder {
 		opts: TxOptions{
 			Value:     big.NewInt(1),
 			Gas:       21000,
-			GasPrice:  big.NewInt(20000000000),
-			GasTipCap: big.NewInt(3000000000),
-			GasFeeCap: big.NewInt(30000000000),
+			GasPrice:  big.NewInt(1),
+			GasTipCap: big.NewInt(1000000000),
+			GasFeeCap: big.NewInt(20000000000),
 			ChainID:   chainID,
 			TxType:    TxTypeDynamic,
 		},

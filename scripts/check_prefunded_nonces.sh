@@ -1,7 +1,58 @@
 #!/bin/bash
 
 # Query nonce values of prefunded accounts
-RPC_URL="http://172.16.0.11:8545"
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source RPC configuration
+if [[ -f "${SCRIPT_DIR}/rpc_config.sh" ]]; then
+    source "${SCRIPT_DIR}/rpc_config.sh"
+else
+    echo "Error: rpc_config.sh not found in ${SCRIPT_DIR}"
+    exit 1
+fi
+
+# Use first RPC endpoint by default, or allow override via command line argument
+RPC_URL="${1:-${RPC_ENDPOINTS[0]}}"
+
+# Test RPC connection
+test_connection() {
+    local response=$(curl -s -X POST -H "Content-Type: application/json" \
+        --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' \
+        --connect-timeout 5 --max-time 10 "$RPC_URL" 2>/dev/null)
+    
+    if [[ $? -eq 0 ]] && echo "$response" | grep -q '"result"'; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Check if jq is available
+if ! command -v jq &> /dev/null; then
+    echo "Error: jq is not installed. Please install jq first."
+    echo "Ubuntu/Debian: sudo apt-get install jq"
+    echo "MacOS: brew install jq"
+    exit 1
+fi
+
+# Test connection before proceeding
+echo "Testing connection to $RPC_URL..."
+if ! test_connection; then
+    echo "Error: Cannot connect to RPC endpoint $RPC_URL"
+    echo ""
+    echo "Available endpoints from rpc_config.sh:"
+    for i in "${!RPC_ENDPOINTS[@]}"; do
+        echo "  [$i] ${RPC_ENDPOINTS[$i]}"
+    done
+    echo ""
+    echo "Usage: $0 [rpc_url]"
+    echo "Example: $0 http://172.16.0.13:8545"
+    exit 1
+fi
+echo "Connection successful!"
+echo ""
 
 # Prefunded account addresses array
 ACCOUNTS=(
@@ -29,33 +80,53 @@ ACCOUNTS=(
 )
 
 echo "=== Prefunded Account Nonce Query ==="
+echo "Using RPC endpoint: $RPC_URL"
+echo ""
 echo "Account Address                            | Nonce (Decimal) | Nonce (Hex)     | Balance (Wei)"
 echo "-------------------------------------------|-----------------|-----------------|------------------"
 
+success_count=0
+error_count=0
+
 for account in "${ACCOUNTS[@]}"; do
     # Query nonce value
-    nonce_hex=$(curl -s -X POST -H "Content-Type: application/json" \
+    nonce_response=$(curl -s -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","method":"eth_getTransactionCount","params":["'$account'", "latest"],"id":1}' \
-        $RPC_URL | jq -r '.result')
+        --connect-timeout 5 --max-time 10 $RPC_URL 2>/dev/null)
+    nonce_hex=$(echo "$nonce_response" | jq -r '.result' 2>/dev/null)
     
     # Query balance
-    balance_hex=$(curl -s -X POST -H "Content-Type: application/json" \
+    balance_response=$(curl -s -X POST -H "Content-Type: application/json" \
         --data '{"jsonrpc":"2.0","method":"eth_getBalance","params":["'$account'", "latest"],"id":1}' \
-        $RPC_URL | jq -r '.result')
+        --connect-timeout 5 --max-time 10 $RPC_URL 2>/dev/null)
+    balance_hex=$(echo "$balance_response" | jq -r '.result' 2>/dev/null)
 
     # Convert to decimal (use Python to handle large numbers to avoid bash integer overflow)
-    if [ "$nonce_hex" != "null" ] && [ "$nonce_hex" != "" ]; then
+    if [ "$nonce_hex" != "null" ] && [ "$nonce_hex" != "" ] && [ "$nonce_hex" != "None" ]; then
         nonce_dec=$((16#${nonce_hex#0x}))
         # Use Python to correctly handle large numbers
         balance_dec=$(python3 -c "print(int('$balance_hex', 16))" 2>/dev/null || echo "Calculation Error")
         printf "%-42s | %-15s | %-15s | %s\n" "$account" "$nonce_dec" "$nonce_hex" "$balance_dec"
+        ((success_count++))
     else
-        printf "%-42s | %-15s | %-15s | %s\n" "$account" "ERROR" "ERROR" "ERROR"
+        printf "%-42s | %-15s | %-15s | %s\n" "$account" "ERROR" "ERROR" "RPC Query Failed"
+        ((error_count++))
     fi
 done
 
+echo ""
+echo "=== Query Summary ==="
+echo "Total accounts: ${#ACCOUNTS[@]}"
+echo "Successful queries: $success_count"
+echo "Failed queries: $error_count"
 echo ""
 echo "Notes:"
 echo "- Nonce = 0: Account has not sent any transactions"
 echo "- Nonce > 0: Account has sent corresponding number of transactions"
 echo "- Balance is displayed in Wei units (1 ETH = 10^18 Wei)"
+echo ""
+if [ $error_count -gt 0 ]; then
+    echo "⚠ Some queries failed. You can try using a different RPC endpoint:"
+    echo "Usage: $0 [rpc_url]"
+    echo "Example: $0 http://172.16.0.13:8545"
+fi

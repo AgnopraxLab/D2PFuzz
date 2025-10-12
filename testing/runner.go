@@ -52,10 +52,9 @@ func init() {
 	Register("test-soft-limit", &SoftLimitTest{})
 	Register("test-soft-limit-single", &SoftLimitSingleTest{})
 	Register("test-soft-limit-report", &SoftLimitReportTest{})
-	Register("GetPooledTxs", &GetPooledTxsTest{})
+	// Register("getPooledTxs", &GetPooledTxsTest{})
 	Register("oneTransaction", &OneTransactionTest{})
 	Register("largeTransactions", &LargeTransactionsTest{})
-	Register("interactive", &InteractiveTest{})
 
 	// Blob transaction tests (EIP-4844)
 	Register("blob-single", &BlobSingleNodeTest{})

@@ -7,23 +7,44 @@
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
-# RPC endpoint list
-RPC_ENDPOINTS=(
-    "http://172.16.0.11:8545"  # el-1-geth-lighthouse (geth)
-    "http://172.16.0.12:8545"  # el-2-nethermind-lighthouse (nethermind)
-    "http://172.16.0.13:8545"  # el-3-reth-lighthouse (reth)
-    "http://172.16.0.14:8545"  # el-4-erigon-lighthouse (erigon)
-    "http://172.16.0.15:8545"  # el-5-besu-lighthouse (besu)
-)
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Node type to RPC endpoint mapping
-declare -A NODE_RPC_MAP=(
-    ["geth"]="http://172.16.0.11:8545"
-    ["nethermind"]="http://172.16.0.14:8545"
-    ["reth"]="http://172.16.0.15:8545"
-    ["erigon"]="http://172.16.0.12:8545"
-    ["besu"]="http://172.16.0.13:8545"
-)
+# Source RPC configuration
+if [[ -f "${SCRIPT_DIR}/rpc_config.sh" ]]; then
+    source "${SCRIPT_DIR}/rpc_config.sh"
+else
+    echo "Error: rpc_config.sh not found in ${SCRIPT_DIR}"
+    exit 1
+fi
+
+# RPC_ENDPOINTS and NODE_RPC_MAP are now loaded from rpc_config.sh
+
+# ============================================================================
+# LOCAL CONFIGURATION SECTION
+# ============================================================================
+# Create simplified node name aliases for easier command line usage
+# Map simple names to actual node types from rpc_config.sh
+
+declare -A NODE_ALIASES
+# Auto-detect node types and create aliases
+for node_type in "${!NODE_RPC_MAP[@]}"; do
+    # Extract the EL client name (first part before hyphen)
+    simple_name=$(echo "$node_type" | cut -d'-' -f1)
+    # Store mapping if not already set (first occurrence wins)
+    if [[ -z "${NODE_ALIASES[$simple_name]}" ]]; then
+        NODE_ALIASES["$simple_name"]="$node_type"
+    fi
+    # Also allow using the full name
+    NODE_ALIASES["$node_type"]="$node_type"
+done
+
+# Default node - use first node type from rpc_config.sh
+DEFAULT_NODE="${NODE_ALIASES[geth]:-${!NODE_RPC_MAP[@]:0:1}}"
+
+# ============================================================================
+# END OF LOCAL CONFIGURATION
+# ============================================================================
 
 # Color definitions
 RED='\033[0;31m'
@@ -33,9 +54,6 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
-
-# Default values
-DEFAULT_NODE="geth"
 
 # Show usage information
 show_usage() {
@@ -366,11 +384,17 @@ main() {
     else
         # Query single node
         if [[ -z "$endpoint" ]]; then
-            if [[ -n "${NODE_RPC_MAP[$node]}" ]]; then
+            # Try to resolve node alias first
+            local resolved_node="${NODE_ALIASES[$node]}"
+            if [[ -n "$resolved_node" ]] && [[ -n "${NODE_RPC_MAP[$resolved_node]}" ]]; then
+                endpoint="${NODE_RPC_MAP[$resolved_node]}"
+                node="$resolved_node"  # Update node name to full name for display
+            elif [[ -n "${NODE_RPC_MAP[$node]}" ]]; then
                 endpoint="${NODE_RPC_MAP[$node]}"
             else
                 echo -e "${RED}Error: Unknown node type '$node'${NC}"
-                echo "Available nodes: ${!NODE_RPC_MAP[@]}"
+                echo "Available simple names: ${!NODE_ALIASES[@]}"
+                echo "Available full names: ${!NODE_RPC_MAP[@]}"
                 exit 1
             fi
         fi

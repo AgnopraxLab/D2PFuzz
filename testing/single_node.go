@@ -28,10 +28,25 @@ func (t *SingleNodeTest) Description() string {
 func (t *SingleNodeTest) Run(cfg *config.Config) error {
 	fmt.Println("=== D2PFuzz Single-Node Testing Tool ===")
 
-	// Get test parameters from config
-	nodeIndex := cfg.Test.SingleNodeIndex
-	batchSize := cfg.Test.SingleNodeBatchSize
-	nonceStr := cfg.Test.SingleNodeNonce
+	// Get test parameters from config - prefer new SingleNode section, fallback to legacy
+	var nodeIndex int
+	var batchSize int
+	var nonceStr string
+	var saveHashes bool
+
+	if cfg.Test.SingleNode.BatchSize > 0 { // New config section detected
+		nodeIndex = cfg.Test.SingleNode.NodeIndex
+		batchSize = cfg.Test.SingleNode.BatchSize
+		nonceStr = cfg.Test.SingleNode.Nonce
+		saveHashes = cfg.Test.SingleNode.SaveHashes
+		fmt.Println("📋 Using new single_node configuration section")
+	} else { // Fallback to legacy fields
+		nodeIndex = cfg.Test.SingleNodeIndex
+		batchSize = cfg.Test.SingleNodeBatchSize
+		nonceStr = cfg.Test.SingleNodeNonce
+		saveHashes = true // default
+		fmt.Println("📋 Using legacy configuration fields")
+	}
 
 	// Validate node index
 	if nodeIndex < 0 || nodeIndex >= cfg.GetNodeCount() {
@@ -113,9 +128,11 @@ func (t *SingleNodeTest) Run(cfg *config.Config) error {
 			break
 		}
 
-		// Write transaction hash to file
-		if err := utils.AppendHashToFile(hashFilePath, txHash); err != nil {
-			fmt.Printf(" ⚠️ Failed to write hash to file: %v", err)
+		// Write transaction hash to file (if enabled)
+		if saveHashes {
+			if err := utils.AppendHashToFile(hashFilePath, txHash); err != nil {
+				fmt.Printf(" ⚠️ Failed to write hash to file: %v", err)
+			}
 		}
 
 		// Increment nonce for this node after successful transaction

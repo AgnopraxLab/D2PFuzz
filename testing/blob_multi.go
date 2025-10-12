@@ -32,16 +32,50 @@ func (t *BlobMultiNodeTest) Run(cfg *config.Config) error {
 	fmt.Println("═══════════════════════════════════════════════════════════════")
 	fmt.Println()
 
-	// Validate configuration
-	blobCfg := cfg.Test.BlobTest
-	if blobCfg.BlobCount < 1 || blobCfg.BlobCount > blob.MaxBlobsPerTransaction {
-		return fmt.Errorf("invalid blob count: %d (must be 1-%d)", blobCfg.BlobCount, blob.MaxBlobsPerTransaction)
+	// Get configuration - prefer new BlobMulti section, fallback to BlobTest
+	var nodeIndices []int
+	var blobCount int
+	var blobDataSize int
+	var maxFeePerBlobGas string
+	var generatorType string
+	var totalBlobTxs int
+	var sendInterval int
+	var nodeNonces []string
+
+	if cfg.Test.BlobMulti.BlobCount > 0 { // New config section detected
+		nodeIndices = cfg.Test.BlobMulti.NodeIndices
+		blobCount = cfg.Test.BlobMulti.BlobCount
+		blobDataSize = cfg.Test.BlobMulti.BlobDataSize
+		maxFeePerBlobGas = cfg.Test.BlobMulti.MaxFeePerBlobGas
+		generatorType = cfg.Test.BlobMulti.GeneratorType
+		totalBlobTxs = cfg.Test.BlobMulti.TotalTransactions
+		sendInterval = cfg.Test.BlobMulti.SendIntervalMS
+		nodeNonces = cfg.Test.BlobMulti.Nonces
+		fmt.Println("📋 Using new blob_multi configuration section")
+	} else { // Fallback to BlobTest
+		blobCfg := cfg.Test.BlobTest
+		nodeIndices = blobCfg.MultiNodeIndices
+		blobCount = blobCfg.BlobCount
+		blobDataSize = blobCfg.BlobDataSize
+		maxFeePerBlobGas = blobCfg.MaxFeePerBlobGas
+		if len(blobCfg.Scenarios) > 0 {
+			generatorType = blobCfg.Scenarios[0]
+		} else {
+			generatorType = "random"
+		}
+		totalBlobTxs = blobCfg.TotalBlobTxs
+		sendInterval = blobCfg.SendInterval
+		nodeNonces = blobCfg.MultiNodeNonces
+		fmt.Println("📋 Using legacy blob_test configuration section")
 	}
 
-	// Get node indices
-	nodeIndices := blobCfg.MultiNodeIndices
+	// Validate blob count
+	if blobCount < 1 || blobCount > blob.MaxBlobsPerTransaction {
+		return fmt.Errorf("invalid blob count: %d (must be 1-%d)", blobCount, blob.MaxBlobsPerTransaction)
+	}
+
+	// Get node indices (default: use all nodes if empty)
 	if len(nodeIndices) == 0 {
-		// Default: use all nodes
 		nodeIndices = make([]int, len(cfg.P2P.BootstrapNodes))
 		for i := range nodeIndices {
 			nodeIndices[i] = i
@@ -59,8 +93,8 @@ func (t *BlobMultiNodeTest) Run(cfg *config.Config) error {
 		}
 		fmt.Printf("   - Node %d: %s\n", idx, cfg.GetNodeName(idx))
 	}
-	fmt.Printf("🧊 Blobs per transaction: %d\n", blobCfg.BlobCount)
-	fmt.Printf("📊 Transactions per node: %d\n", blobCfg.TotalBlobTxs/len(nodeIndices))
+	fmt.Printf("🧊 Blobs per transaction: %d\n", blobCount)
+	fmt.Printf("📊 Transactions per node: %d\n", totalBlobTxs/len(nodeIndices))
 	fmt.Println()
 
 	// Initialize KZG
@@ -77,32 +111,32 @@ func (t *BlobMultiNodeTest) Run(cfg *config.Config) error {
 	}
 
 	// Parse max fee per blob gas
-	maxFeePerBlobGas := new(big.Int)
-	if blobCfg.MaxFeePerBlobGas != "" {
-		if _, ok := maxFeePerBlobGas.SetString(blobCfg.MaxFeePerBlobGas, 10); !ok {
-			return fmt.Errorf("invalid max_fee_per_blob_gas: %s", blobCfg.MaxFeePerBlobGas)
+	maxFeePerBlobGasBig := new(big.Int)
+	if maxFeePerBlobGas != "" {
+		if _, ok := maxFeePerBlobGasBig.SetString(maxFeePerBlobGas, 10); !ok {
+			return fmt.Errorf("invalid max_fee_per_blob_gas: %s", maxFeePerBlobGas)
 		}
 	} else {
-		maxFeePerBlobGas = big.NewInt(1000000000) // 1 Gwei default
+		maxFeePerBlobGasBig = big.NewInt(1000000000) // 1 Gwei default
 	}
 
-	// Determine generator type
-	generatorType := blob.GeneratorRandom
-	if len(blobCfg.Scenarios) > 0 {
-		switch blobCfg.Scenarios[0] {
-		case "random":
-			generatorType = blob.GeneratorRandom
-		case "pattern":
-			generatorType = blob.GeneratorPattern
-		case "zero":
-			generatorType = blob.GeneratorZero
-		case "l2-data":
-			generatorType = blob.GeneratorL2Data
-		}
+	// Determine generator type from string
+	var genType blob.GeneratorType
+	switch generatorType {
+	case "random":
+		genType = blob.GeneratorRandom
+	case "pattern":
+		genType = blob.GeneratorPattern
+	case "zero":
+		genType = blob.GeneratorZero
+	case "l2-data":
+		genType = blob.GeneratorL2Data
+	default:
+		genType = blob.GeneratorRandom
 	}
 
 	fmt.Printf("🎲 Generator type: %s\n", generatorType)
-	fmt.Printf("💰 Max fee per blob gas: %s wei\n", maxFeePerBlobGas.String())
+	fmt.Printf("💰 Max fee per blob gas: %s wei\n", maxFeePerBlobGasBig.String())
 	fmt.Println()
 
 	// Statistics tracking
@@ -151,7 +185,7 @@ func (t *BlobMultiNodeTest) Run(cfg *config.Config) error {
 			fmt.Printf("✅ Node %d (%s): Connected\n", nodeIdx, stats.NodeName)
 
 			// Calculate transactions for this node
-			totalTxs := blobCfg.TotalBlobTxs / len(nodeIndices)
+			totalTxs := totalBlobTxs / len(nodeIndices)
 			if totalTxs == 0 {
 				totalTxs = 1
 			}
@@ -163,8 +197,8 @@ func (t *BlobMultiNodeTest) Run(cfg *config.Config) error {
 
 			// Resolve nonce for this node
 			nonceStr := "auto" // default to auto
-			if nodeIdx < len(blobCfg.MultiNodeNonces) && blobCfg.MultiNodeNonces[nodeIdx] != "" {
-				nonceStr = blobCfg.MultiNodeNonces[nodeIdx]
+			if nodeIdx < len(nodeNonces) && nodeNonces[nodeIdx] != "" {
+				nonceStr = nodeNonces[nodeIdx]
 			}
 
 			nonce, err := utils.ResolveNonce(client, nonceStr, common.HexToAddress(fromAccount.Address))
@@ -183,17 +217,17 @@ func (t *BlobMultiNodeTest) Run(cfg *config.Config) error {
 					WithFrom(fromAccount).
 					WithTo(toAccount).
 					WithNonce(nonce).
-					WithMaxFeePerBlobGas(maxFeePerBlobGas)
+					WithMaxFeePerBlobGas(maxFeePerBlobGasBig)
 
 				// Generate and add blobs
 				success := true
-				for k := 0; k < blobCfg.BlobCount; k++ {
-					blobSize := blobCfg.BlobDataSize
+				for k := 0; k < blobCount; k++ {
+					blobSize := blobDataSize
 					if blobSize == 0 {
 						blobSize = blob.BlobDataSize
 					}
 
-					blobData, err := blob.GenerateBlob(generatorType, blobSize)
+					blobData, err := blob.GenerateBlob(genType, blobSize)
 					if err != nil {
 						success = false
 						break
@@ -231,8 +265,8 @@ func (t *BlobMultiNodeTest) Run(cfg *config.Config) error {
 				nonce++
 
 				// Delay between transactions
-				if j < totalTxs-1 && blobCfg.SendInterval > 0 {
-					time.Sleep(time.Duration(blobCfg.SendInterval) * time.Millisecond)
+				if j < totalTxs-1 && sendInterval > 0 {
+					time.Sleep(time.Duration(sendInterval) * time.Millisecond)
 				}
 			}
 

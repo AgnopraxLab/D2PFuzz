@@ -90,7 +90,6 @@ func main() {
 	// Test mode:
 	// "multi" = multi-node testing,
 	// "single" = single node testing,
-	// "interactive" = interactive selection,
 	// "oneTransaction" = single transaction testing,
 	// "largeTransactions" = large batch transaction testing
 	// "GetPooledTxs" = test GetPooledTransactions
@@ -215,29 +214,9 @@ func main() {
 		// Single node testing, send only one transaction
 		fmt.Println("=== D2PFuzz Large-Transaction Testing Tool ===")
 		sendLargeTransactions(config)
-	case "interactive":
-		// Interactive selection mode
-		fmt.Println("=== D2PFuzz Multi-Node Testing Tool ===")
-		fmt.Println("Available test modes:")
-		fmt.Println("1. Multi-node testing (all nodes)")
-		fmt.Println("2. Single node testing (specific node)")
-		fmt.Print("Please select test mode (1 or 2): ")
-
-		var choice int
-		fmt.Scanln(&choice)
-
-		switch choice {
-		case 1:
-			fmt.Println("\n🚀 Starting multi-node testing...")
-			multiNodesTesting(elNames, config, multiNodeNonceInitialValues, multiNodeBatchSize)
-		case 2:
-			runSingleNodeTestingWithUI(elNames, config)
-		default:
-			fmt.Println("Invalid choice. Please select 1 or 2.")
-		}
 
 	default:
-		fmt.Printf("Invalid test mode: %s. Valid modes: multi, single, interactive\n", testMode)
+		fmt.Printf("Invalid test mode: %s. Valid modes: multi, single\n", testMode)
 	}
 }
 

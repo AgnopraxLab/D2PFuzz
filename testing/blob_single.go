@@ -31,14 +31,58 @@ func (t *BlobSingleNodeTest) Run(cfg *config.Config) error {
 	fmt.Println("═══════════════════════════════════════════════════════════════")
 	fmt.Println()
 
-	// Validate configuration
-	blobCfg := cfg.Test.BlobTest
-	if blobCfg.BlobCount < 1 || blobCfg.BlobCount > blob.MaxBlobsPerTransaction {
-		return fmt.Errorf("invalid blob count: %d (must be 1-%d)", blobCfg.BlobCount, blob.MaxBlobsPerTransaction)
+	// Get configuration - prefer new BlobSingle section, fallback to BlobTest
+	var nodeIndex int
+	var blobCount int
+	var blobDataSize int
+	var maxFeePerBlobGas string
+	var generatorType string
+	var totalBlobTxs int
+	var sendInterval int
+	var nonceStr string
+	var saveHashes bool
+	var fromAccountIndex int
+	var toAccountIndex int
+
+	if cfg.Test.BlobSingle.BlobCount > 0 { // New config section detected
+		nodeIndex = cfg.Test.BlobSingle.NodeIndex
+		blobCount = cfg.Test.BlobSingle.BlobCount
+		blobDataSize = cfg.Test.BlobSingle.BlobDataSize
+		maxFeePerBlobGas = cfg.Test.BlobSingle.MaxFeePerBlobGas
+		generatorType = cfg.Test.BlobSingle.GeneratorType
+		totalBlobTxs = cfg.Test.BlobSingle.TotalTransactions
+		sendInterval = cfg.Test.BlobSingle.SendIntervalMS
+		nonceStr = cfg.Test.BlobSingle.Nonce
+		saveHashes = cfg.Test.BlobSingle.SaveHashes
+		fromAccountIndex = cfg.Test.BlobSingle.FromAccountIndex
+		toAccountIndex = cfg.Test.BlobSingle.ToAccountIndex
+		fmt.Println("📋 Using new blob_single configuration section")
+	} else { // Fallback to BlobTest
+		blobCfg := cfg.Test.BlobTest
+		nodeIndex = blobCfg.SingleNodeIndex
+		blobCount = blobCfg.BlobCount
+		blobDataSize = blobCfg.BlobDataSize
+		maxFeePerBlobGas = blobCfg.MaxFeePerBlobGas
+		if len(blobCfg.Scenarios) > 0 {
+			generatorType = blobCfg.Scenarios[0]
+		} else {
+			generatorType = "random"
+		}
+		totalBlobTxs = blobCfg.TotalBlobTxs
+		sendInterval = blobCfg.SendInterval
+		nonceStr = blobCfg.SingleNodeNonce
+		saveHashes = true // default
+		fromAccountIndex = blobCfg.FromAccountIndex
+		toAccountIndex = blobCfg.ToAccountIndex
+		fmt.Println("📋 Using legacy blob_test configuration section")
 	}
 
-	// Get node configuration
-	nodeIndex := blobCfg.SingleNodeIndex
+	// Validate configuration
+	if blobCount < 1 || blobCount > blob.MaxBlobsPerTransaction {
+		return fmt.Errorf("invalid blob count: %d (must be 1-%d)", blobCount, blob.MaxBlobsPerTransaction)
+	}
+
+	// Validate node index
 	if nodeIndex >= len(cfg.P2P.BootstrapNodes) {
 		return fmt.Errorf("invalid node index: %d", nodeIndex)
 	}
@@ -48,8 +92,8 @@ func (t *BlobSingleNodeTest) Run(cfg *config.Config) error {
 
 	fmt.Printf("📍 Target Node: %s (Index: %d)\n", nodeName, nodeIndex)
 	fmt.Printf("📍 Node Enode: %s\n", nodeEnode)
-	fmt.Printf("🧊 Blobs per transaction: %d\n", blobCfg.BlobCount)
-	fmt.Printf("📊 Total blob transactions: %d\n", blobCfg.TotalBlobTxs)
+	fmt.Printf("🧊 Blobs per transaction: %d\n", blobCount)
+	fmt.Printf("📊 Total blob transactions: %d\n", totalBlobTxs)
 	fmt.Println()
 
 	// Initialize KZG
@@ -69,48 +113,64 @@ func (t *BlobSingleNodeTest) Run(cfg *config.Config) error {
 	fmt.Printf("✅ Connected to %s\n", nodeName)
 	fmt.Println()
 
-	// Get account
+	// Get accounts with validation
 	if len(cfg.Accounts) == 0 {
 		return fmt.Errorf("no accounts configured")
 	}
-	fromAccount := cfg.Accounts[0]
-	toAccount := cfg.Accounts[1%len(cfg.Accounts)]
 
-	fmt.Printf("💼 From Account: %s\n", fromAccount.Address)
-	fmt.Printf("💼 To Account: %s\n", toAccount.Address)
+	// Validate and set default account indices
+	if fromAccountIndex < 0 || fromAccountIndex >= len(cfg.Accounts) {
+		if fromAccountIndex != 0 { // Only warn if explicitly set to invalid value
+			fmt.Printf("⚠️  Invalid from_account_index %d, using default 0\n", fromAccountIndex)
+		}
+		fromAccountIndex = 0
+	}
+
+	// Default toAccountIndex to 1 if not set, or use modulo to wrap around
+	if toAccountIndex <= 0 {
+		toAccountIndex = 1 % len(cfg.Accounts)
+	} else if toAccountIndex >= len(cfg.Accounts) {
+		fmt.Printf("⚠️  Invalid to_account_index %d (max: %d), wrapping around\n", toAccountIndex, len(cfg.Accounts)-1)
+		toAccountIndex = toAccountIndex % len(cfg.Accounts)
+	}
+
+	fromAccount := cfg.Accounts[fromAccountIndex]
+	toAccount := cfg.Accounts[toAccountIndex]
+
+	fmt.Printf("💼 From Account [%d]: %s\n", fromAccountIndex, fromAccount.Address)
+	fmt.Printf("💼 To Account [%d]: %s\n", toAccountIndex, toAccount.Address)
 	fmt.Println()
 
 	// Parse max fee per blob gas
-	maxFeePerBlobGas := new(big.Int)
-	if blobCfg.MaxFeePerBlobGas != "" {
-		if _, ok := maxFeePerBlobGas.SetString(blobCfg.MaxFeePerBlobGas, 10); !ok {
-			return fmt.Errorf("invalid max_fee_per_blob_gas: %s", blobCfg.MaxFeePerBlobGas)
+	maxFeePerBlobGasBig := new(big.Int)
+	if maxFeePerBlobGas != "" {
+		if _, ok := maxFeePerBlobGasBig.SetString(maxFeePerBlobGas, 10); !ok {
+			return fmt.Errorf("invalid max_fee_per_blob_gas: %s", maxFeePerBlobGas)
 		}
 	} else {
-		maxFeePerBlobGas = big.NewInt(1000000000) // 1 Gwei default
+		maxFeePerBlobGasBig = big.NewInt(2000000000) // 2 Gwei default
 	}
 
-	// Determine generator type
-	generatorType := blob.GeneratorRandom
-	if len(blobCfg.Scenarios) > 0 {
-		switch blobCfg.Scenarios[0] {
-		case "random":
-			generatorType = blob.GeneratorRandom
-		case "pattern":
-			generatorType = blob.GeneratorPattern
-		case "zero":
-			generatorType = blob.GeneratorZero
-		case "l2-data":
-			generatorType = blob.GeneratorL2Data
-		}
+	// Determine generator type from string
+	var genType blob.GeneratorType
+	switch generatorType {
+	case "random":
+		genType = blob.GeneratorRandom
+	case "pattern":
+		genType = blob.GeneratorPattern
+	case "zero":
+		genType = blob.GeneratorZero
+	case "l2-data":
+		genType = blob.GeneratorL2Data
+	default:
+		genType = blob.GeneratorRandom
 	}
 
 	fmt.Printf("🎲 Generator type: %s\n", generatorType)
-	fmt.Printf("💰 Max fee per blob gas: %s wei\n", maxFeePerBlobGas.String())
+	fmt.Printf("💰 Max fee per blob gas: %s wei\n", maxFeePerBlobGasBig.String())
 	fmt.Println()
 
 	// Resolve nonce (use blob-specific config or default to "auto")
-	nonceStr := blobCfg.SingleNodeNonce
 	if nonceStr == "" {
 		nonceStr = "auto" // default to auto
 	}
@@ -129,9 +189,8 @@ func (t *BlobSingleNodeTest) Run(cfg *config.Config) error {
 	fmt.Println()
 	successCount := 0
 	failCount := 0
-	totalTxs := blobCfg.TotalBlobTxs
-	if totalTxs == 0 {
-		totalTxs = 1
+	if totalBlobTxs == 0 {
+		totalBlobTxs = 1
 	}
 
 	// Collect transaction hashes for saving to file
@@ -139,25 +198,25 @@ func (t *BlobSingleNodeTest) Run(cfg *config.Config) error {
 
 	startTime := time.Now()
 
-	for i := 0; i < totalTxs; i++ {
-		fmt.Printf("📤 Transaction %d/%d (Nonce: %d)\n", i+1, totalTxs, nonce)
+	for i := 0; i < totalBlobTxs; i++ {
+		fmt.Printf("📤 Transaction %d/%d (Nonce: %d)\n", i+1, totalBlobTxs, nonce)
 
 		// Build blob transaction
 		builder := transaction.NewBlobTxBuilder(cfg.ChainID).
 			WithFrom(fromAccount).
 			WithTo(toAccount).
 			WithNonce(nonce).
-			WithMaxFeePerBlobGas(maxFeePerBlobGas)
+			WithMaxFeePerBlobGas(maxFeePerBlobGasBig)
 
 		// Generate and add blobs
-		fmt.Printf("   🧊 Generating %d blob(s)...\n", blobCfg.BlobCount)
-		for j := 0; j < blobCfg.BlobCount; j++ {
-			blobSize := blobCfg.BlobDataSize
+		fmt.Printf("   🧊 Generating %d blob(s)...\n", blobCount)
+		for j := 0; j < blobCount; j++ {
+			blobSize := blobDataSize
 			if blobSize == 0 {
 				blobSize = blob.BlobDataSize // 128 KB
 			}
 
-			blobData, err := blob.GenerateBlob(generatorType, blobSize)
+			blobData, err := blob.GenerateBlob(genType, blobSize)
 			if err != nil {
 				fmt.Printf("   ❌ Failed to generate blob %d: %v\n", j, err)
 				failCount++
@@ -174,7 +233,7 @@ func (t *BlobSingleNodeTest) Run(cfg *config.Config) error {
 			fmt.Printf("      Hash: %s\n", blobData.VersionedHash.Hex())
 		}
 
-		if builder.GetBlobCount() != blobCfg.BlobCount {
+		if builder.GetBlobCount() != blobCount {
 			fmt.Println("   ⚠️  Blob generation incomplete, skipping transaction")
 			continue
 		}
@@ -194,7 +253,7 @@ func (t *BlobSingleNodeTest) Run(cfg *config.Config) error {
 
 		// Send the transaction
 		opts := transaction.DefaultSendOptions()
-		opts.Verify = false // Skip immediate verification for speed
+		opts.Verify = true // Skip immediate verification for speed
 
 		txHash, err := transaction.SendBlob(client, blobTx, opts)
 		if err != nil {
@@ -210,8 +269,8 @@ func (t *BlobSingleNodeTest) Run(cfg *config.Config) error {
 		fmt.Println()
 
 		// Delay between transactions
-		if i < totalTxs-1 && blobCfg.SendInterval > 0 {
-			time.Sleep(time.Duration(blobCfg.SendInterval) * time.Millisecond)
+		if i < totalBlobTxs-1 && sendInterval > 0 {
+			time.Sleep(time.Duration(sendInterval) * time.Millisecond)
 		}
 	}
 
@@ -229,8 +288,8 @@ func (t *BlobSingleNodeTest) Run(cfg *config.Config) error {
 		fmt.Printf("📊 Average: %.2f tx/sec\n", float64(successCount)/duration.Seconds())
 	}
 
-	// Save transaction hashes to file
-	if len(txHashes) > 0 {
+	// Save transaction hashes to file (if enabled)
+	if saveHashes && len(txHashes) > 0 {
 		if err := utils.WriteHashesToFile(txHashes, cfg.Paths.TxHashes); err != nil {
 			fmt.Printf("⚠️  Warning: Failed to save transaction hashes: %v\n", err)
 		} else {

@@ -2,6 +2,7 @@ package transaction
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -228,7 +229,7 @@ func SendBlob(client *ethclient.Client, blobTx *blob.BlobTransaction, opts SendO
 	// For blob transactions, we need to send the transaction with blobs attached
 	// The go-ethereum library handles the sidecar encoding automatically
 	var err error
-	if opts.WaitForRecv || client.GetNodeName() == "reth" {
+	if opts.WaitForRecv || strings.Contains(client.GetNodeName(), "reth") {
 		err = suite.SendTxs([]*types.Transaction{blobTx.Tx})
 	} else {
 		err = suite.SendTxsWithoutRecv([]*types.Transaction{blobTx.Tx})

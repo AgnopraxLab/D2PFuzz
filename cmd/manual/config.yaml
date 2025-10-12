@@ -1,6 +1,11 @@
 # D2PFuzz Manual Testing Tool Configuration
 # This is a dedicated config file for the manual testing tool
 
+# Transaction Defaults
+chain_id: 3151908                # Chain ID for transactions (default: 3151908)
+default_gas_tip_cap: "1000000000"    # Default gas tip cap in wei (3 Gwei)
+default_gas_fee_cap: "20000000000"   # Default gas fee cap in wei (30 Gwei)
+
 # P2P Network Configuration
 p2p:
   jwt_secret: "0xdc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
@@ -15,11 +20,11 @@ p2p:
   
   # Bootstrap nodes (enode addresses)
   bootstrap_nodes:
-    - "enode://eef482b983920da6d08685a237500f87bbf8f0df277f221104d1821dac0362849dc7de0e59ac748147b49f5d2495bad5ad30e1a7519e98d8650b1064f54519a8@172.16.0.11:30303"
-    - "enode://03a51a55626a4cd5f3633b04a5b4090eeb52bf2a7f95c203bcfc8ffbce2b2e9a8cb890d2b2d36ddc9de3be7d97da14a3994fd3669e45daeb3a047e776a838f67@172.16.0.13:30303"
-    - "enode://b301441fdcaa669031ecb5481ea51b6417ef8c9e5cfc16773bfcd37ae3044c4d75cfb06208daa24d32faf873f8457a145a887a3386552dbf8c5770e18beb5e5f@172.16.0.14:30303"
-    - "enode://4acc4207d9fe767e56c9af28f70567e30ec8fd4e8c428bfa2029dc14a2819419ee0a06419e34af3cad6b5a4bf30d94ee1f94090c2654753fa9b1e369ef82a202@172.16.0.15:30303"
-    - "enode://bbdff23b06a172836e073378f558d00c17df1f1f647ee4576ae0c85ae8b9742a6feafa207ec67484d098f902553c956a9fa4e664661f1de92f53dc74363c4e10@172.16.0.12:30303"
+    - "enode://7b3dc532394f1eacfff000311ab1c4351749161201cccd7185d017abee5375344367836f0a949bd8c53a1ed96c2a357139044318338508d4886391bce460ab38@172.16.0.12:30303"
+    - "enode://42d2ee8c23f926b6adfb7ed770e6999f430436e7facde758d3dc89ac6a9aaf6e25f0c9202c04406a6ce4a638b42860ea17d21f7fe9f58b81868b4c467e4e4347@172.16.0.14:30303"
+    - "enode://5bc9f7a51bcab3b901589188935ac36e43df41faa50e8dcda664bc8ce9a6e6d4ad6d3a729b4fa459120731f4b359ab710de3b873357cb3e3a205c0422e59d1df@172.16.0.15:30303"
+    - "enode://5b75604bb320b3497f2b2238759454994d64abb2860262251ec1061a7360c8dc34927dadcb28f43b2b4013576a9a7941eff789682e4a3c05d3fcf90b0f85c375@172.16.0.16:30303"
+    - "enode://6524e20b1886ba98677733d73d7b35525739929c3f839869fad755af24018f01688b18eca97e9b29293960435af574f79501a20df1445b5f7c65efa9b5e2ea4f@172.16.0.13:30303"
 
 # File Paths Configuration
 paths:
@@ -28,8 +33,8 @@ paths:
 
 # Test Configuration
 test:
-  # Test mode: single/multi/test-soft-limit/test-soft-limit-single/test-soft-limit-report/GetPooledTxs/oneTransaction/largeTransactions/interactive/blob-single/blob-multi
-  mode: "multi"
+  # Test mode: single/multi/test-soft-limit/test-soft-limit-single/test-soft-limit-report/getPooledTxs/oneTransaction/largeTransactions/blob-single/blob-multi
+  mode: "blob-single"
   
   # Single node test settings
   single_node_index: 0          # Which node to test (0-4)
@@ -47,24 +52,28 @@ test:
   # GetPooledTxs test settings
   get_pooled_txs_node_index: 1  # Which node to test
   
-  # Blob transaction test settings (EIP-4844)
+  # Blob transaction test settings (EIP-4844) - LEGACY, kept for backward compatibility
   blob_test:
     # Basic configuration
     blob_count: 2                      # Number of blobs per transaction (1-6)
     blob_data_size: 131072             # Blob data size in bytes (128 KB standard)
-    max_fee_per_blob_gas: "1000000000" # Max fee per blob gas (1 Gwei)
+    max_fee_per_blob_gas: "2000000000" # Max fee per blob gas (2 Gwei)
     
     # Test scenarios: random, pattern, zero, l2-data
     scenarios:
-      - "random"
+      - "l2-data"
     
     # Node configuration
-    single_node_index: 0               # Node index for single-node test
+    single_node_index: 1              # Node index for single-node test
     multi_node_indices: [0, 1, 2]      # Node indices for multi-node test
     
     # Nonce configuration for blob tests
     single_node_nonce: "auto"          # "auto" or specific number
     multi_node_nonces: ["auto", "auto", "auto"]  # Per-node nonce values
+    
+    # Account configuration (for legacy blob_test config)
+    from_account_index: 0              # Index of sender account (default: 0)
+    to_account_index: 1                # Index of receiver account (default: 1)
     
     # Verification configuration
     verify_beacon_api: true           # Whether to verify via Beacon API
@@ -80,6 +89,94 @@ test:
   stress_test_duration_sec: 60       # Duration for stress test in seconds
   max_concurrent: 10                 # Max concurrent blob transactions
   fill_blobs: false                  # Fill all 6 blobs per transaction
+
+  # ============================================================================
+  # NEW PER-MODE CONFIGURATION SECTIONS (v2.0) - Preferred over legacy fields
+  # ============================================================================
+  
+  # Common test defaults (optional, applies to all modes)
+  common:
+    timeout_seconds: 60
+    retry_count: 3
+    delay_between_requests_ms: 100
+    
+  # Single-node test configuration (mode: "single")
+  # single_node:
+  #   node_index: 0
+  #   nonce: "auto"
+  #   batch_size: 5
+  #   account_strategy: "predefined"
+  #   from_account_index: 0
+  #   to_account_index: 5
+  #   verify_transactions: true
+  #   save_hashes: true
+  
+  # Multi-node test configuration (mode: "multi")
+  # multi_node:
+  #   batch_size: 2
+  #   nonces: ["auto", "auto", "auto", "auto", "auto"]
+  #   account_strategy: "predefined"
+  #   verify_transactions: true
+  #   save_hashes: true
+  #   parallel_execution: true
+  
+  # Blob single-node test configuration (mode: "blob-single")
+  blob_single:
+    node_index: 1
+    nonce: "auto"
+    blob_count: 3
+    blob_data_size: 131072
+    max_fee_per_blob_gas: "2000000000"
+    generator_type: "l2-data"
+    total_transactions: 3
+    send_interval_ms: 50
+    verify_transactions: false
+    save_hashes: true
+    from_account_index: 0  # Index of sender account in accounts array (default: 0)
+    to_account_index: 5    # Index of receiver account in accounts array (default: 1)
+  
+  # Blob multi-node test configuration (mode: "blob-multi")
+  # blob_multi:
+  #   node_indices: [0, 1, 2]
+  #   nonces: ["auto", "auto", "auto"]
+  #   blob_count: 2
+  #   blob_data_size: 131072
+  #   max_fee_per_blob_gas: "1000000000"
+  #   generator_type: "random"
+  #   total_transactions: 30
+  #   send_interval_ms: 100
+  #   parallel_execution: true
+  #   verify_transactions: false
+  #   save_hashes: true
+  
+  # GetPooledTxs test configuration (mode: "GetPooledTxs")
+  # get_pooled_txs:
+  #   node_index: 1
+  #   hash_file_path: "./tx_hashes.txt"
+  #   fallback_file_path: "./txhashes.txt"
+  #   verify_hashes: true
+  #   print_results: true
+  
+  # One transaction test configuration (mode: "oneTransaction")
+  # one_transaction:
+  #   node_index: 0
+  #   nonce: "auto"
+  #   from_account_index: 0
+  #   to_account_index: 5
+  #   value: "1"
+  #   verify_in_pool: true
+  #   print_transaction: true
+  
+  # Large transactions test configuration (mode: "largeTransactions")
+  large_transactions:
+    node_index: 4
+    transaction_count: 10000
+    nonce_start: "auto"
+    from_account_index: 4
+    to_account_index: 9
+    value: "1"
+    save_hashes: true
+    batch_send: true
 
 # Accounts Configuration
 accounts:

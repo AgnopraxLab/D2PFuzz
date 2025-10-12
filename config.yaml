@@ -1,5 +1,10 @@
 # D2PFuzz Configuration File
 
+# Transaction Defaults
+chain_id: 3151908                    # Chain ID for transactions (default: 3151908)
+default_gas_tip_cap: "3000000000"    # Default gas tip cap in wei (3 Gwei)
+default_gas_fee_cap: "30000000000"   # Default gas fee cap in wei (30 Gwei)
+
 # Server Configuration
 server:
   host: "localhost"
@@ -88,7 +93,7 @@ paths:
 
 # Manual Test Configuration  
 test:
-  mode: "single"  # single/multi/test-soft-limit/test-soft-limit-single/test-soft-limit-report/GetPooledTxs/oneTransaction/largeTransactions/interactive
+  mode: "single"  # single/multi/test-soft-limit/test-soft-limit-single/test-soft-limit-report/GetPooledTxs/oneTransaction/largeTransactions
   single_node_index: 4
   single_node_nonce: 1
   single_node_batch_size: 1

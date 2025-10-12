@@ -64,7 +64,6 @@ A command-line tool for testing Ethereum P2P nodes.
 - Multi-node testing - Test all configured nodes simultaneously
 - Soft limit testing - Validate NewPooledTransactionHashes soft limit implementation
 - GetPooledTransactions testing - Test transaction pool queries
-- Interactive mode - Runtime test selection
 
 #### Quick Start
 
@@ -112,7 +111,6 @@ test:
 | `GetPooledTxs` | Test GetPooledTransactions protocol |
 | `oneTransaction` | Send a single transaction |
 | `largeTransactions` | Send large batch of transactions |
-| `interactive` | Interactive test selection |
 
 #### Configuration
 

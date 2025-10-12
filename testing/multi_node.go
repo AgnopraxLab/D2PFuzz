@@ -30,9 +30,22 @@ func (t *MultiNodeTest) Run(cfg *config.Config) error {
 	fmt.Println("=== D2PFuzz Multi-Node Testing Tool ===")
 	fmt.Println("🚀 Starting multi-node testing...")
 
-	// Get test parameters from config
-	batchSize := cfg.Test.MultiNodeBatchSize
-	nodeNonceStrs := cfg.Test.MultiNodeNonces
+	// Get test parameters from config - prefer new MultiNode section, fallback to legacy
+	var batchSize int
+	var nodeNonceStrs []string
+	var saveHashes bool
+
+	if cfg.Test.MultiNode.BatchSize > 0 { // New config section detected
+		batchSize = cfg.Test.MultiNode.BatchSize
+		nodeNonceStrs = cfg.Test.MultiNode.Nonces
+		saveHashes = cfg.Test.MultiNode.SaveHashes
+		fmt.Println("📋 Using new multi_node configuration section")
+	} else { // Fallback to legacy fields
+		batchSize = cfg.Test.MultiNodeBatchSize
+		nodeNonceStrs = cfg.Test.MultiNodeNonces
+		saveHashes = true // default
+		fmt.Println("📋 Using legacy configuration fields")
+	}
 
 	// Ensure nonce string list has sufficient length (default to "auto")
 	for len(nodeNonceStrs) < cfg.GetNodeCount() {
@@ -132,9 +145,11 @@ func (t *MultiNodeTest) Run(cfg *config.Config) error {
 				break
 			}
 
-			// Write transaction hash to file
-			if err := utils.AppendHashToFile(hashFilePath, txHash); err != nil {
-				fmt.Printf(" ⚠️ Failed to write hash to file: %v", err)
+			// Write transaction hash to file (if enabled)
+			if saveHashes {
+				if err := utils.AppendHashToFile(hashFilePath, txHash); err != nil {
+					fmt.Printf(" ⚠️ Failed to write hash to file: %v", err)
+				}
 			}
 
 			// Increment nonce for this node after successful transaction

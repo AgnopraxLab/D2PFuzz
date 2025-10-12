@@ -75,23 +75,21 @@ for node_type in "${!NODE_RPC_MAP[@]}"; do
     NODES["$node_type"]="${NODE_RPC_MAP[$node_type]}"
 done
 
-# If NODE_RPC_MAP is empty, build from known endpoints with default mapping
+# If NODE_RPC_MAP is empty, use RPC_ENDPOINTS array from rpc_config.sh
 if [[ ${#NODES[@]} -eq 0 ]]; then
-    # Fallback: try common node endpoints
-    declare -A POTENTIAL_NODES=(
-        ["geth"]="http://172.16.0.11:8545"
-        ["nethermind"]="http://172.16.0.13:8545"
-        ["reth"]="http://172.16.0.14:8545"
-        ["erigon"]="http://172.16.0.15:8545"
-        ["besu"]="http://172.16.0.12:8545"
-    )
-    
-    for node_type in "${!POTENTIAL_NODES[@]}"; do
-        NODES["$node_type"]="${POTENTIAL_NODES[$node_type]}"
-    done
-    
-    echo -e "${YELLOW}Warning: Using fallback node list (rpc_config.sh might be empty)${NC}"
-    echo ""
+    # Fallback: use endpoints from RPC_ENDPOINTS array
+    if [[ ${#RPC_ENDPOINTS[@]} -gt 0 ]]; then
+        index=0
+        for endpoint in "${RPC_ENDPOINTS[@]}"; do
+            NODES["node-$index"]="$endpoint"
+            ((index++))
+        done
+        echo -e "${YELLOW}Warning: NODE_RPC_MAP is empty, using RPC_ENDPOINTS from rpc_config.sh${NC}"
+        echo ""
+    else
+        echo -e "${RED}Error: No RPC endpoints available in rpc_config.sh${NC}"
+        exit 1
+    fi
 fi
 
 check_tx_on_node() {
