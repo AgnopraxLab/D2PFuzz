@@ -59,7 +59,7 @@ func GetNonceWithRetry(client *ethclient.Client, address common.Address, maxRetr
 
 	for i := 0; i < maxRetries; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), NonceRetryTimeout)
-		nonce, err = rpcClient.PendingNonceAt(ctx, address)
+		nonce, err = rpcClient.NonceAt(ctx, address, nil)
 		cancel()
 
 		if err == nil {

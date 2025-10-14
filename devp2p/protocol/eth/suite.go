@@ -993,6 +993,10 @@ func makeSidecar(data ...byte) *types.BlobTxSidecar {
 	return types.NewBlobTxSidecar(types.BlobSidecarVersion0, blobs, commitments, proofs)
 }
 
+func MakeSidecar(data ...byte) *types.BlobTxSidecar {
+	return makeSidecar(data...)
+}
+
 func (s *Suite) makeBlobTxs(count, blobs int, discriminator byte) (txs types.Transactions) {
 	from, nonce := s.chain.GetSender(5)
 	for i := 0; i < count; i++ {

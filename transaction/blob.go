@@ -7,25 +7,28 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/holiman/uint256"
 
 	"D2PFuzz/blob"
 	"D2PFuzz/config"
+	ethtest "D2PFuzz/devp2p/protocol/eth"
 )
 
 // BlobTxBuilder provides a fluent interface for building blob transactions
 type BlobTxBuilder struct {
 	// Base transaction options
-	from      config.Account
-	to        config.Account
-	nonce     uint64
-	value     *big.Int
-	gasTipCap *big.Int
-	gasFeeCap *big.Int
-	gas       uint64
-	data      []byte
-	chainID   *big.Int
+	from          config.Account
+	to            config.Account
+	nonce         uint64
+	value         *big.Int
+	gasTipCap     *big.Int
+	gasFeeCap     *big.Int
+	gas           uint64
+	data          []byte
+	chainID       *big.Int
+	count         int
+	blobsCount    int
+	discriminator byte
 
 	// Blob specific options
 	blobs            []*blob.BlobData
@@ -41,6 +44,9 @@ func NewBlobTxBuilder(chainID *big.Int) *BlobTxBuilder {
 		gasFeeCap:        big.NewInt(30000000000), // 30 Gwei
 		maxFeePerBlobGas: big.NewInt(1000000000),  // 1 Gwei
 		chainID:          chainID,
+		count:            2,   // hard code for now
+		blobsCount:       3,   // hard code for now
+		discriminator:    0x1, // hard code for now
 		blobs:            make([]*blob.BlobData, 0),
 	}
 }
@@ -150,7 +156,7 @@ func (b *BlobTxBuilder) AddRandomBlobs(count int) error {
 }
 
 // Build creates and signs the blob transaction
-func (b *BlobTxBuilder) Build() (*blob.BlobTransaction, error) {
+func (b *BlobTxBuilder) Build() (txs types.Transactions, err error) {
 	// Validate we have at least one blob
 	if len(b.blobs) == 0 {
 		return nil, fmt.Errorf("at least one blob is required")
@@ -167,63 +173,90 @@ func (b *BlobTxBuilder) Build() (*blob.BlobTransaction, error) {
 	for i, blobData := range b.blobs {
 		versionedHashes[i] = blobData.VersionedHash
 	}
+	txs = make([]*types.Transaction, 0)
+	//==========================================
+	for i := 0; i < b.count; i++ {
+		// Make blob data, max of 2 blobs per tx.
+		blobdata := make([]byte, b.blobsCount%3)
+		for j := range blobdata {
+			blobdata[j] = b.discriminator
+			b.blobsCount -= 1
+		}
+		inner := &types.BlobTx{
+			ChainID:    uint256.MustFromBig(b.chainID),
+			Nonce:      b.nonce + uint64(i),
+			GasTipCap:  uint256.MustFromBig(b.gasTipCap),
+			GasFeeCap:  uint256.MustFromBig(b.gasFeeCap),
+			Gas:        b.gas,
+			BlobFeeCap: uint256.MustFromBig(b.maxFeePerBlobGas),
+			BlobHashes: ethtest.MakeSidecar(blobdata...).BlobHashes(),
+			Sidecar:    ethtest.MakeSidecar(blobdata...),
+		}
+		tx, err := types.SignTx(types.NewTx(inner), types.NewCancunSigner(b.chainID), privateKey)
+		if err != nil {
+			panic("blob tx signing failed")
+		}
+		txs = append(txs, tx)
+	}
+
+	//==========================================
 
 	// Build the transaction
-	toAddr := common.HexToAddress(b.to.Address)
-	tx := types.NewTx(&types.BlobTx{
-		ChainID:    uint256.MustFromBig(b.chainID),
-		Nonce:      b.nonce,
-		GasTipCap:  uint256.MustFromBig(b.gasTipCap),
-		GasFeeCap:  uint256.MustFromBig(b.gasFeeCap),
-		Gas:        b.gas,
-		To:         toAddr,
-		Value:      uint256.MustFromBig(b.value),
-		Data:       b.data,
-		BlobFeeCap: uint256.MustFromBig(b.maxFeePerBlobGas),
-		BlobHashes: versionedHashes,
-	})
+	// toAddr := common.HexToAddress(b.to.Address)
+	// tx := types.NewTx(&types.BlobTx{
+	// 	ChainID:    uint256.MustFromBig(b.chainID),
+	// 	Nonce:      b.nonce,
+	// 	GasTipCap:  uint256.MustFromBig(b.gasTipCap),
+	// 	GasFeeCap:  uint256.MustFromBig(b.gasFeeCap),
+	// 	Gas:        b.gas,
+	// 	To:         toAddr,
+	// 	Value:      uint256.MustFromBig(b.value),
+	// 	Data:       b.data,
+	// 	BlobFeeCap: uint256.MustFromBig(b.maxFeePerBlobGas),
+	// 	BlobHashes: versionedHashes,
+	// })
 
-	// Sign the transaction
-	signer := types.NewCancunSigner(b.chainID)
-	signedTx, err := types.SignTx(tx, signer, privateKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign transaction: %w", err)
-	}
+	// // Sign the transaction
+	// signer := types.NewCancunSigner(b.chainID)
+	// signedTx, err := types.SignTx(tx, signer, privateKey)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("failed to sign transaction: %w", err)
+	// }
 
 	// Create sidecar for network transmission
 	// Note: All blobs share a single sidecar structure
-	blobs := make([]kzg4844.Blob, len(b.blobs))
-	commitments := make([]kzg4844.Commitment, len(b.blobs))
-	proofs := make([]kzg4844.Proof, len(b.blobs))
+	// blobs = make([]kzg4844.Blob, len(b.blobs))
+	// commitments := make([]kzg4844.Commitment, len(b.blobs))
+	// proofs := make([]kzg4844.Proof, len(b.blobs))
 
-	for i, blobData := range b.blobs {
-		blobs[i] = blobData.Blob
-		commitments[i] = blobData.Commitment
-		proofs[i] = blobData.Proof
-	}
+	// for i, blobData := range b.blobs {
+	// 	blobs[i] = blobData.Blob
+	// 	commitments[i] = blobData.Commitment
+	// 	proofs[i] = blobData.Proof
+	// }
 
-	sidecar := &types.BlobTxSidecar{
-		Blobs:       blobs,
-		Commitments: commitments,
-		Proofs:      proofs,
-	}
+	// sidecar := &types.BlobTxSidecar{
+	// 	Blobs:       blobs,
+	// 	Commitments: commitments,
+	// 	Proofs:      proofs,
+	// }
 
-	// Attach sidecar to the signed transaction
-	// This is CRITICAL for blob transactions to be recognized as Type-3
-	signedTx = signedTx.WithBlobTxSidecar(sidecar)
+	// // Attach sidecar to the signed transaction
+	// // This is CRITICAL for blob transactions to be recognized as Type-3
+	// signedTx = signedTx.WithBlobTxSidecar(sidecar)
 
-	blobTx := &blob.BlobTransaction{
-		Tx:       signedTx,
-		Blobs:    b.blobs,
-		Sidecars: []types.BlobTxSidecar{*sidecar},
-	}
+	// blobTx := &blob.BlobTransaction{
+	// 	Tx:       signedTx,
+	// 	Blobs:    b.blobs,
+	// 	Sidecars: []types.BlobTxSidecar{*sidecar},
+	// }
 
-	// Validate the complete blob transaction
-	if err := blob.ValidateBlobTransaction(blobTx); err != nil {
-		return nil, fmt.Errorf("blob transaction validation failed: %w", err)
-	}
+	// // Validate the complete blob transaction
+	// if err := blob.ValidateBlobTransaction(blobTx); err != nil {
+	// 	return nil, fmt.Errorf("blob transaction validation failed: %w", err)
+	// }
 
-	return blobTx, nil
+	return txs, nil
 }
 
 // BuildUnsigned creates an unsigned blob transaction
@@ -276,7 +309,7 @@ func CreateSimpleBlobTransaction(
 	nonce uint64,
 	blobCount int,
 	chainID *big.Int,
-) (*blob.BlobTransaction, error) {
+) (types.Transactions, error) {
 	builder := NewBlobTxBuilder(chainID).
 		WithFrom(from).
 		WithTo(to).
@@ -287,5 +320,9 @@ func CreateSimpleBlobTransaction(
 		return nil, fmt.Errorf("failed to add blobs: %w", err)
 	}
 
-	return builder.Build()
+	tx, err := builder.Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build blob transaction: %w", err)
+	}
+	return tx, nil
 }

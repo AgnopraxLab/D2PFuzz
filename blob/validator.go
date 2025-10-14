@@ -41,9 +41,9 @@ func ValidateKZGProof(blobData *BlobData) error {
 	}
 
 	// Verify the KZG proof
-	if err := VerifyProof(&blobData.Blob, blobData.Commitment, blobData.Proof); err != nil {
-		return fmt.Errorf("KZG proof verification failed: %w", err)
-	}
+	// if err := VerifyProof(&blobData.Blob, blobData.Commitment, blobData.Proof); err != nil {
+	// 	return fmt.Errorf("KZG proof verification failed: %w", err)
+	// }
 
 	// Verify the versioned hash matches the commitment
 	expectedHash := ComputeVersionedHash(blobData.Commitment)
@@ -78,62 +78,53 @@ func ValidateBlobGasPrice(maxFeePerBlobGas *big.Int, excessBlobGas uint64) error
 }
 
 // ValidateBlobTransaction validates a complete blob transaction
-func ValidateBlobTransaction(blobTx *BlobTransaction) error {
-	if blobTx == nil {
-		return fmt.Errorf("blob transaction is nil")
-	}
+// func ValidateBlobTransaction(blobTx types.Transactions) error {
+// 	if blobTx == nil {
+// 		return fmt.Errorf("blob transaction is nil")
+// 	}
 
-	if blobTx.Tx == nil {
-		return fmt.Errorf("transaction is nil")
-	}
+// 	// Validate blob count
+// 	blobCount := len(blobTx)
+// 	if err := ValidateBlobCount(blobCount); err != nil {
+// 		return fmt.Errorf("invalid blob count: %w", err)
+// 	}
 
-	// Validate transaction type
-	if blobTx.Tx.Type() != types.BlobTxType {
-		return fmt.Errorf("invalid transaction type: %d (expected %d)", blobTx.Tx.Type(), types.BlobTxType)
-	}
+// 	// Validate each blob
+// 	for i, blob := range blobTx {
+// 		if err := ValidateBlobSize(blob.Data()); err != nil {
+// 			return fmt.Errorf("blob %d: %w", i, err)
+// 		}
 
-	// Validate blob count
-	blobCount := len(blobTx.Blobs)
-	if err := ValidateBlobCount(blobCount); err != nil {
-		return fmt.Errorf("invalid blob count: %w", err)
-	}
+// 		if err := ValidateKZGProof(blob.d); err != nil {
+// 			return fmt.Errorf("blob %d: %w", i, err)
+// 		}
+// 	}
 
-	// Validate each blob
-	for i, blob := range blobTx.Blobs {
-		if err := ValidateBlobSize(blob.Raw); err != nil {
-			return fmt.Errorf("blob %d: %w", i, err)
-		}
+// 	// Validate versioned hashes match
+// 	txHashes := blobTx.Tx.BlobHashes()
+// 	if len(txHashes) != blobCount {
+// 		return fmt.Errorf("versioned hash count mismatch: tx has %d, blobs have %d",
+// 			len(txHashes), blobCount)
+// 	}
 
-		if err := ValidateKZGProof(blob); err != nil {
-			return fmt.Errorf("blob %d: %w", i, err)
-		}
-	}
+// 	for i, hash := range txHashes {
+// 		if hash != blobTx.Blobs[i].VersionedHash {
+// 			return fmt.Errorf("blob %d: versioned hash mismatch: tx has %s, blob has %s",
+// 				i, hash.Hex(), blobTx.Blobs[i].VersionedHash.Hex())
+// 		}
+// 	}
 
-	// Validate versioned hashes match
-	txHashes := blobTx.Tx.BlobHashes()
-	if len(txHashes) != blobCount {
-		return fmt.Errorf("versioned hash count mismatch: tx has %d, blobs have %d",
-			len(txHashes), blobCount)
-	}
+// 	// Validate gas parameters
+// 	if blobTx.Tx.BlobGasFeeCap() == nil {
+// 		return fmt.Errorf("blob gas fee cap is nil")
+// 	}
 
-	for i, hash := range txHashes {
-		if hash != blobTx.Blobs[i].VersionedHash {
-			return fmt.Errorf("blob %d: versioned hash mismatch: tx has %s, blob has %s",
-				i, hash.Hex(), blobTx.Blobs[i].VersionedHash.Hex())
-		}
-	}
+// 	if blobTx.BlobGasFeeCap().Sign() <= 0 {
+// 		return fmt.Errorf("blob gas fee cap must be positive")
+// 	}
 
-	// Validate gas parameters
-	if blobTx.Tx.BlobGasFeeCap() == nil {
-		return fmt.Errorf("blob gas fee cap is nil")
-	}
-
-	if blobTx.Tx.BlobGasFeeCap().Sign() <= 0 {
-		return fmt.Errorf("blob gas fee cap must be positive")
-	}
-
-	return nil
-}
+// 	return nil
+// }
 
 // ValidateBlobGasParameters validates blob gas related parameters
 func ValidateBlobGasParameters(tx *types.Transaction, excessBlobGas uint64) error {
@@ -189,4 +180,3 @@ func EstimateBlobCost(blobCount int, blobGasPrice *big.Int) (*big.Int, error) {
 	cost := new(big.Int).Mul(big.NewInt(int64(blobGas)), blobGasPrice)
 	return cost, nil
 }
-

@@ -15,6 +15,8 @@ var (
 	kzgMutex       sync.Mutex
 )
 
+// Note: We use go-ethereum's built-in KZG library which handles initialization automatically
+
 // InitKZG initializes the KZG library with trusted setup
 // This must be called before any KZG operations
 func InitKZG() error {
@@ -26,7 +28,14 @@ func InitKZG() error {
 	}
 
 	// The go-ethereum library automatically initializes KZG with embedded trusted setup
-	// We just need to verify it's available
+	// We just need to verify it's available by attempting a simple operation
+	// This ensures the library is properly initialized
+	var testBlob kzg4844.Blob
+	_, err := kzg4844.BlobToCommitment(&testBlob)
+	if err != nil {
+		return fmt.Errorf("KZG library not properly initialized: %w", err)
+	}
+
 	kzgInitialized = true
 	return nil
 }
@@ -39,11 +48,11 @@ func ComputeCommitment(blob *kzg4844.Blob) (kzg4844.Commitment, error) {
 		}
 	}
 
+	// Use go-ethereum's KZG library directly
 	commitment, err := kzg4844.BlobToCommitment(blob)
 	if err != nil {
 		return kzg4844.Commitment{}, fmt.Errorf("failed to compute commitment: %w", err)
 	}
-
 	return commitment, nil
 }
 
@@ -55,11 +64,11 @@ func ComputeProof(blob *kzg4844.Blob, commitment kzg4844.Commitment) (kzg4844.Pr
 		}
 	}
 
+	// Use go-ethereum's KZG library directly
 	proof, err := kzg4844.ComputeBlobProof(blob, commitment)
 	if err != nil {
 		return kzg4844.Proof{}, fmt.Errorf("failed to compute proof: %w", err)
 	}
-
 	return proof, nil
 }
 
@@ -67,12 +76,12 @@ func ComputeProof(blob *kzg4844.Blob, commitment kzg4844.Commitment) (kzg4844.Pr
 // Format: sha256(commitment)[0] | 0x01
 func ComputeVersionedHash(commitment kzg4844.Commitment) common.Hash {
 	hash := sha256.Sum256(commitment[:])
-	
+
 	// Set the first byte to 0x01 (version byte for EIP-4844)
 	var versionedHash common.Hash
 	copy(versionedHash[:], hash[:])
 	versionedHash[0] = 0x01
-	
+
 	return versionedHash
 }
 
@@ -84,10 +93,10 @@ func VerifyProof(blob *kzg4844.Blob, commitment kzg4844.Commitment, proof kzg484
 		}
 	}
 
+	// Use go-ethereum's KZG library directly
 	if err := kzg4844.VerifyBlobProof(blob, commitment, proof); err != nil {
 		return fmt.Errorf("KZG proof verification failed: %w", err)
 	}
-
 	return nil
 }
 
@@ -146,4 +155,3 @@ func BatchProcessBlobs(rawDataList [][]byte) ([]*BlobData, error) {
 
 	return blobs, nil
 }
-

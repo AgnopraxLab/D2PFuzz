@@ -1,13 +1,16 @@
 package testing
 
 import (
+	"context"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
+	gethclient "github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
 	"D2PFuzz/config"
@@ -179,6 +182,15 @@ func (t *LargeTransactionsTest) Run(cfg *config.Config) error {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
 
+	// Prepare RPC client for chain queries (block numbers, headers, receipts)
+	nodeIP := client.GetNodeIP()
+	rpcURL := fmt.Sprintf("http://%s:8545", nodeIP)
+	rpcClient, err := gethclient.Dial(rpcURL)
+	if err != nil {
+		return fmt.Errorf("failed to connect RPC at %s: %w", rpcURL, err)
+	}
+	defer rpcClient.Close()
+
 	// Resolve nonce (auto or specific value)
 	fromAddress := common.HexToAddress(config.PredefinedAccounts[fromAccountIndex].Address)
 	nonce, err := utils.ResolveNonce(client, nonceStr, fromAddress)
@@ -218,6 +230,17 @@ func (t *LargeTransactionsTest) Run(cfg *config.Config) error {
 	var to common.Address = common.HexToAddress(config.PredefinedAccounts[toAccountIndex].Address)
 
 	fmt.Printf("\n📝 Generating %d transactions...\n", count)
+
+	// Record start block height before sending
+	{
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		startBlock, err := rpcClient.BlockNumber(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get start block number: %w", err)
+		}
+		fmt.Printf("📍 Sending at block height: %d\n", startBlock)
+	}
 	for i := 0; i < count; i++ {
 		inner := &types.DynamicFeeTx{
 			ChainID:   cfg.ChainID,
@@ -250,6 +273,109 @@ func (t *LargeTransactionsTest) Run(cfg *config.Config) error {
 		fmt.Printf("First transaction hash: %s\n", hashes[0].Hex())
 		if len(hashes) > 1 {
 			fmt.Printf("Last transaction hash:  %s\n", hashes[len(hashes)-1].Hex())
+		}
+	}
+
+	// Poll receipts and print periodic tip height
+	{
+		confirmedAt := make(map[common.Hash]uint64, len(hashes))
+		remaining := make(map[common.Hash]struct{}, len(hashes))
+		for _, h := range hashes {
+			remaining[h] = struct{}{}
+		}
+
+		pollInterval := 2 * time.Second
+		maxWait := 2 * time.Minute
+		deadline := time.Now().Add(maxWait)
+
+		for {
+			if len(remaining) == 0 || time.Now().After(deadline) {
+				break
+			}
+
+			// Print current tip height
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			tip, err := rpcClient.BlockNumber(ctx)
+			cancel()
+			if err == nil {
+				fmt.Printf("🔎 Query tip height: %d (confirmed %d/%d)\n", tip, len(confirmedAt), len(hashes))
+			}
+
+			// Check receipts for remaining hashes
+			for h := range remaining {
+				ctxR, cancelR := context.WithTimeout(context.Background(), 8*time.Second)
+				rec, err := rpcClient.TransactionReceipt(ctxR, h)
+				cancelR()
+				if err == nil && rec != nil && rec.BlockNumber != nil {
+					confirmedAt[h] = rec.BlockNumber.Uint64()
+					delete(remaining, h)
+				}
+			}
+
+			time.Sleep(pollInterval)
+		}
+
+		// Compute per-block gas utilization if we have any confirmations
+		var (
+			minBlock    uint64
+			maxBlock    uint64
+			initialized bool
+		)
+		for _, b := range confirmedAt {
+			if !initialized || b < minBlock {
+				minBlock = b
+			}
+			if !initialized || b > maxBlock {
+				maxBlock = b
+			}
+			initialized = true
+		}
+
+		// If none confirmed, we still can show latest tip and exit
+		if !initialized {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			tip, _ := rpcClient.BlockNumber(ctx)
+			cancel()
+			fmt.Printf("⚠ No receipts within wait window. Confirmed 0/%d. Tip: %d\n", len(hashes), tip)
+		} else {
+			// Determine start block (re-query to be precise around send time window)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			startBlock, err := rpcClient.BlockNumber(ctx)
+			cancel()
+			if err != nil {
+				startBlock = minBlock // fallback
+			}
+
+			// For reporting, use the send-time start block previously printed is approximate.
+			// Iterate from startBlock to maxBlock to report gas utilization
+			fmt.Printf("\n📊 Block gas utilization from %d to %d:\n", startBlock, maxBlock)
+			fullThreshold := 0.98
+			for b := startBlock; b <= maxBlock; b++ {
+				ctxH, cancelH := context.WithTimeout(context.Background(), 6*time.Second)
+				header, err := rpcClient.HeaderByNumber(ctxH, new(big.Int).SetUint64(b))
+				cancelH()
+				if err != nil || header == nil {
+					fmt.Printf("  #%d: (failed to fetch header)\n", b)
+					continue
+				}
+				gasUsed := header.GasUsed
+				gasLimit := header.GasLimit
+				util := float64(gasUsed) / float64(gasLimit)
+				fullMark := ""
+				if util >= fullThreshold {
+					fullMark = " (full)"
+				}
+				fmt.Printf("  #%d: GasUsed %d / GasLimit %d (%.2f%%%s)\n", b, gasUsed, gasLimit, util*100.0, fullMark)
+			}
+
+			// Summarize confirmations
+			allConfirmed := len(confirmedAt) == len(hashes)
+			if allConfirmed {
+				blocksUsed := int64(maxBlock) - int64(startBlock) + 1
+				fmt.Printf("\n✅ All %d transactions confirmed by block %d (span: %d blocks)\n", len(hashes), maxBlock, blocksUsed)
+			} else {
+				fmt.Printf("\nℹ Confirmed %d/%d transactions by block %d\n", len(confirmedAt), len(hashes), maxBlock)
+			}
 		}
 	}
 

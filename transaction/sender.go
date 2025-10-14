@@ -9,7 +9,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 
-	"D2PFuzz/blob"
 	"D2PFuzz/ethclient"
 )
 
@@ -205,34 +204,35 @@ func Query(client *ethclient.Client, txHashes []common.Hash) ([]*types.Transacti
 
 // SendBlob sends a blob transaction to the client
 // Note: Blob transactions require special handling as they include sidecars
-func SendBlob(client *ethclient.Client, blobTx *blob.BlobTransaction, opts SendOptions) (common.Hash, error) {
-	if blobTx == nil || blobTx.Tx == nil {
+func SendBlob(client *ethclient.Client, blobTx types.Transactions, opts SendOptions) (common.Hash, error) {
+	if blobTx == nil {
 		return common.Hash{}, fmt.Errorf("blob transaction is nil")
 	}
 
 	// Validate blob transaction
-	if err := blob.ValidateBlobTransaction(blobTx); err != nil {
-		return common.Hash{}, fmt.Errorf("blob transaction validation failed: %w", err)
-	}
+	// if err := blob.ValidateBlobTransaction(blobTx); err != nil {
+	// 	return common.Hash{}, fmt.Errorf("blob transaction validation failed: %w", err)
+	// }
 
 	// Debug: Check if transaction has sidecar
-	if blobTx.Tx.BlobTxSidecar() == nil {
+	if blobTx[0].BlobTxSidecar() == nil {
 		fmt.Printf("⚠️  WARNING: Blob transaction has NO sidecar attached!\n")
 	} else {
-		sidecar := blobTx.Tx.BlobTxSidecar()
+		sidecar := blobTx[0].BlobTxSidecar()
 		fmt.Printf("🔍 DEBUG: Blob transaction has sidecar with %d blob(s)\n", len(sidecar.Blobs))
 	}
 
-	txHash := blobTx.Tx.Hash()
+	// TODO: check if this is correct
+	txHash := blobTx[0].Hash()
 	suite := client.GetSuite()
 
 	// For blob transactions, we need to send the transaction with blobs attached
 	// The go-ethereum library handles the sidecar encoding automatically
 	var err error
 	if opts.WaitForRecv || strings.Contains(client.GetNodeName(), "reth") {
-		err = suite.SendTxs([]*types.Transaction{blobTx.Tx})
+		err = suite.SendTxs(blobTx)
 	} else {
-		err = suite.SendTxsWithoutRecv([]*types.Transaction{blobTx.Tx})
+		err = suite.SendTxsWithoutRecv(blobTx)
 	}
 
 	if err != nil {
@@ -250,24 +250,24 @@ func SendBlob(client *ethclient.Client, blobTx *blob.BlobTransaction, opts SendO
 }
 
 // SendBlobBatch sends multiple blob transactions in batch
-func SendBlobBatch(client *ethclient.Client, blobTxs []*blob.BlobTransaction, opts SendOptions) ([]common.Hash, error) {
+func SendBlobBatch(client *ethclient.Client, blobTxs types.Transactions, opts SendOptions) ([]common.Hash, error) {
 	if len(blobTxs) == 0 {
 		return nil, nil
 	}
 
 	// Validate all blob transactions
-	for i, blobTx := range blobTxs {
-		if err := blob.ValidateBlobTransaction(blobTx); err != nil {
-			return nil, fmt.Errorf("blob transaction %d validation failed: %w", i, err)
-		}
-	}
+	// for i, blobTx := range blobTxs {
+	// 	if err := blob.ValidateBlobTransaction(blobTx); err != nil {
+	// 		return nil, fmt.Errorf("blob transaction %d validation failed: %w", i, err)
+	// 	}
+	// }
 
 	// Extract regular transactions
 	txs := make([]*types.Transaction, len(blobTxs))
 	hashes := make([]common.Hash, len(blobTxs))
 	for i, blobTx := range blobTxs {
-		txs[i] = blobTx.Tx
-		hashes[i] = blobTx.Tx.Hash()
+		txs[i] = blobTx
+		hashes[i] = blobTx.Hash()
 	}
 
 	// Send using batch method
@@ -294,7 +294,7 @@ func SendBlobBatch(client *ethclient.Client, blobTxs []*blob.BlobTransaction, op
 }
 
 // SendBlobWithoutVerify sends a blob transaction without verification (faster)
-func SendBlobWithoutVerify(client *ethclient.Client, blobTx *blob.BlobTransaction) (common.Hash, error) {
+func SendBlobWithoutVerify(client *ethclient.Client, blobTx types.Transactions) (common.Hash, error) {
 	opts := DefaultSendOptions()
 	opts.Verify = false
 	return SendBlob(client, blobTx, opts)

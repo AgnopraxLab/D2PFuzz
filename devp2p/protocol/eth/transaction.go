@@ -174,7 +174,7 @@ func (s *Suite) SendTxs(txs []*types.Transaction) error {
 				BlockHeadersRequest: headers.BlockHeadersRequest,
 			})
 		default:
-			// return fmt.Errorf("unexpected eth wire msg: %s", pretty.Sdump(msg))
+			return fmt.Errorf("unexpected eth wire msg: %s", pretty.Sdump(msg))
 		}
 
 		// Check if all txs received.
