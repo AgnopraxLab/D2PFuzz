@@ -61,7 +61,7 @@ func (s *Suite) GetElName() string {
 // be used to test the given node against the given blockchain
 // data.
 func NewSuite(dest *enode.Node, engineURL, jwt string, elName string) (*Suite, error) {
-	chain, err := NewChain("./testdata")
+	// chain, err := NewChain("./testdata")
 	engine, err := NewEngineClient(engineURL, jwt)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,6 @@ func NewSuite(dest *enode.Node, engineURL, jwt string, elName string) (*Suite, e
 
 	return &Suite{
 		Dest:   dest,
-		chain:  chain,
 		engine: engine,
 		elName: elName,
 	}, nil

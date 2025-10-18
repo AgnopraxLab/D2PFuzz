@@ -1,15 +1,28 @@
 package transaction
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 
+	ethtest "D2PFuzz/devp2p/protocol/eth"
 	"D2PFuzz/ethclient"
+)
+
+var (
+	pretty = spew.ConfigState{
+		Indent:                  "  ",
+		DisableCapacities:       true,
+		DisablePointerAddresses: true,
+		SortKeys:                true,
+	}
+	timeout = 2 * time.Second
 )
 
 // SendOptions holds options for sending transactions
@@ -327,4 +340,105 @@ func QueryBlob(client *ethclient.Client, txHash common.Hash) (*types.Transaction
 	}
 
 	return tx, nil
+}
+
+func SendTxs(s *ethtest.Suite, txs []*types.Transaction) error {
+	// Open sending conn.
+	sendConn, err := s.Dial()
+	if err != nil {
+		return err
+	}
+	defer sendConn.Close()
+	if err = sendConn.Peer(nil); err != nil {
+		return fmt.Errorf("peering failed: %v", err)
+	}
+
+	// Open receiving conn.
+	recvConn, err := s.Dial()
+	if err != nil {
+		return err
+	}
+	defer recvConn.Close()
+	if err = recvConn.Peer(nil); err != nil {
+		return fmt.Errorf("peering failed: %v", err)
+	}
+
+	if err = sendConn.Write(1, eth.TransactionsMsg, eth.TransactionsPacket(txs)); err != nil {
+		return fmt.Errorf("failed to write message to connection: %v", err)
+	}
+
+	var (
+		got = make(map[common.Hash]bool)
+		end = time.Now().Add(2 * time.Second)
+	)
+
+	// Wait for the transaction announcements, make sure all txs ar propagated.
+	for time.Now().Before(end) {
+		msg, err := recvConn.ReadEth()
+		if err != nil {
+			return fmt.Errorf("failed to read from connection: %w", err)
+		}
+		switch msg := msg.(type) {
+		case *eth.TransactionsPacket:
+			for _, tx := range *msg {
+				got[tx.Hash()] = true
+			}
+		case *eth.NewPooledTransactionHashesPacket:
+			for _, hash := range msg.Hashes {
+				got[hash] = true
+			}
+		case *eth.GetBlockHeadersPacket:
+			headers, err := s.GetChain().GetHeaders(msg)
+			if err != nil {
+				fmt.Errorf("invalid GetBlockHeaders request: %v", err)
+			}
+			recvConn.Write(1, eth.BlockHeadersMsg, &eth.BlockHeadersPacket{
+				RequestId:           msg.RequestId,
+				BlockHeadersRequest: headers,
+			})
+		default:
+			return fmt.Errorf("unexpected eth wire msg: %s", pretty.Sdump(msg))
+		}
+		// Check if all txs received.
+		allReceived := func() bool {
+			for _, tx := range txs {
+				if !got[tx.Hash()] {
+					return false
+				}
+			}
+			return true
+		}
+		if allReceived() {
+			return nil
+		}
+	}
+	return errors.New("timed out waiting for txs")
+}
+
+func SendTxsWithoutRecv(s *ethtest.Suite, txs []*types.Transaction) error {
+	// Open sending conn.
+	sendConn, err := s.Dial()
+	if err != nil {
+		return err
+	}
+	defer sendConn.Close()
+	if err = sendConn.Peer(nil); err != nil {
+		return fmt.Errorf("peering failed: %v", err)
+	}
+
+	// Open receiving conn.
+	recvConn, err := s.Dial()
+	if err != nil {
+		return err
+	}
+	defer recvConn.Close()
+	if err = recvConn.Peer(nil); err != nil {
+		return fmt.Errorf("peering failed: %v", err)
+	}
+
+	if err = sendConn.Write(1, eth.TransactionsMsg, eth.TransactionsPacket(txs)); err != nil {
+		return fmt.Errorf("failed to write message to connection: %v", err)
+	}
+
+	return nil
 }

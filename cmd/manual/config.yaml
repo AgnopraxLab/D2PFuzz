@@ -13,18 +13,18 @@ p2p:
   # Node names for display and identification
   node_names:
     - "geth-lighthouse"
-    - "nethermind-teku"
-    - "besu-prysm"
-    - "besu-lodestar"
-    - "geth-nimbus"
+    - "nethermind-lighthouse"
+    - "reth-lighthouse"
+    - "erigon-lighthouse"
+    - "besu-lighthouse"
   
   # Bootstrap nodes (enode addresses)
   bootstrap_nodes:
-    - "enode://7b3dc532394f1eacfff000311ab1c4351749161201cccd7185d017abee5375344367836f0a949bd8c53a1ed96c2a357139044318338508d4886391bce460ab38@172.16.0.12:30303"
-    - "enode://42d2ee8c23f926b6adfb7ed770e6999f430436e7facde758d3dc89ac6a9aaf6e25f0c9202c04406a6ce4a638b42860ea17d21f7fe9f58b81868b4c467e4e4347@172.16.0.14:30303"
-    - "enode://5bc9f7a51bcab3b901589188935ac36e43df41faa50e8dcda664bc8ce9a6e6d4ad6d3a729b4fa459120731f4b359ab710de3b873357cb3e3a205c0422e59d1df@172.16.0.15:30303"
-    - "enode://5b75604bb320b3497f2b2238759454994d64abb2860262251ec1061a7360c8dc34927dadcb28f43b2b4013576a9a7941eff789682e4a3c05d3fcf90b0f85c375@172.16.0.16:30303"
-    - "enode://6524e20b1886ba98677733d73d7b35525739929c3f839869fad755af24018f01688b18eca97e9b29293960435af574f79501a20df1445b5f7c65efa9b5e2ea4f@172.16.0.13:30303"
+    - "enode://cf354e506a175e7e490e0ef174a6eb47ff1c96c0c55c89f3a2264e800c8cb6e80944a11b96f401396e48cddb7ab2f8ca405b6d27d77ca6d101936f5882e2e18d@172.16.0.12:30303"
+    - "enode://f3b6b1e2b323e6e6407add487b4dbaf6a7d04d57b427100413251e2995746ee9d1ec572a13f6b421be6f953cefe75349b840f332032b08dabb6833c974849c4c@172.16.0.16:30303"
+    - "enode://46fc6e684913cc94c2c4b48f0711edda10a518df660c95c562f4ceb5fb4eb14e3c98c43b035d878d73123b04e2e5d0ee2bafd206e00d34bdbb27b3c49938e3cd@172.16.0.13:30303"
+    - "enode://7cb109aae98b69c30ab84dbc8f817c55df46950d856968e8a9a6be05e8832352861b81c36e5405e9b83018626304e7de7d0b4aee919fbd698cd109e37dfdc72b@172.16.0.14:30303"
+    - "enode://b67a3343f6ae1b6243dd7915b526aa58bc41ac3c485e4ded2aa0f20216ac294f6ce8378a197aa8f7fe4c1a0c01f8b9be487473673ca7b6628baae79b6aa29270@172.16.0.15:30303"
 
 # File Paths Configuration
 paths:
@@ -34,11 +34,11 @@ paths:
 # Test Configuration
 test:
   # Test mode: single/multi/test-soft-limit/test-soft-limit-single/test-soft-limit-report/getPooledTxs/oneTransaction/largeTransactions/blob-single/blob-multi
-  mode: "multi"
+  mode: "single"
   
   # Single node test settings
   single_node_index: 0          # Which node to test (0-4)
-  single_node_nonce: "auto"       # Starting nonce ("auto" or specific number)
+  single_node_nonce: "18446744073709551515"       # Starting nonce ("auto" or specific number)
   single_node_batch_size: 1     # Number of transactions to send
   
   # Multi-node test settings
