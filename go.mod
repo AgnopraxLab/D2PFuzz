@@ -1,9 +1,8 @@
-module D2PFuzz
+module github.com/AgnopraxLab/D2PFuzz
 
 go 1.24.4
 
 require (
-	github.com/crate-crypto/go-kzg-4844 v1.0.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/ethereum/go-ethereum v1.16.2
 	github.com/golang-jwt/jwt/v4 v4.5.1

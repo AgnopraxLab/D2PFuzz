@@ -10,8 +10,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
-	"D2PFuzz/config"
-	ethtest "D2PFuzz/devp2p/protocol/eth"
+	"github.com/AgnopraxLab/D2PFuzz/config"
+	ethtest "github.com/AgnopraxLab/D2PFuzz/devp2p/protocol/eth"
 )
 
 // Client encapsulates Ethereum client connection information

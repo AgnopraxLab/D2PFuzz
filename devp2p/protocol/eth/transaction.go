@@ -27,7 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 
-	"D2PFuzz/devp2p/protocol/eth/utesting"
+	"github.com/AgnopraxLab/D2PFuzz/devp2p/protocol/eth/utesting"
 )
 
 // sendTxs sends the given transactions to the node and

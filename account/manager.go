@@ -1,6 +1,6 @@
 package account
 
-import "D2PFuzz/config"
+import "github.com/AgnopraxLab/D2PFuzz/config"
 
 // AccountManager manages polling different accounts
 type AccountManager struct {

@@ -11,8 +11,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 
-	ethtest "D2PFuzz/devp2p/protocol/eth"
-	"D2PFuzz/ethclient"
+	ethtest "github.com/AgnopraxLab/D2PFuzz/devp2p/protocol/eth"
+	"github.com/AgnopraxLab/D2PFuzz/ethclient"
 )
 
 var (

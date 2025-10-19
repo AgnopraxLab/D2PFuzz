@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"time"
 
-	"D2PFuzz/utils"
+	"github.com/AgnopraxLab/D2PFuzz/utils"
 )
 
 // MutationStrategy defines the interface for different mutation strategies

@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 
-	"D2PFuzz/mutation"
+	"github.com/AgnopraxLab/D2PFuzz/mutation"
 )
 
 // ETH protocol message codes

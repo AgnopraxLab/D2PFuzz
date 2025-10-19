@@ -25,7 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"gopkg.in/yaml.v2"
 
-	ethtest "D2PFuzz/devp2p/protocol/eth"
+	ethtest "github.com/AgnopraxLab/D2PFuzz/devp2p/protocol/eth"
 )
 
 // Account account structure
@@ -618,7 +618,7 @@ func singleNodeTesting(elNames []string, config *Config, elIndex int, customNonc
 	fmt.Printf("   To: %s\n", nodeAccount.ToAccount.Address)
 
 	// Initialize transaction hash record file - single node testing directly uses txhashes.txt
-	hashFilePath := "/home/kkk/workspaces/D2PFuzz/manual/txhashes.txt"
+	hashFilePath := "/home/kkk/workspaces/github.com/AgnopraxLab/D2PFuzz/manual/txhashes.txt"
 	// Clear file content and add node name comment
 	nodeHeader := fmt.Sprintf("# %s\n", elNames[elIndex])
 	if err := os.WriteFile(hashFilePath, []byte(nodeHeader), 0644); err != nil {
@@ -689,7 +689,7 @@ func multiNodesTesting(elNames []string, config *Config, nodeNonceInitialValues 
 	failureCount := 0
 
 	// Initialize transaction hash record file
-	hashFilePath := "/home/kkk/workspaces/D2PFuzz/manual/txhashes.txt"
+	hashFilePath := "/home/kkk/workspaces/github.com/AgnopraxLab/D2PFuzz/manual/txhashes.txt"
 	// Clear file content
 	if err := os.WriteFile(hashFilePath, []byte(""), 0644); err != nil {
 		fmt.Printf("❌ Failed to initialize hash file: %v\n", err)
@@ -949,7 +949,7 @@ func sendLargeTransactions(config *Config) (eth.PooledTransactionsResponse, []co
 	fmt.Printf("Transaction sending time consumed: %v", elapsed)
 
 	// Write transaction hashes to file
-	hashFilePath := "/home/kkk/workspaces/D2PFuzz/manual/txhashes.txt"
+	hashFilePath := "/home/kkk/workspaces/github.com/AgnopraxLab/D2PFuzz/manual/txhashes.txt"
 	if err := writeHashesToFile(hashes, hashFilePath); err != nil {
 		fmt.Printf("Failed to write hashes to file: %v\n", err)
 	}
@@ -1838,7 +1838,7 @@ func sendTransaction(config *Config) error {
 	fmt.Printf("Transaction sending time consumed: %v\n", elapsed)
 
 	// Write transaction hashes to file
-	// hashFilePath := "/home/kkk/workspaces/D2PFuzz/test/txhashes.txt"
+	// hashFilePath := "/home/kkk/workspaces/github.com/AgnopraxLab/D2PFuzz/test/txhashes.txt"
 	// if err := writeHashesToFile(hashes, hashFilePath); err != nil {
 	// 	fmt.Printf("Failed to write hashes to file: %v\n", err)
 	// }
@@ -2151,7 +2151,7 @@ func getPooledTxs(config *Config, nodeIndex int) error {
 	txHashes := []common.Hash{}
 
 	// Read hash values from file
-	// file, err := os.Open("/home/kkk/workspaces/D2PFuzz/manual/txhashes.txt")
+	// file, err := os.Open("/home/kkk/workspaces/github.com/AgnopraxLab/D2PFuzz/manual/txhashes.txt")
 	file, err := os.Open("/home/kkk/workspaces/ethereum-package/tx_hashes.txt")
 	// file, err := os.Open("/home/kkk/workspaces/ethereum-package/scripts/mempool_hashes.txt")
 	if err != nil {

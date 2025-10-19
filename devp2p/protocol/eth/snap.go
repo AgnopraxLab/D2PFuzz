@@ -32,7 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/trienode"
 
-	"D2PFuzz/devp2p/protocol/eth/utesting"
+	"github.com/AgnopraxLab/D2PFuzz/devp2p/protocol/eth/utesting"
 )
 
 func (c *Conn) snapRequest(code uint64, msg any) (any, error) {

@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"D2PFuzz/config"
-	"D2PFuzz/testing"
+	"github.com/AgnopraxLab/D2PFuzz/config"
+	"github.com/AgnopraxLab/D2PFuzz/testing"
 )
 
 const version = "1.0"

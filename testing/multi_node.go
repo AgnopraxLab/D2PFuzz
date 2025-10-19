@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"D2PFuzz/account"
-	"D2PFuzz/config"
-	"D2PFuzz/ethclient"
-	"D2PFuzz/transaction"
-	"D2PFuzz/utils"
+	"github.com/AgnopraxLab/D2PFuzz/account"
+	"github.com/AgnopraxLab/D2PFuzz/config"
+	"github.com/AgnopraxLab/D2PFuzz/ethclient"
+	"github.com/AgnopraxLab/D2PFuzz/transaction"
+	"github.com/AgnopraxLab/D2PFuzz/utils"
 
 	"github.com/ethereum/go-ethereum/common"
 )

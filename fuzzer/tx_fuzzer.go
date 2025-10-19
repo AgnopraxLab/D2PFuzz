@@ -17,11 +17,11 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"D2PFuzz/config"
-	"D2PFuzz/mutation"
-	"D2PFuzz/mutation/generators"
-	"D2PFuzz/mutation/strategies"
-	"D2PFuzz/utils"
+	"github.com/AgnopraxLab/D2PFuzz/config"
+	"github.com/AgnopraxLab/D2PFuzz/mutation"
+	"github.com/AgnopraxLab/D2PFuzz/mutation/generators"
+	"github.com/AgnopraxLab/D2PFuzz/mutation/strategies"
+	"github.com/AgnopraxLab/D2PFuzz/utils"
 )
 
 // TransactionRecord records detailed information about each transaction

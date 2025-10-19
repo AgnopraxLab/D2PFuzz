@@ -10,7 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/holiman/uint256"
 
-	"D2PFuzz/config"
+	"github.com/AgnopraxLab/D2PFuzz/config"
 )
 
 // TxType represents transaction type

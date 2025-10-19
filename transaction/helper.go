@@ -9,8 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	"D2PFuzz/config"
-	"D2PFuzz/ethclient"
+	"github.com/AgnopraxLab/D2PFuzz/config"
+	"github.com/AgnopraxLab/D2PFuzz/ethclient"
 )
 
 // QuickSend is a convenience function for sending a simple transaction
