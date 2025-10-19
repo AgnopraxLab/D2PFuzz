@@ -11,10 +11,10 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
-	ethtest "D2PFuzz/devp2p/protocol/eth"
-	"D2PFuzz/rpc"
-	"D2PFuzz/transaction"
-	"D2PFuzz/utils"
+	ethtest "github.com/AgnopraxLab/D2PFuzz/devp2p/protocol/eth"
+	"github.com/AgnopraxLab/D2PFuzz/rpc"
+	"github.com/AgnopraxLab/D2PFuzz/transaction"
+	"github.com/AgnopraxLab/D2PFuzz/utils"
 )
 
 /*

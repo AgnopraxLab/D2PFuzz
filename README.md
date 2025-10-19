@@ -9,6 +9,7 @@ D2PFuzz/
 ├── cmd/                # Command-line tools directory
 │   ├── livefuzzer/    # Transaction fuzzer tool
 │   └── manual/        # Manual testing tool
+├── poc/               # Proof of Concept implementations
 ├── config/             # Configuration modules
 ├── devp2p/             # P2P network protocol modules
 ├── fuzzer/             # Fuzzing core modules
@@ -171,6 +172,23 @@ cd cmd/manual
 cd stress_test
 ./run_stress_test.sh
 ```
+
+### POC (Proof of Concept) Testing
+
+Specialized testing tools for specific scenarios.
+
+#### Maximum Nonce Testing
+
+Test extreme nonce values (`math.MaxUint64`) to verify how Ethereum clients handle boundary conditions.
+
+**Quick Start:**
+```bash
+cd poc/maxNonce
+# Edit maxNonce.go to configure your node parameters
+go run maxNonce.go
+```
+
+**Expected Result:** Transaction should be `QUEUED` (waiting for conditions) due to extreme nonce value.
 
 ### tx-fuzz
 ```bash
