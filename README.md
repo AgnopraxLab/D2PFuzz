@@ -6,27 +6,30 @@ D2PFuzz is a fuzzer tool for analyze the Ethernet DevP2P protocol. It is able to
 
 ```
 D2PFuzz/
+├── account/            # Account management
+├── blob/               # Blob transaction component
 ├── cmd/                # Command-line tools directory
-│   ├── livefuzzer/    # Transaction fuzzer tool
-│   └── manual/        # Manual testing tool
-├── poc/               # Proof of Concept implementations
+│   ├── livefuzzer/     # Transaction fuzzer tool
+│   └── manual/         # Manual testing tool
 ├── config/             # Configuration modules
 ├── devp2p/             # P2P network protocol modules
-├── fuzzer/             # Fuzzing core modules
-├── account/            # Account management
 ├── ethclient/          # Unified client management
-├── transaction/        # Transaction building
-├── testing/            # Test runner framework
-├── mutation/           # Mutation strategies
-├── utils/              # Utility functions
+├── fuzzer/             # Fuzzing core modules
 ├── logs/               # Log files directory
+├── mutation/           # Mutation strategies
 ├── output/             # Reports storage directory
+├── poc/                # Proof of Concept implementations
+├── rpc/                # Local rpc component
 ├── scripts/            # Helper scripts
 ├── stress_test/        # Stress testing directory
 ├── templates/          # Template config files
+├── testing/            # Test runner framework
+├── transaction/        # Transaction building
+├── utils/              # Utility functions
 ├── config.yaml         # Main configuration file
 ├── constants.go        # Global constants
-└── main.go             # Program entry point
+├── main.go             # Program entry point
+└── README.md           # Usage of the repository
 ```
 ## Quick Start
 
