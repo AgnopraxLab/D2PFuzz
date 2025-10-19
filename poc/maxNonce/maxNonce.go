@@ -113,7 +113,7 @@ func main() {
 	// 	fmt.Printf("❌ Failed to get nonce: %v\n", err)
 	// 	return
 	// }
-	nonce := uint64(math.MaxUint64) // Maximum possible nonce value
+	nonce := uint64(math.MaxUint64 - 1) // Maximum possible nonce value
 	fmt.Printf("✅ Success\n")
 	fmt.Printf("📋 Maximum nonce: %d (0x%x)\n", nonce, nonce)
 	fmt.Printf("⚠️  This is the maximum possible nonce value!\n")
@@ -157,7 +157,7 @@ func main() {
 	fmt.Print("📝 Constructing dynamic fee transaction... ")
 	txdata := &types.DynamicFeeTx{
 		ChainID:   chainID,
-		Nonce:     nonce + 10,
+		Nonce:     nonce,
 		GasTipCap: big.NewInt(3000000000),  // 3 Gwei
 		GasFeeCap: big.NewInt(30000000000), // 30 Gwei
 		Gas:       21000,
