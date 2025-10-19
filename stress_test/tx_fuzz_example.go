@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"D2PFuzz/config"
-	"D2PFuzz/fuzzer"
-	"D2PFuzz/utils"
+	"github.com/AgnopraxLab/D2PFuzz/config"
+	"github.com/AgnopraxLab/D2PFuzz/fuzzer"
+	"github.com/AgnopraxLab/D2PFuzz/utils"
 )
 
 // displayStats shows real-time statistics

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"D2PFuzz/ethclient"
+	"github.com/AgnopraxLab/D2PFuzz/ethclient"
 
 	"github.com/ethereum/go-ethereum/common"
 	gethclient "github.com/ethereum/go-ethereum/ethclient"

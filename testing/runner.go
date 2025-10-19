@@ -3,7 +3,7 @@ package testing
 import (
 	"fmt"
 
-	"D2PFuzz/config"
+	"github.com/AgnopraxLab/D2PFuzz/config"
 )
 
 // TestRunner defines the interface for all test modes

@@ -3,7 +3,7 @@ package account
 import (
 	"fmt"
 
-	"D2PFuzz/config"
+	"github.com/AgnopraxLab/D2PFuzz/config"
 )
 
 // NodeAccount represents single node account information

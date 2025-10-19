@@ -12,8 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/rlpx"
 
-	"D2PFuzz/config"
-	"D2PFuzz/utils"
+	"github.com/AgnopraxLab/D2PFuzz/config"
+	"github.com/AgnopraxLab/D2PFuzz/utils"
 )
 
 // FuzzClient represents a P2P client for fuzzing Ethereum nodes

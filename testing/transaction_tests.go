@@ -13,11 +13,11 @@ import (
 	gethclient "github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
-	"D2PFuzz/config"
-	ethtest "D2PFuzz/devp2p/protocol/eth"
-	"D2PFuzz/ethclient"
-	"D2PFuzz/transaction"
-	"D2PFuzz/utils"
+	"github.com/AgnopraxLab/D2PFuzz/config"
+	ethtest "github.com/AgnopraxLab/D2PFuzz/devp2p/protocol/eth"
+	"github.com/AgnopraxLab/D2PFuzz/ethclient"
+	"github.com/AgnopraxLab/D2PFuzz/transaction"
+	"github.com/AgnopraxLab/D2PFuzz/utils"
 )
 
 // OneTransactionTest sends a single transaction

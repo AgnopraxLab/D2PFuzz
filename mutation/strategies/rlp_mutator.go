@@ -10,7 +10,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/rlp"
 
-	"D2PFuzz/mutation"
+	"github.com/AgnopraxLab/D2PFuzz/mutation"
 )
 
 // RLP encoding constants

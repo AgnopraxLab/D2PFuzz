@@ -14,9 +14,9 @@ import (
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 
-	"D2PFuzz/config"
-	ethtest "D2PFuzz/devp2p/protocol/eth"
-	"D2PFuzz/transaction"
+	"github.com/AgnopraxLab/D2PFuzz/config"
+	ethtest "github.com/AgnopraxLab/D2PFuzz/devp2p/protocol/eth"
+	"github.com/AgnopraxLab/D2PFuzz/transaction"
 )
 
 // TestNewPooledTransactionHashesSoftLimitWithNonceDetailed tests with custom starting nonce and returns detailed results
