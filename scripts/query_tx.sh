@@ -400,6 +400,7 @@ main() {
     echo -e "Existing transactions: ${GREEN}${#existing_txs[@]}${NC}"
     echo -e "  - Confirmed: ${GREEN}${#confirmed_txs[@]}${NC}"
     echo -e "  - Pending: ${YELLOW}${#pending_txs[@]}${NC}"
+    echo -e "  - Queued: ${BLUE}${#queued_txs[@]}${NC}"
     echo -e "  - Failed: ${RED}${#failed_txs[@]}${NC}"
     echo -e "Non-existing transactions: ${RED}${#non_existing_txs[@]}${NC}"
     if [[ $total -gt 0 ]]; then

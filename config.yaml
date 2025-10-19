@@ -1,5 +1,10 @@
 # D2PFuzz Configuration File
 
+# Transaction Defaults
+chain_id: 3151908                    # Chain ID for transactions (default: 3151908)
+default_gas_tip_cap: "3000000000"    # Default gas tip cap in wei (3 Gwei)
+default_gas_fee_cap: "30000000000"   # Default gas fee cap in wei (30 Gwei)
+
 # Server Configuration
 server:
   host: "localhost"
@@ -36,6 +41,13 @@ tx_fuzz:
 p2p:
   max_peers: 50
   listen_port: 30303
+  jwt_secret: "0xdc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
+  node_names:
+    - "geth-lighthouse"
+    - "netherhmind-teku"
+    - "besu-prysm"
+    - "besu-lodestar"
+    - "geth-nimbus"
   bootstrap_nodes:
     - "enode://8e7b1b24dc1b1d0685081523ea8d84d6d8c8493f42fc64a5e210d17f9bfe3594b389e893476de995905a1fcc48ccd268768e5fc4e6490863e4e1131f285efbbf@172.16.0.11:30303"  # el-1-geth-lighthouse (geth)
     - "enode://d388f8f5da4213fdd2593cc4867499965e7feba6baa033ef3f0de0d80d5bebe36d037268a8402ecb1a8d5fb8363f6f0338ada4e8bc6bb34e73e4fd8be016a2e3@172.16.0.12:30303"  # el-2-nethermind-lighthouse (nethermind)
@@ -73,6 +85,23 @@ log:
   template: "default"
   auto_generate: true
   include_details: true
+
+# File Paths Configuration
+paths:
+  tx_hashes: "./txhashes.txt"
+  tx_hashes_ext: "/home/kkk/workspaces/ethereum-package/tx_hashes.txt"
+
+# Manual Test Configuration  
+test:
+  mode: "single"  # single/multi/test-soft-limit/test-soft-limit-single/test-soft-limit-report/GetPooledTxs/oneTransaction/largeTransactions
+  single_node_index: 4
+  single_node_nonce: 1
+  single_node_batch_size: 1
+  multi_node_batch_size: 20
+  multi_node_nonces: [0, 0, 0, 0, 0]
+  soft_limit_scenarios: [4096, 5000, 8192]
+  default_timeout_seconds: 60
+  get_pooled_txs_node_index: 1
 
 # Accounts Configuration
 accounts:

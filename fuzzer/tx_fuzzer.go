@@ -1030,7 +1030,7 @@ func (tf *TxFuzzer) getNonceWithRetry(client *ethclient.Client, address common.A
 
 	for i := 0; i < maxRetries; i++ {
 		ctx, cancel := context.WithTimeout(tf.ctx, 10*time.Second)
-		nonce, err = client.PendingNonceAt(ctx, address)
+		nonce, err = client.NonceAt(ctx, address, nil)
 		cancel()
 
 		if err == nil {

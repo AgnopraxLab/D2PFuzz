@@ -18,20 +18,30 @@ Fuzz the Ethereum networking stack—end to end.
 
 ```
 D2PFuzz/
-├── cmd/             # CLI + tx-fuzz entrypoints
-├── config/          # Config structs & loaders
-├── devp2p/          # DevP2P stack (discv4/5, RLPx, eth)
-├── fuzzer/          # Fuzzing core
-├── logs/            # Runtime logs
-├── manual/          # Manual protocol test runner
-├── mutation/        # Mutation strategies
-├── output/          # Reports & artifacts
-├── scripts/         # Devnet + helpers
-├── stress_test/     # Stress test harness
-├── templates/       # Config templates
-├── utils/           # Utilities
-├── config.yaml      # Example config
-└── main.go          # Program entry
+├── account/            # Account management
+├── blob/               # Blob transaction component
+├── cmd/                # Command-line tools directory
+│   ├── livefuzzer/     # Transaction fuzzer tool
+│   └── manual/         # Manual testing tool
+├── config/             # Configuration modules
+├── devp2p/             # P2P network protocol modules
+├── ethclient/          # Unified client management
+├── fuzzer/             # Fuzzing core modules
+├── logs/               # Log files directory
+├── mutation/           # Mutation strategies
+├── output/             # Reports storage directory
+├── poc/                # Proof of Concept implementations
+├── rpc/                # Local rpc component
+├── scripts/            # Helper scripts
+├── stress_test/        # Stress testing directory
+├── templates/          # Template config files
+├── testing/            # Test runner framework
+├── transaction/        # Transaction building
+├── utils/              # Utility functions
+├── config.yaml         # Main configuration file
+├── constants.go        # Global constants
+├── main.go             # Program entry point
+└── README.md           # Usage of the repository
 ```
 
 ---
@@ -71,10 +81,115 @@ Grab enodes/RPCs from `scripts/output.txt` and fill your YAML (see `templates/`)
 
 ### 1) Manual protocol test (DevP2P / eth sub-protocols)
 
+### Manual Test
+
+A command-line tool for testing Ethereum P2P nodes.
+
+#### Features
+- Single node testing - Test specific nodes independently
+- Multi-node testing - Test all configured nodes simultaneously
+- Soft limit testing - Validate NewPooledTransactionHashes soft limit implementation
+- GetPooledTransactions testing - Test transaction pool queries
+
+#### Quick Start
+
+**1. Build the tool:**
 ```bash
-cd manual
-go run main.go
-# reads manual/config.yaml and sends predefined sequences
+cd cmd/manual
+go build -o manual
+```
+
+**2. Configure (edit `cmd/manual/config.yaml`):**
+```yaml
+test:
+  mode: "single"              # Test mode
+  single_node_index: 4        # Which node to test (0-4)
+  single_node_batch_size: 1   # Number of transactions
+```
+
+**3. Run tests:**
+```bash
+# Use default config
+./manual
+
+# Specify custom config
+./manual -config /path/to/config.yaml
+
+# Override test mode from command line
+./manual -mode multi
+
+# List all available test modes
+./manual --list
+
+# Show version
+./manual --version
+```
+
+#### Available Test Modes
+
+| Mode | Description |
+|------|-------------|
+| `single` | Test a single specific node |
+| `multi` | Test all configured nodes |
+| `test-soft-limit` | Test soft limit for all clients |
+| `test-soft-limit-single` | Test soft limit for one client |
+| `test-soft-limit-report` | Generate soft limit test report |
+| `GetPooledTxs` | Test GetPooledTransactions protocol |
+| `oneTransaction` | Send a single transaction |
+| `largeTransactions` | Send large batch of transactions |
+
+#### Configuration
+
+The manual tool uses its own `config.yaml` in `cmd/manual/` directory, independent from the root project configuration:
+
+```yaml
+# P2P Configuration
+p2p:
+  jwt_secret: "..."
+  node_names:
+    - "geth-lighthouse"
+    - "netherhmind-teku"
+    - "besu-prysm"
+    - "besu-lodestar"
+    - "geth-nimbus"
+  bootstrap_nodes: [...]
+
+# Test Configuration
+test:
+  mode: "single"
+  single_node_index: 4
+  single_node_nonce: 1
+  single_node_batch_size: 1
+  multi_node_batch_size: 20
+  multi_node_nonces: [0, 0, 0, 0, 0]
+  soft_limit_scenarios: [4096, 5000, 8192]
+```
+
+#### Example Usage
+
+**Single Node Test:**
+```bash
+cd cmd/manual
+./manual -mode single
+# Tests node 4 (configured in config.yaml) with 1 transaction
+```
+
+**Multi-Node Test:**
+```bash
+./manual -mode multi
+# Tests all 5 configured nodes with 20 transactions each
+```
+
+**Soft Limit Testing:**
+```bash
+./manual -mode test-soft-limit-report
+# Generates comprehensive soft limit test report for all clients
+```
+
+**Custom Configuration:**
+```bash
+./manual -config my-test-config.yaml -mode single
+# Use custom config file
 ```
 
 ### 2) Stress test
@@ -84,8 +199,24 @@ cd stress_test
 ./run_stress_test.sh
 ```
 
-### 3) Transaction fuzzing
+### POC (Proof of Concept) Testing
 
+Specialized testing tools for specific scenarios.
+
+#### Maximum Nonce Testing
+
+Test extreme nonce values (`math.MaxUint64`) to verify how Ethereum clients handle boundary conditions.
+
+**Quick Start:**
+```bash
+cd poc/maxNonce
+# Edit maxNonce.go to configure your node parameters
+go run maxNonce.go
+```
+
+**Expected Result:** Transaction should be `QUEUED` (waiting for conditions) due to extreme nonce value.
+
+### tx-fuzz
 ```bash
 cd cmd
 ./livefuzzer spam --seed <seed> --sk <hex_private_key> -rpc <rpc_url>

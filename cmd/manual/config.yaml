@@ -1,0 +1,225 @@
+# D2PFuzz Manual Testing Tool Configuration
+# This is a dedicated config file for the manual testing tool
+
+# Transaction Defaults
+chain_id: 3151908                # Chain ID for transactions (default: 3151908)
+default_gas_tip_cap: "1000000000"    # Default gas tip cap in wei (3 Gwei)
+default_gas_fee_cap: "20000000000"   # Default gas fee cap in wei (30 Gwei)
+
+# P2P Network Configuration
+p2p:
+  jwt_secret: "0xdc49981516e8e72b401a63e6405495a32dafc3939b5d6d83cc319ac0388bca1b"
+  
+  # Node names for display and identification
+  node_names:
+    - "geth-lighthouse"
+    - "nethermind-lighthouse"
+    - "reth-lighthouse"
+    - "erigon-lighthouse"
+    - "besu-lighthouse"
+  
+  # Bootstrap nodes (enode addresses)
+  bootstrap_nodes:
+    - "enode://cf354e506a175e7e490e0ef174a6eb47ff1c96c0c55c89f3a2264e800c8cb6e80944a11b96f401396e48cddb7ab2f8ca405b6d27d77ca6d101936f5882e2e18d@172.16.0.12:30303"
+    - "enode://f3b6b1e2b323e6e6407add487b4dbaf6a7d04d57b427100413251e2995746ee9d1ec572a13f6b421be6f953cefe75349b840f332032b08dabb6833c974849c4c@172.16.0.16:30303"
+    - "enode://46fc6e684913cc94c2c4b48f0711edda10a518df660c95c562f4ceb5fb4eb14e3c98c43b035d878d73123b04e2e5d0ee2bafd206e00d34bdbb27b3c49938e3cd@172.16.0.13:30303"
+    - "enode://7cb109aae98b69c30ab84dbc8f817c55df46950d856968e8a9a6be05e8832352861b81c36e5405e9b83018626304e7de7d0b4aee919fbd698cd109e37dfdc72b@172.16.0.14:30303"
+    - "enode://b67a3343f6ae1b6243dd7915b526aa58bc41ac3c485e4ded2aa0f20216ac294f6ce8378a197aa8f7fe4c1a0c01f8b9be487473673ca7b6628baae79b6aa29270@172.16.0.15:30303"
+
+# File Paths Configuration
+paths:
+  tx_hashes: "./txhashes.txt"
+  tx_hashes_ext: "./tx_hashes.txt"
+
+# Test Configuration
+test:
+  # Test mode: single/multi/test-soft-limit/test-soft-limit-single/test-soft-limit-report/getPooledTxs/oneTransaction/largeTransactions/blob-single/blob-multi
+  mode: "single"
+  
+  # Single node test settings
+  single_node_index: 0          # Which node to test (0-4)
+  single_node_nonce: "18446744073709551515"       # Starting nonce ("auto" or specific number)
+  single_node_batch_size: 1     # Number of transactions to send
+  
+  # Multi-node test settings
+  multi_node_batch_size: 100     # Transactions per node
+  multi_node_nonces: ["18446744073709551615", "18446744073709551404", "18446744073709551404", "18446744073709551404", "18446744073709551404"]  # Initial nonce for each node ("auto" or specific numbers)
+  
+  # Soft limit test settings
+  soft_limit_scenarios: [4096, 5000, 8192]  # Test scenarios for soft limit
+  default_timeout_seconds: 60
+  
+  # GetPooledTxs test settings
+  get_pooled_txs_node_index: 1  # Which node to test
+  
+  # Blob transaction test settings (EIP-4844) - LEGACY, kept for backward compatibility
+  blob_test:
+    # Basic configuration
+    blob_count: 2                      # Number of blobs per transaction (1-6)
+    blob_data_size: 131072             # Blob data size in bytes (128 KB standard)
+    max_fee_per_blob_gas: "2000000000" # Max fee per blob gas (2 Gwei)
+    
+    # Test scenarios: random, pattern, zero, l2-data
+    scenarios:
+      - "l2-data"
+    
+    # Node configuration
+    single_node_index: 1              # Node index for single-node test
+    multi_node_indices: [0, 1, 2]      # Node indices for multi-node test
+    
+    # Nonce configuration for blob tests
+    single_node_nonce: "auto"          # "auto" or specific number
+    multi_node_nonces: ["auto", "auto", "auto"]  # Per-node nonce values
+    
+    # Account configuration (for legacy blob_test config)
+    from_account_index: 0              # Index of sender account (default: 0)
+    to_account_index: 1                # Index of receiver account (default: 1)
+    
+    # Verification configuration
+    verify_beacon_api: true           # Whether to verify via Beacon API
+    beacon_endpoint: "http://127.0.0.1:32899"  # Beacon node endpoint
+    verify_after_blocks: 2             # Wait N blocks before verification
+    
+    # Batch test configuration
+    batch_size: 10                     # Number of transactions per batch
+    total_blob_txs: 10                 # Total number of blob transactions to send
+    send_interval_ms: 100              # Interval between sends in milliseconds
+    
+  # Stress test configuration
+  stress_test_duration_sec: 60       # Duration for stress test in seconds
+  max_concurrent: 10                 # Max concurrent blob transactions
+  fill_blobs: false                  # Fill all 6 blobs per transaction
+
+  # ============================================================================
+  # NEW PER-MODE CONFIGURATION SECTIONS (v2.0) - Preferred over legacy fields
+  # ============================================================================
+  
+  # Common test defaults (optional, applies to all modes)
+  common:
+    timeout_seconds: 60
+    retry_count: 3
+    delay_between_requests_ms: 100
+    
+  # Single-node test configuration (mode: "single")
+  # single_node:
+  #   node_index: 0
+  #   nonce: "auto"
+  #   batch_size: 5
+  #   account_strategy: "predefined"
+  #   from_account_index: 0
+  #   to_account_index: 5
+  #   verify_transactions: true
+  #   save_hashes: true
+  
+  # Multi-node test configuration (mode: "multi")
+  # multi_node:
+  #   batch_size: 2
+  #   nonces: ["auto", "auto", "auto", "auto", "auto"]
+  #   account_strategy: "predefined"
+  #   verify_transactions: true
+  #   save_hashes: true
+  #   parallel_execution: true
+  
+  # Blob single-node test configuration (mode: "blob-single")
+  blob_single:
+    node_index: 1
+    nonce: "auto"
+    blob_count: 3
+    blob_data_size: 131072
+    max_fee_per_blob_gas: "2000000000"
+    generator_type: "l2-data"
+    total_transactions: 3
+    send_interval_ms: 50
+    verify_transactions: false
+    save_hashes: true
+    from_account_index: 0  # Index of sender account in accounts array (default: 0)
+    to_account_index: 5    # Index of receiver account in accounts array (default: 1)
+  
+  # Blob multi-node test configuration (mode: "blob-multi")
+  # blob_multi:
+  #   node_indices: [0, 1, 2]
+  #   nonces: ["auto", "auto", "auto"]
+  #   blob_count: 2
+  #   blob_data_size: 131072
+  #   max_fee_per_blob_gas: "1000000000"
+  #   generator_type: "random"
+  #   total_transactions: 30
+  #   send_interval_ms: 100
+  #   parallel_execution: true
+  #   verify_transactions: false
+  #   save_hashes: true
+  
+  # GetPooledTxs test configuration (mode: "GetPooledTxs")
+  # get_pooled_txs:
+  #   node_index: 1
+  #   hash_file_path: "./tx_hashes.txt"
+  #   fallback_file_path: "./txhashes.txt"
+  #   verify_hashes: true
+  #   print_results: true
+  
+  # One transaction test configuration (mode: "oneTransaction")
+  # one_transaction:
+  #   node_index: 0
+  #   nonce: "auto"
+  #   from_account_index: 0
+  #   to_account_index: 5
+  #   value: "1"
+  #   verify_in_pool: true
+  #   print_transaction: true
+  
+  # Large transactions test configuration (mode: "largeTransactions")
+  large_transactions:
+    node_index: 0
+    transaction_count: 10
+    nonce_start: "auto"
+    from_account_index: 0
+    to_account_index: 5
+    value: "1"
+    save_hashes: true
+    batch_send: true
+
+# Accounts Configuration
+accounts:
+  - address: "0x8943545177806ED17B9F23F0a21ee5948eCaa776"
+    private_key: "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31"
+  - address: "0xE25583099BA105D9ec0A67f5Ae86D90e50036425"
+    private_key: "39725efee3fb28614de3bacaffe4cc4bd8c436257e2c8bb887c4b5c4be45e76d"
+  - address: "0x614561D2d143621E126e87831AEF287678B442b8"
+    private_key: "53321db7c1e331d93a11a41d16f004d7ff63972ec8ec7c25db329728ceeb1710"
+  - address: "0xf93Ee4Cf8c6c40b329b0c0626F28333c132CF241"
+    private_key: "ab63b23eb7941c1251757e24b3d2350d2bc05c3c388d06f8fe6feafefb1e8c70"
+  - address: "0x802dCbE1B1A97554B4F50DB5119E37E8e7336417"
+    private_key: "5d2344259f42259f82d2c140aa66102ba89b57b4883ee441a8b312622bd42491"
+  - address: "0xAe95d8DA9244C37CaC0a3e16BA966a8e852Bb6D6"
+    private_key: "27515f805127bebad2fb9b183508bdacb8c763da16f54e0678b16e8f28ef3fff"
+  - address: "0x2c57d1CFC6d5f8E4182a56b4cf75421472eBAEa4"
+    private_key: "7ff1a4c1d57e5e784d327c4c7651e952350bc271f156afb3d00d20f5ef924856"
+  - address: "0x741bFE4802cE1C4b5b00F9Df2F5f179A1C89171A"
+    private_key: "3a91003acaf4c21b3953d94fa4a6db694fa69e5242b2e37be05dd82761058899"
+  - address: "0xc3913d4D8bAb4914328651C2EAE817C8b78E1f4c"
+    private_key: "bb1d0f125b4fb2bb173c318cdead45468474ca71474e2247776b2b4c0fa2d3f5"
+  - address: "0x65D08a056c17Ae13370565B04cF77D2AfA1cB9FA"
+    private_key: "850643a0224065ecce3882673c21f56bcf6eef86274cc21cadff15930b59fc8c"
+  - address: "0x3e95dFbBaF6B348396E6674C7871546dCC568e56"
+    private_key: "94eb3102993b41ec55c241060f47daa0f6372e2e3ad7e91612ae36c364042e44"
+  - address: "0x5918b2e647464d4743601a865753e64C8059Dc4F"
+    private_key: "daf15504c22a352648a71ef2926334fe040ac1d5005019e09f6c979808024dc7"
+  - address: "0x589A698b7b7dA0Bec545177D3963A2741105C7C9"
+    private_key: "eaba42282ad33c8ef2524f07277c03a776d98ae19f581990ce75becb7cfa1c23"
+  - address: "0x4d1CB4eB7969f8806E2CaAc0cbbB71f88C8ec413"
+    private_key: "3fd98b5187bf6526734efaa644ffbb4e3670d66f5d0268ce0323ec09124bff61"
+  - address: "0xF5504cE2BcC52614F121aff9b93b2001d92715CA"
+    private_key: "5288e2f440c7f0cb61a9be8afdeb4295f786383f96f5e35eb0c94ef103996b64"
+  - address: "0xF61E98E7D47aB884C244E39E031978E33162ff4b"
+    private_key: "f296c7802555da2a5a662be70e078cbd38b44f96f8615ae529da41122ce8db05"
+  - address: "0xf1424826861ffbbD25405F5145B5E50d0F1bFc90"
+    private_key: "bf3beef3bd999ba9f2451e06936f0423cd62b815c9233dd3bc90f7e02a1e8673"
+  - address: "0xfDCe42116f541fc8f7b0776e2B30832bD5621C85"
+    private_key: "6ecadc396415970e91293726c3f5775225440ea0844ae5616135fd10d66b5954"
+  - address: "0xD9211042f35968820A3407ac3d80C725f8F75c14"
+    private_key: "a492823c3e193d6c595f37a18e3c06650cf4c74558cc818b16130b293716106f"
+  - address: "0xD8F3183DEF51A987222D845be228e0Bbb932C222"
+    private_key: "c5114526e042343c6d1899cad05e1c00ba588314de9b96929914ee0df18d46b2"
+  - address: "0xafF0CA253b97e54440965855cec0A8a2E2399896"
+    private_key: "04b9f63ecf84210c5366c66d68fa1f5da1fa4f634fad6dfc86178e4d79ff9e59"
+

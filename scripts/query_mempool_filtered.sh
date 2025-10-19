@@ -3,6 +3,12 @@
 # Mempool transaction query script (with filtering functionality)
 # Query pending transactions in Ethereum network mempool, supports filtering by address, amount and other conditions
 
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Import RPC configuration
+source "$SCRIPT_DIR/rpc_config.sh"
+
 # Color definitions
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -12,26 +18,19 @@ PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# RPC endpoint list
-RPC_ENDPOINTS=(
-    "http://172.16.0.11:8545"
-    "http://172.16.0.12:8545"
-    "http://172.16.0.13:8545"
-    "http://172.16.0.14:8545"
-    "http://172.16.0.15:8545"
-)
-
 # Default parameters
 FILTER_ADDRESS=""
 MIN_VALUE=""
 MAX_VALUE=""
 SHOW_DETAILS=false
-OUTPUT_FORMAT="table"
+OUTPUT_FORMAT="txt"
 SAVE_TO_FILE=""
 
 # Show help information
 show_help() {
-    echo -e "${BLUE}🔍 Ethereum Mempool Transaction Query Tool (with Filtering)${NC}"
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        echo -e "${BLUE}🔍 Ethereum Mempool Transaction Query Tool (with Filtering)${NC}"
+    fi
     echo ""
     echo "Usage: $0 [options]"
     echo ""
@@ -40,7 +39,7 @@ show_help() {
     echo "  --min-value VALUE      Minimum transaction amount (Wei)"
     echo "  --max-value VALUE      Maximum transaction amount (Wei)"
     echo "  -d, --details          Show detailed transaction information"
-    echo "  -f, --format FORMAT    Output format (table|json|csv)"
+    echo "  -f, --format FORMAT    Output format (txt|json|csv)"
     echo "  -o, --output FILE      Save results to file"
     echo "  -h, --help             Show this help information"
     echo ""
@@ -168,20 +167,9 @@ format_transaction() {
         "csv")
             echo "$hash,$from,$to,$value,$gas,$gasPrice,$nonce,$txType"
             ;;
-        "table"|*)
-            if [[ "$SHOW_DETAILS" == true ]]; then
-                echo -e "  🔗 Hash: $hash"
-                echo -e "  📤 From: $from"
-                echo -e "  📥 To: $to"
-                echo -e "  💰 Amount: $value Wei"
-                echo -e "  ⛽ Gas Limit: $gas"
-                echo -e "  💸 Gas Price: $gasPrice"
-                echo -e "  🔢 Nonce: $nonce"
-                echo -e "  🏷️ Transaction Type: $txType"
-                echo -e "  ----------------------------------------"
-            else
-                echo -e "  🔗 $hash | From: $from | To: $to | Value: $value Wei"
-            fi
+        "txt"|*)
+            # Output in tx_hashes.txt style format - just the hash
+            echo "$hash"
             ;;
     esac
 }
@@ -192,7 +180,9 @@ query_and_filter_mempool() {
     local total_found=0
     local filtered_count=0
     
-    echo -e "${CYAN}🔍 Querying node: $endpoint${NC}"
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        echo -e "${CYAN}🔍 Querying node: $endpoint${NC}"
+    fi
     
     # Query txpool_content
     local response=$(curl -s -X POST -H "Content-Type: application/json" \
@@ -200,14 +190,18 @@ query_and_filter_mempool() {
         --connect-timeout 10 --max-time 15 "$endpoint" 2>/dev/null)
     
     if [[ $? -ne 0 ]]; then
-        echo -e "${RED}✗ RPC call failed${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            echo -e "${RED}✗ RPC call failed${NC}"
+        fi
         return 1
     fi
     
     # Check for errors
     if echo "$response" | grep -q '"error"'; then
         local error_msg=$(echo "$response" | jq -r '.error.message // "Unknown error"' 2>/dev/null)
-        echo -e "${RED}✗ RPC error: $error_msg${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            echo -e "${RED}✗ RPC error: $error_msg${NC}"
+        fi
         return 1
     fi
     
@@ -216,13 +210,17 @@ query_and_filter_mempool() {
     local queued_count=$(echo "$response" | jq -r '.result.queued | keys | length' 2>/dev/null)
     
     if [[ "$pending_count" == "null" ]]; then
-        echo -e "${YELLOW}⚠ Unable to parse response or method not supported${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            echo -e "${YELLOW}⚠ Unable to parse response or method not supported${NC}"
+        fi
         return 1
     fi
     
-    echo -e "${BLUE}📈 Mempool Statistics:${NC}"
-    echo -e "  📤 Pending transaction accounts: ${pending_count:-0}"
-    echo -e "  📥 Queued transaction accounts: ${queued_count:-0}"
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        echo -e "${BLUE}📈 Mempool Statistics:${NC}"
+        echo -e "  📤 Pending transaction accounts: ${pending_count:-0}"
+        echo -e "  📥 Queued transaction accounts: ${queued_count:-0}"
+    fi
     
     # Output CSV header
     if [[ "$OUTPUT_FORMAT" == "csv" ]] && [[ -z "$csv_header_printed" ]]; then
@@ -236,7 +234,19 @@ query_and_filter_mempool() {
     
     # Process pending transactions
     if [[ "$pending_count" -gt 0 ]]; then
-        echo -e "\n${YELLOW}🔄 Pending Transactions (with filters applied):${NC}"
+        # Add node type comment for txt format
+        if [[ "$OUTPUT_FORMAT" == "txt" ]]; then
+            local node_type=$(get_node_type_from_endpoint "$endpoint")
+            if [[ -n "$node_type" ]]; then
+                if [[ -n "$SAVE_TO_FILE" ]]; then
+                    echo "# $node_type" >> "$SAVE_TO_FILE"
+                else
+                    echo "# $node_type"
+                fi
+            fi
+        else
+            echo -e "\n${YELLOW}🔄 Pending Transactions (with filters applied):${NC}"
+        fi
         
         # Extract all pending transactions
         local pending_txs=$(echo "$response" | jq -c '.result.pending | to_entries[] | .value | to_entries[] | .value' 2>/dev/null)
@@ -262,7 +272,10 @@ query_and_filter_mempool() {
     
     # Process queued transactions
     if [[ "$queued_count" -gt 0 ]]; then
-        echo -e "\n${PURPLE}⏳ Queued Transactions (with filters applied):${NC}"
+        # For txt format, queued transactions are included under the same node comment
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            echo -e "\n${PURPLE}⏳ Queued Transactions (with filters applied):${NC}"
+        fi
         
         # Extract all queued transactions
         local queued_txs=$(echo "$response" | jq -c '.result.queued | to_entries[] | .value | to_entries[] | .value' 2>/dev/null)
@@ -286,9 +299,11 @@ query_and_filter_mempool() {
         done <<< "$queued_txs"
     fi
     
-    echo -e "\n${GREEN}📊 Node $endpoint Statistics:${NC}"
-    echo -e "  🔍 Total transactions: $total_found"
-    echo -e "  ✅ Matching filters: $filtered_count"
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        echo -e "\n${GREEN}📊 Node $endpoint Statistics:${NC}"
+        echo -e "  🔍 Total transactions: $total_found"
+        echo -e "  ✅ Matching filters: $filtered_count"
+    fi
     
     return 0
 }
@@ -296,28 +311,37 @@ query_and_filter_mempool() {
 # Main function
 main() {
     echo -e "${BLUE}🔍 Ethereum Mempool Transaction Query Tool (with Filtering)${NC}"
-    echo "================================================================================"
-    
-    # Show filter conditions
-    if [[ -n "$FILTER_ADDRESS" ]] || [[ -n "$MIN_VALUE" ]] || [[ -n "$MAX_VALUE" ]]; then
-        echo -e "\n${CYAN}🔧 Applied Filter Conditions:${NC}"
-        [[ -n "$FILTER_ADDRESS" ]] && echo -e "  📍 Address filter: $FILTER_ADDRESS"
-        [[ -n "$MIN_VALUE" ]] && echo -e "  💰 Minimum amount: $MIN_VALUE Wei"
-        [[ -n "$MAX_VALUE" ]] && echo -e "  💰 Maximum amount: $MAX_VALUE Wei"
-        echo -e "  📋 Output format: $OUTPUT_FORMAT"
-        [[ -n "$SAVE_TO_FILE" ]] && echo -e "  💾 Save to file: $SAVE_TO_FILE"
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        echo "================================================================================"
     fi
     
-    # Test RPC connections
-    echo -e "\n${CYAN}🔗 Testing RPC connections...${NC}"
+    # Show filter conditions
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        if [[ -n "$FILTER_ADDRESS" ]] || [[ -n "$MIN_VALUE" ]] || [[ -n "$MAX_VALUE" ]]; then
+            echo -e "\n${CYAN}🔧 Applied Filter Conditions:${NC}"
+            [[ -n "$FILTER_ADDRESS" ]] && echo -e "  📍 Address filter: $FILTER_ADDRESS"
+            [[ -n "$MIN_VALUE" ]] && echo -e "  💰 Minimum amount: $MIN_VALUE Wei"
+            [[ -n "$MAX_VALUE" ]] && echo -e "  💰 Maximum amount: $MAX_VALUE Wei"
+            echo -e "  📋 Output format: $OUTPUT_FORMAT"
+            [[ -n "$SAVE_TO_FILE" ]] && echo -e "  💾 Save to file: $SAVE_TO_FILE"
+        fi
+        
+        # Test RPC connections
+        echo -e "\n${CYAN}🔗 Testing RPC connections...${NC}"
+    fi
+    
     available_endpoints=()
     
     for endpoint in "${RPC_ENDPOINTS[@]}"; do
         if test_rpc_connection "$endpoint"; then
-            echo -e "${GREEN}✅ $endpoint connection successful${NC}"
+            if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+                echo -e "${GREEN}✅ $endpoint connection successful${NC}"
+            fi
             available_endpoints+=("$endpoint")
         else
-            echo -e "${RED}❌ $endpoint connection failed${NC}"
+            if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+                echo -e "${RED}❌ $endpoint connection failed${NC}"
+            fi
         fi
     done
     
@@ -326,32 +350,42 @@ main() {
         exit 1
     fi
     
-    echo -e "\n${GREEN}✅ Found ${#available_endpoints[@]} available RPC endpoints${NC}"
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        echo -e "\n${GREEN}✅ Found ${#available_endpoints[@]} available RPC endpoints${NC}"
+    fi
     
     # Clear output file
     if [[ -n "$SAVE_TO_FILE" ]]; then
         > "$SAVE_TO_FILE"
-        echo -e "${CYAN}📝 Output will be saved to: $SAVE_TO_FILE${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            echo -e "${CYAN}📝 Output will be saved to: $SAVE_TO_FILE${NC}"
+        fi
     fi
     
     # Query mempool for each available endpoint
     local total_filtered=0
     for endpoint in "${available_endpoints[@]}"; do
-        echo -e "\n${BLUE}=================================================================================${NC}"
-        echo -e "${BLUE}🔍 Querying node: $endpoint${NC}"
-        echo -e "${BLUE}=================================================================================${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            echo -e "\n${BLUE}=================================================================================${NC}"
+            echo -e "${BLUE}🔍 Querying node: $endpoint${NC}"
+            echo -e "${BLUE}=================================================================================${NC}"
+        fi
         
         query_and_filter_mempool "$endpoint"
         
-        echo -e "\n${CYAN}⏱️ Waiting 1 second before querying next node...${NC}"
+        if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+            echo -e "\n${CYAN}⏱️ Waiting 1 second before querying next node...${NC}"
+        fi
         sleep 1
     done
     
-    echo -e "\n${GREEN}✅ Mempool query completed${NC}"
-    echo -e "${CYAN}🕒 Query time: $(date)${NC}"
-    
-    if [[ -n "$SAVE_TO_FILE" ]]; then
-        echo -e "${GREEN}💾 Results saved to: $SAVE_TO_FILE${NC}"
+    if [[ "$OUTPUT_FORMAT" != "txt" ]]; then
+        echo -e "\n${GREEN}✅ Mempool query completed${NC}"
+        echo -e "${CYAN}🕒 Query time: $(date)${NC}"
+        
+        if [[ -n "$SAVE_TO_FILE" ]]; then
+            echo -e "${GREEN}💾 Results saved to: $SAVE_TO_FILE${NC}"
+        fi
     fi
 }
 

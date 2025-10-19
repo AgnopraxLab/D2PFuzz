@@ -61,7 +61,7 @@ func (s *Suite) GetElName() string {
 // be used to test the given node against the given blockchain
 // data.
 func NewSuite(dest *enode.Node, engineURL, jwt string, elName string) (*Suite, error) {
-	chain, err := NewChain("./testdata")
+	// chain, err := NewChain("./testdata")
 	engine, err := NewEngineClient(engineURL, jwt)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,6 @@ func NewSuite(dest *enode.Node, engineURL, jwt string, elName string) (*Suite, e
 
 	return &Suite{
 		Dest:   dest,
-		chain:  chain,
 		engine: engine,
 		elName: elName,
 	}, nil
@@ -991,6 +990,10 @@ func makeSidecar(data ...byte) *types.BlobTxSidecar {
 		proofs = append(proofs, p)
 	}
 	return types.NewBlobTxSidecar(types.BlobSidecarVersion0, blobs, commitments, proofs)
+}
+
+func MakeSidecar(data ...byte) *types.BlobTxSidecar {
+	return makeSidecar(data...)
 }
 
 func (s *Suite) makeBlobTxs(count, blobs int, discriminator byte) (txs types.Transactions) {

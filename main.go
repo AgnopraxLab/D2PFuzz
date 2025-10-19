@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"D2PFuzz/config"
-	"D2PFuzz/utils"
 	"D2PFuzz/fuzzer"
+	"D2PFuzz/utils"
 )
 
 func main() {
@@ -60,37 +60,37 @@ func main() {
 			logger.Warn("No accounts found for transaction fuzzing")
 		} else {
 			logger.Info("Found %d accounts for transaction fuzzing", len(accounts))
-			
+
 			// Create fuzzer client
 			fuzzClient, err := fuzzer.NewFuzzClient(*logger)
 			if err != nil {
 				logger.Error("Failed to create fuzz client: %v", err)
 			} else {
 				// Note: FuzzClient doesn't have Close method, cleanup is handled by Stop methods
-				
+
 				// Create transaction fuzzing configuration
 				txCfg := cfg.GetTxFuzzingConfig()
 				fuzzConfig := &fuzzer.TxFuzzConfig{
-					RPCEndpoint:     txCfg.RPCEndpoint,
-					ChainID:         txCfg.ChainID,
-					MaxGasPrice:     big.NewInt(txCfg.MaxGasPrice),
-					MaxGasLimit:     txCfg.MaxGasLimit,
-					TxPerSecond:     txCfg.TxPerSecond,
-					FuzzDuration:    time.Duration(txCfg.FuzzDurationSec) * time.Second,
-					Seed:            txCfg.Seed,
+					RPCEndpoint:  txCfg.RPCEndpoint,
+					ChainID:      txCfg.ChainID,
+					MaxGasPrice:  big.NewInt(txCfg.MaxGasPrice),
+					MaxGasLimit:  txCfg.MaxGasLimit,
+					TxPerSecond:  txCfg.TxPerSecond,
+					FuzzDuration: time.Duration(txCfg.FuzzDurationSec) * time.Second,
+					Seed:         txCfg.Seed,
 				}
-				
+
 				// Start transaction fuzzing
 				err = fuzzClient.StartTxFuzzing(fuzzConfig, accounts)
 				if err != nil {
 					logger.Error("Failed to start transaction fuzzing: %v", err)
 				} else {
 					logger.Info("Transaction fuzzing started successfully")
-					
+
 					// Set up signal handling for graceful shutdown
 					sigChan := make(chan os.Signal, 1)
 					signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-					
+
 					// Wait for signal or timeout
 					select {
 					case <-sigChan:
@@ -98,7 +98,7 @@ func main() {
 					case <-time.After(fuzzConfig.FuzzDuration):
 						logger.Info("Transaction fuzzing duration completed")
 					}
-					
+
 					// Stop transaction fuzzing
 					fuzzClient.StopTxFuzzing()
 					logger.Info("Transaction fuzzing stopped")
@@ -122,7 +122,7 @@ func main() {
 
 	// Create output directories if they don't exist
 	logger.Info("Creating output directories...")
-	
+
 	outputPath := cfg.GetOutputPath()
 	if err := os.MkdirAll(outputPath, 0755); err != nil {
 		logger.Fatal("Failed to create output directory '%s': %v", outputPath, err)

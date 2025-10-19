@@ -1,11 +1,28 @@
 #!/bin/bash
 
 # Query all transaction details for specified account address
-ACCOUNT="0x614561D2d143621E126e87831AEF287678B442b8"
-RPC_URL="http://172.16.0.13:8545"
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source RPC configuration
+if [[ -f "${SCRIPT_DIR}/rpc_config.sh" ]]; then
+    source "${SCRIPT_DIR}/rpc_config.sh"
+else
+    echo "Error: rpc_config.sh not found in ${SCRIPT_DIR}"
+    exit 1
+fi
+
+# Default account and RPC URL (can be overridden by command line arguments)
+ACCOUNT="${1:-0x4d1CB4eB7969f8806E2CaAc0cbbB71f88C8ec413}"
+RPC_URL="${2:-${RPC_ENDPOINTS[0]}}"
 
 echo "=== Complete Analysis for Account $ACCOUNT ==="
 echo "RPC Endpoint: $RPC_URL"
+echo ""
+echo "Usage: $0 [account_address] [rpc_url]"
+echo "Using default account if not specified: 0x4d1CB4eB7969f8806E2CaAc0cbbB71f88C8ec413"
+echo "Using default RPC from rpc_config.sh if not specified: ${RPC_ENDPOINTS[0]}"
 echo ""
 
 # 1. Basic information query
@@ -99,13 +116,20 @@ else
     )
 fi
 
-for segment in "${SEARCH_SEGMENTS[@]}"; do
+# Reverse the search order to start from the latest blocks
+REVERSED_SEGMENTS=()
+for ((i=${#SEARCH_SEGMENTS[@]}-1; i>=0; i--)); do
+    REVERSED_SEGMENTS+=("${SEARCH_SEGMENTS[$i]}")
+done
+
+for segment in "${REVERSED_SEGMENTS[@]}"; do
     START_BLOCK=$(echo $segment | cut -d':' -f1)
     END_BLOCK=$(echo $segment | cut -d':' -f2)
     
-    echo "Searching block segment: $START_BLOCK to $END_BLOCK"
+    echo "Searching block segment: $END_BLOCK to $START_BLOCK (newest first)"
     
-    for ((block=$START_BLOCK; block<=END_BLOCK; block++)); do
+    # Search from newest to oldest within each segment
+    for ((block=$END_BLOCK; block>=START_BLOCK; block--)); do
         block_hex=$(printf "0x%x" $block)
         
         # Get block data
@@ -186,7 +210,7 @@ for segment in "${SEARCH_SEGMENTS[@]}"; do
         fi
     done
     
-    echo "Block segment $START_BLOCK-$END_BLOCK search completed"
+    echo "Block segment $END_BLOCK-$START_BLOCK search completed"
     echo ""
 done
 

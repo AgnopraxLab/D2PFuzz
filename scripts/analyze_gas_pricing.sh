@@ -7,6 +7,75 @@
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source RPC configuration
+if [[ -f "${SCRIPT_DIR}/rpc_config.sh" ]]; then
+    source "${SCRIPT_DIR}/rpc_config.sh"
+else
+    echo "Error: rpc_config.sh not found in ${SCRIPT_DIR}"
+    exit 1
+fi
+
+# ============================================================================
+# LOCAL CONFIGURATION SECTION
+# ============================================================================
+# This section defines local mappings and configurations specific to this script.
+# Modify these values to customize node numbering and display names.
+
+# Node number assignment mapping
+# Format: [node_type_from_rpc_config]="node_number"
+declare -A NODE_NUMBER_MAP=(
+    ["geth-lighthouse"]="12"
+    ["nethermind-teku"]="14"
+    ["besu-prysm"]="15"
+    ["besu-lodestar"]="16"
+    ["geth-nimbus"]="13"
+)
+
+# Node display name mapping (optional customization)
+# If not defined here, will use the node type from rpc_config.sh
+declare -A NODE_DISPLAY_NAMES=(
+    ["geth-lighthouse"]="Geth-Lighthouse"
+    ["nethermind-teku"]="Nethermind-Teku"
+    ["besu-prysm"]="Besu-Prysm"
+    ["besu-lodestar"]="Besu-Lodestar"
+    ["geth-nimbus"]="Geth-Nimbus"
+)
+
+# Available node numbers for iteration (sorted array)
+NODE_NUMBERS=(12 13 14 15 16)
+
+# Client configuration notes (optional)
+# Define gas price configuration notes for each client type
+declare -A CLIENT_CONFIG_NOTES=(
+    ["geth-lighthouse"]="Geth: --miner.gasprice=1 (1 wei, only in kurtosis network)"
+    ["nethermind-teku"]="Nethermind: Uses low gas price strategy similar to Geth"
+    ["besu-prysm"]="Besu: --min-gas-price=1000000000 (1 Gwei)"
+    ["besu-lodestar"]="Besu: --min-gas-price=1000000000 (1 Gwei)"
+    ["geth-nimbus"]="Geth: --miner.gasprice=1 (1 wei, only in kurtosis network)"
+)
+
+# Transaction parameter recommendations
+# Define different gas price strategies
+CONSERVATIVE_TIP_CAP="1500000000"  # 1.5 Gwei
+CONSERVATIVE_FEE_CAP="3000000000"  # 3 Gwei
+AGGRESSIVE_TIP_CAP="10000000"      # 0.01 Gwei
+AGGRESSIVE_FEE_CAP="50000000"      # 0.05 Gwei
+MINIMUM_TIP_CAP="1000000000"       # 1 Gwei
+MINIMUM_FEE_CAP="2000000000"       # 2 Gwei
+STANDARD_GAS="21000"
+
+# Strategy descriptions (can be customized based on your node types)
+CONSERVATIVE_CLIENTS="all clients"
+AGGRESSIVE_CLIENTS="low gas price clients (Geth, Nethermind)"
+MINIMUM_CLIENTS="strict gas price clients (Besu)"
+
+# ============================================================================
+# END OF LOCAL CONFIGURATION
+# ============================================================================
+
 # Color definitions
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -16,22 +85,22 @@ CYAN='\033[0;36m'
 PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
-# Node endpoint configuration
-declare -A NODE_ENDPOINTS=(
-    [11]="http://172.16.0.11:8545"  # Geth
-    [12]="http://172.16.0.12:8545"  # Erigon
-    [13]="http://172.16.0.13:8545"  # Besu
-    [14]="http://172.16.0.14:8545"  # Nethermind
-    [15]="http://172.16.0.15:8545"  # Reth
-)
+# Build NODE_ENDPOINTS and NODE_NAMES from configuration
+declare -A NODE_ENDPOINTS
+declare -A NODE_NAMES
 
-declare -A NODE_NAMES=(
-    [11]="Geth"
-    [12]="Erigon"
-    [13]="Besu"
-    [14]="Nethermind"
-    [15]="Reth"
-)
+for node_type in "${!NODE_RPC_MAP[@]}"; do
+    node_num="${NODE_NUMBER_MAP[$node_type]}"
+    if [[ -n "$node_num" ]]; then
+        NODE_ENDPOINTS[$node_num]="${NODE_RPC_MAP[$node_type]}"
+        # Use display name if defined, otherwise use node type
+        if [[ -n "${NODE_DISPLAY_NAMES[$node_type]}" ]]; then
+            NODE_NAMES[$node_num]="${NODE_DISPLAY_NAMES[$node_type]}"
+        else
+            NODE_NAMES[$node_num]="$node_type"
+        fi
+    fi
+done
 
 # Utility functions
 hex_to_dec() {
@@ -131,7 +200,7 @@ analyze_all_clients() {
     # 1. Client version check
     echo -e "${CYAN}1. Client Version Information:${NC}"
     echo "-" | tr ' ' '-' | head -c 50; echo
-    for node in 11 12 13 14 15; do
+    for node in "${NODE_NUMBERS[@]}"; do
         local endpoint="${NODE_ENDPOINTS[$node]}"
         local name="${NODE_NAMES[$node]}"
         
@@ -144,49 +213,48 @@ analyze_all_clients() {
     done
     echo ""
     
-    # 2. Gas price comparison
-    echo -e "${CYAN}2. Gas Price Comparison Analysis:${NC}"
-    echo "-" | tr ' ' '-' | head -c 50; echo
-    printf "%-12s %-15s %-20s %-15s\n" "Node" "Client" "Gas Price(hex)" "Gas Price(Gwei)"
-    echo "-" | tr ' ' '-' | head -c 70; echo
+    # 2. Comprehensive gas price comparison
+    echo -e "${CYAN}2. Comprehensive Gas Price Analysis:${NC}"
+    echo "-" | tr ' ' '-' | head -c 100; echo
+    printf "%-10s %-20s %-18s %-18s %-18s\n" "Node" "Client" "GasPrice(Gwei)" "BaseFee(Gwei)" "BaseFee(Hex)"
+    echo "-" | tr ' ' '-' | head -c 100; echo
     
-    for node in 11 12 13 14 15; do
+    for node in "${NODE_NUMBERS[@]}"; do
         local endpoint="${NODE_ENDPOINTS[$node]}"
         local name="${NODE_NAMES[$node]}"
         
         if test_rpc_connection "$endpoint"; then
+            # Get gas price
             local gas_price_hex=$(get_gas_price "$endpoint")
             local gas_price_dec=$(hex_to_dec "$gas_price_hex")
             local gas_price_gwei=$(wei_to_gwei "$gas_price_dec")
             
-            printf "%-12s %-15s %-20s %-15s\n" "Node $node" "$name" "$gas_price_hex" "${gas_price_gwei} Gwei"
-        else
-            printf "%-12s %-15s %-20s %-15s\n" "Node $node" "$name" "Connection failed" "N/A"
-        fi
-    done
-    echo ""
-    
-    # 3. Base fee check
-    echo -e "${CYAN}3. Network Base Fee (baseFeePerGas):${NC}"
-    echo "-" | tr ' ' '-' | head -c 50; echo
-    for node in 11 12 13 14 15; do
-        local endpoint="${NODE_ENDPOINTS[$node]}"
-        local name="${NODE_NAMES[$node]}"
-        
-        if test_rpc_connection "$endpoint"; then
+            # Get base fee
             local base_fee_hex=$(get_base_fee "$endpoint")
             local base_fee_dec=$(hex_to_dec "$base_fee_hex")
-            echo "Node $node ($name): $base_fee_hex = $(format_number $base_fee_dec) wei"
+            local base_fee_gwei=$(wei_to_gwei "$base_fee_dec")
+            
+            printf "%-10s %-20s %-18s %-18s %-18s\n" \
+                "Node $node" \
+                "$name" \
+                "${gas_price_gwei}" \
+                "${base_fee_gwei}" \
+                "$base_fee_hex"
         else
-            echo "Node $node ($name): Connection failed"
+            printf "%-10s %-20s %-18s %-18s %-18s\n" \
+                "Node $node" \
+                "$name" \
+                "N/A" \
+                "N/A" \
+                "Connection failed"
         fi
     done
     echo ""
     
-    # 4. Mempool status
-    echo -e "${CYAN}4. Mempool Status Check:${NC}"
+    # 3. Mempool status
+    echo -e "${CYAN}3. Mempool Status Check:${NC}"
     echo "-" | tr ' ' '-' | head -c 50; echo
-    for node in 11 12 13 14 15; do
+    for node in "${NODE_NUMBERS[@]}"; do
         local endpoint="${NODE_ENDPOINTS[$node]}"
         local name="${NODE_NAMES[$node]}"
         
@@ -199,40 +267,61 @@ analyze_all_clients() {
     done
     echo ""
     
-    # 5. Configuration analysis summary
-    echo -e "${CYAN}5. Client Configuration Analysis:${NC}"
+    # 4. Configuration analysis summary
+    echo -e "${CYAN}4. Client Configuration Analysis:${NC}"
     echo "-" | tr ' ' '-' | head -c 50; echo
     echo "Minimum gas price settings derived from configuration file analysis:"
-    echo "• Besu: --min-gas-price=1000000000 (1 Gwei)"
-    echo "• Geth: --miner.gasprice=1 (1 wei, only in kurtosis network)"
-    echo "• Reth: No explicit minimum gas price configuration found"
-    echo "• Erigon: Uses dynamic gas price strategy"
-    echo "• Nethermind: Uses similar low gas price strategy as Geth"
+    
+    # Display configuration notes for each configured node type
+    local displayed_notes=()
+    for node_type in "${!NODE_RPC_MAP[@]}"; do
+        if [[ -n "${CLIENT_CONFIG_NOTES[$node_type]}" ]]; then
+            # Check if this note was already displayed (to avoid duplicates)
+            local note="${CLIENT_CONFIG_NOTES[$node_type]}"
+            local already_shown=0
+            for shown in "${displayed_notes[@]}"; do
+                if [[ "$shown" == "$note" ]]; then
+                    already_shown=1
+                    break
+                fi
+            done
+            
+            if [[ $already_shown -eq 0 ]]; then
+                echo "• $note"
+                displayed_notes+=("$note")
+            fi
+        fi
+    done
+    
+    # If no notes were configured, show a default message
+    if [[ ${#displayed_notes[@]} -eq 0 ]]; then
+        echo "• No specific configuration notes available"
+    fi
     echo ""
     
-    # 6. EIP-1559 transaction recommendations
-    echo -e "${CYAN}6. EIP-1559 Transaction Parameter Recommendations:${NC}"
+    # 5. EIP-1559 transaction recommendations
+    echo -e "${CYAN}5. EIP-1559 Transaction Parameter Recommendations:${NC}"
     echo "-" | tr ' ' '-' | head -c 50; echo
     echo "Based on analysis results, recommended transaction parameters:"
     echo ""
-    echo -e "${GREEN}Conservative Strategy (suitable for all clients):${NC}"
-    echo "GasTipCap: big.NewInt(1500000000)  // 1.5 Gwei"
-    echo "GasFeeCap:  big.NewInt(3000000000)  // 3 Gwei"
-    echo "Gas:       21000"
+    echo -e "${GREEN}Conservative Strategy (suitable for ${CONSERVATIVE_CLIENTS}):${NC}"
+    echo "GasTipCap: big.NewInt(${CONSERVATIVE_TIP_CAP})  // $(wei_to_gwei ${CONSERVATIVE_TIP_CAP}) Gwei"
+    echo "GasFeeCap:  big.NewInt(${CONSERVATIVE_FEE_CAP})  // $(wei_to_gwei ${CONSERVATIVE_FEE_CAP}) Gwei"
+    echo "Gas:       ${STANDARD_GAS}"
     echo ""
-    echo -e "${YELLOW}Aggressive Strategy (suitable for Geth/Nethermind):${NC}"
-    echo "GasTipCap: big.NewInt(10000000)     // 0.01 Gwei"
-    echo "GasFeeCap:  big.NewInt(50000000)    // 0.05 Gwei"
-    echo "Gas:       21000"
+    echo -e "${YELLOW}Aggressive Strategy (suitable for ${AGGRESSIVE_CLIENTS}):${NC}"
+    echo "GasTipCap: big.NewInt(${AGGRESSIVE_TIP_CAP})     // $(wei_to_gwei ${AGGRESSIVE_TIP_CAP}) Gwei"
+    echo "GasFeeCap:  big.NewInt(${AGGRESSIVE_FEE_CAP})    // $(wei_to_gwei ${AGGRESSIVE_FEE_CAP}) Gwei"
+    echo "Gas:       ${STANDARD_GAS}"
     echo ""
-    echo -e "${PURPLE}Minimum Requirements for Reth:${NC}"
-    echo "GasTipCap: big.NewInt(1000000000)   // 1 Gwei"
-    echo "GasFeeCap:  big.NewInt(2000000000)  // 2 Gwei"
-    echo "Gas:       21000"
+    echo -e "${PURPLE}Minimum Requirements (suitable for ${MINIMUM_CLIENTS}):${NC}"
+    echo "GasTipCap: big.NewInt(${MINIMUM_TIP_CAP})   // $(wei_to_gwei ${MINIMUM_TIP_CAP}) Gwei"
+    echo "GasFeeCap:  big.NewInt(${MINIMUM_FEE_CAP})  // $(wei_to_gwei ${MINIMUM_FEE_CAP}) Gwei"
+    echo "Gas:       ${STANDARD_GAS}"
     echo ""
     
-    # 7. Troubleshooting recommendations
-    echo -e "${CYAN}7. Troubleshooting Recommendations:${NC}"
+    # 6. Troubleshooting recommendations
+    echo -e "${CYAN}6. Troubleshooting Recommendations:${NC}"
     echo "-" | tr ' ' '-' | head -c 50; echo
     echo "If transactions still fail, please check:"
     echo "• Whether account balance is sufficient to pay gas fees"
@@ -251,7 +340,11 @@ quick_check() {
     
     if [[ -z "$node" ]]; then
         echo "Usage: $0 quick <node_number>"
-        echo "Node numbers: 11(Geth), 12(Erigon), 13(Besu), 14(Nethermind), 15(Reth)"
+        echo -n "Available node numbers: "
+        for num in "${NODE_NUMBERS[@]}"; do
+            echo -n "$num(${NODE_NAMES[$num]}) "
+        done
+        echo ""
         return 1
     fi
     
@@ -272,10 +365,11 @@ quick_check() {
         local gas_price_gwei=$(wei_to_gwei "$gas_price_dec")
         local base_fee_hex=$(get_base_fee "$endpoint")
         local base_fee_dec=$(hex_to_dec "$base_fee_hex")
+        local base_fee_gwei=$(wei_to_gwei "$base_fee_dec")
         
         echo "Client version: $version"
-        echo "Gas price: $gas_price_hex = $(format_number $gas_price_dec) wei = ${gas_price_gwei} Gwei"
-        echo "Base fee: $base_fee_hex = $(format_number $base_fee_dec) wei"
+        echo "Gas price (eth_gasPrice): $gas_price_hex = $(format_number $gas_price_dec) wei = ${gas_price_gwei} Gwei"
+        echo "Base fee (baseFeePerGas): $base_fee_hex = $(format_number $base_fee_dec) wei = ${base_fee_gwei} Gwei"
         echo "Mempool status: $(get_mempool_status "$endpoint")"
     else
         echo -e "${RED}Connection failed${NC}"
@@ -302,12 +396,10 @@ main() {
             echo "  quick <node>  Quick check of specific node"
             echo "  help          Show this help information"
             echo ""
-            echo "Node numbers:"
-            echo "  11 - Geth"
-            echo "  12 - Erigon"
-            echo "  13 - Besu"
-            echo "  14 - Nethermind"
-            echo "  15 - Reth"
+            echo "Available node numbers:"
+            for node_num in "${NODE_NUMBERS[@]}"; do
+                echo "  $node_num - ${NODE_NAMES[$node_num]}"
+            done
             ;;
         *)
             echo "Unknown command: $1"
